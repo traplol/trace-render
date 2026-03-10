@@ -1,0 +1,47 @@
+{"traceEvents": [
+  {"name": "process_name", "ph": "M", "pid": 1, "tid": 0, "args": {"name": "Browser"}},
+  {"name": "thread_name", "ph": "M", "pid": 1, "tid": 1, "args": {"name": "CrBrowserMain"}},
+  {"name": "thread_name", "ph": "M", "pid": 1, "tid": 2, "args": {"name": "IOThread"}},
+  {"name": "process_name", "ph": "M", "pid": 2, "tid": 0, "args": {"name": "Renderer"}},
+  {"name": "thread_name", "ph": "M", "pid": 2, "tid": 1, "args": {"name": "CrRendererMain"}},
+  {"name": "thread_name", "ph": "M", "pid": 2, "tid": 2, "args": {"name": "Compositor"}},
+
+  {"name": "MessageLoop::RunTask", "cat": "toplevel", "ph": "X", "ts": 1000, "dur": 5000, "pid": 1, "tid": 1, "args": {"src_func": "OnMessageReceived"}},
+  {"name": "NavigationRequest", "cat": "navigation", "ph": "X", "ts": 1200, "dur": 3000, "pid": 1, "tid": 1, "args": {"url": "https://example.com"}},
+  {"name": "URLRequest", "cat": "net", "ph": "X", "ts": 1500, "dur": 2000, "pid": 1, "tid": 1, "args": {"url": "https://example.com", "method": "GET"}},
+  {"name": "DNS Resolve", "cat": "net", "ph": "X", "ts": 1600, "dur": 500, "pid": 1, "tid": 1, "args": {"host": "example.com"}},
+  {"name": "TCP Connect", "cat": "net", "ph": "X", "ts": 2200, "dur": 800, "pid": 1, "tid": 1, "args": {}},
+
+  {"name": "IO Read", "cat": "io", "ph": "X", "ts": 1000, "dur": 200, "pid": 1, "tid": 2},
+  {"name": "IO Read", "cat": "io", "ph": "X", "ts": 1500, "dur": 300, "pid": 1, "tid": 2},
+  {"name": "IO Write", "cat": "io", "ph": "X", "ts": 2000, "dur": 150, "pid": 1, "tid": 2},
+  {"name": "IO Read", "cat": "io", "ph": "X", "ts": 3000, "dur": 400, "pid": 1, "tid": 2},
+  {"name": "IO Write", "cat": "io", "ph": "X", "ts": 4000, "dur": 100, "pid": 1, "tid": 2},
+
+  {"name": "HTMLParser", "cat": "blink", "ph": "X", "ts": 4500, "dur": 3000, "pid": 2, "tid": 1, "args": {"tokenCount": 150}},
+  {"name": "ParseHTML", "cat": "blink", "ph": "X", "ts": 4600, "dur": 1200, "pid": 2, "tid": 1},
+  {"name": "ResourceLoad", "cat": "blink", "ph": "X", "ts": 4700, "dur": 500, "pid": 2, "tid": 1, "args": {"url": "style.css"}},
+  {"name": "ParseStyleSheet", "cat": "blink", "ph": "X", "ts": 5900, "dur": 800, "pid": 2, "tid": 1, "args": {}},
+  {"name": "Layout", "cat": "blink", "ph": "X", "ts": 6800, "dur": 600, "pid": 2, "tid": 1, "args": {"dirtyNodes": 42}},
+
+  {"name": "Draw", "cat": "cc", "ph": "X", "ts": 4000, "dur": 2000, "pid": 2, "tid": 2},
+  {"name": "RasterTask", "cat": "cc", "ph": "X", "ts": 4200, "dur": 800, "pid": 2, "tid": 2, "args": {"tileCount": 8}},
+  {"name": "RasterTask", "cat": "cc", "ph": "X", "ts": 5100, "dur": 700, "pid": 2, "tid": 2, "args": {"tileCount": 6}},
+  {"name": "Composite", "cat": "cc", "ph": "X", "ts": 6200, "dur": 500, "pid": 2, "tid": 2},
+  {"name": "SubmitFrame", "cat": "cc", "ph": "X", "ts": 6300, "dur": 200, "pid": 2, "tid": 2},
+  {"name": "SwapBuffers", "cat": "gpu", "ph": "X", "ts": 6800, "dur": 300, "pid": 2, "tid": 2},
+
+  {"name": "FrameTime", "cat": "benchmark", "ph": "C", "ts": 1000, "pid": 2, "tid": 0, "args": {"value": 16.5}},
+  {"name": "FrameTime", "cat": "benchmark", "ph": "C", "ts": 2000, "pid": 2, "tid": 0, "args": {"value": 18.2}},
+  {"name": "FrameTime", "cat": "benchmark", "ph": "C", "ts": 3000, "pid": 2, "tid": 0, "args": {"value": 15.1}},
+  {"name": "FrameTime", "cat": "benchmark", "ph": "C", "ts": 4000, "pid": 2, "tid": 0, "args": {"value": 22.3}},
+  {"name": "FrameTime", "cat": "benchmark", "ph": "C", "ts": 5000, "pid": 2, "tid": 0, "args": {"value": 19.7}},
+  {"name": "FrameTime", "cat": "benchmark", "ph": "C", "ts": 6000, "pid": 2, "tid": 0, "args": {"value": 16.0}},
+  {"name": "FrameTime", "cat": "benchmark", "ph": "C", "ts": 7000, "pid": 2, "tid": 0, "args": {"value": 17.8}},
+
+  {"name": "Navigate", "cat": "navigation", "ph": "s", "ts": 1200, "pid": 1, "tid": 1, "id": 1},
+  {"name": "ReceiveNavigation", "cat": "navigation", "ph": "f", "ts": 4500, "pid": 2, "tid": 1, "id": 1},
+
+  {"name": "instant_mark", "cat": "benchmark", "ph": "i", "ts": 3500, "pid": 1, "tid": 1, "s": "g"},
+  {"name": "first_paint", "cat": "benchmark", "ph": "i", "ts": 7000, "pid": 2, "tid": 1, "s": "g"}
+]}

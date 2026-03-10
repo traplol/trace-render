@@ -1,0 +1,40 @@
+#pragma once
+#include "model/trace_model.h"
+#include "parser/trace_parser.h"
+#include "ui/view_state.h"
+#include "ui/toolbar.h"
+#include "ui/timeline_view.h"
+#include "ui/detail_panel.h"
+#include "ui/search_panel.h"
+#include "ui/filter_panel.h"
+#include "ui/counter_track.h"
+#include "ui/flow_renderer.h"
+#include <string>
+
+struct SDL_Window;
+
+class App {
+public:
+    void init(SDL_Window* window);
+    void update();
+    void open_file(const std::string& path);
+
+    bool has_trace() const { return has_trace_; }
+
+private:
+    TraceModel model_;
+    ViewState view_;
+    TraceParser parser_;
+
+    Toolbar toolbar_;
+    TimelineView timeline_;
+    DetailPanel detail_;
+    SearchPanel search_;
+    FilterPanel filter_;
+
+    bool has_trace_ = false;
+    bool loading_ = false;
+    float load_progress_ = 0.0f;
+    std::string status_message_;
+    bool first_layout_ = true;
+};

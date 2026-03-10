@@ -1,0 +1,8 @@
+build/
+perfetto_imgui.ini
+*.o
+*.d
+.cache/
+compile_commands.json
+*.png
+*.jpg
