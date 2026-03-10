@@ -24,6 +24,7 @@ void App::open_file(const std::string& path) {
     parser_.on_progress = [this](float p) {
         load_progress_ = p;
     };
+    parser_.time_unit_ns = view_.time_unit_ns;
 
     if (parser_.parse(path, model_)) {
         has_trace_ = true;
@@ -207,6 +208,12 @@ void App::render_settings_modal() {
 
         ImGui::Checkbox("Show Flow Arrows", &view_.show_flows);
 
+        ImGui::SeparatorText("Parser");
+
+        ImGui::Checkbox("Interpret timestamps as nanoseconds", &view_.time_unit_ns);
+        ImGui::SameLine();
+        ImGui::TextDisabled("(reload file to apply)");
+
         ImGui::SeparatorText("Theme");
 
         if (ImGui::RadioButton("Dark", dark_theme_)) {
@@ -256,6 +263,7 @@ void App::save_settings() {
     j["counter_track_height"] = view_.counter_track_height;
     j["label_width"] = view_.label_width;
     j["show_flows"] = view_.show_flows;
+    j["time_unit_ns"] = view_.time_unit_ns;
     j["dark_theme"] = dark_theme_;
 
     std::ofstream f(path);
@@ -284,6 +292,8 @@ void App::load_settings() {
             view_.label_width = j["label_width"].get<float>();
         if (j.contains("show_flows"))
             view_.show_flows = j["show_flows"].get<bool>();
+        if (j.contains("time_unit_ns"))
+            view_.time_unit_ns = j["time_unit_ns"].get<bool>();
         if (j.contains("dark_theme")) {
             dark_theme_ = j["dark_theme"].get<bool>();
             if (dark_theme_)

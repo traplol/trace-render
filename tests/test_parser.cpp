@@ -137,6 +137,40 @@ TEST_F(ParserTest, ParsesArgsAsJson) {
     EXPECT_TRUE(found);
 }
 
+TEST_F(ParserTest, ParsesTimestampsAsNanoseconds) {
+    parser.time_unit_ns = true;
+    ASSERT_TRUE(parse_json(R"({"traceEvents": [
+        {"name": "ev", "ph": "X", "ts": 5000, "dur": 2000, "pid": 1, "tid": 1, "cat": "c"}
+    ]})"));
+
+    bool found = false;
+    for (const auto& ev : model.events_) {
+        if (ev.ph == Phase::Complete) {
+            found = true;
+            // 5000 ns = 5.0 us, 2000 ns = 2.0 us
+            EXPECT_DOUBLE_EQ(ev.ts, 5.0);
+            EXPECT_DOUBLE_EQ(ev.dur, 2.0);
+        }
+    }
+    EXPECT_TRUE(found);
+}
+
+TEST_F(ParserTest, ParsesTimestampsAsMicrosecondsByDefault) {
+    ASSERT_TRUE(parse_json(R"({"traceEvents": [
+        {"name": "ev", "ph": "X", "ts": 5000, "dur": 2000, "pid": 1, "tid": 1, "cat": "c"}
+    ]})"));
+
+    bool found = false;
+    for (const auto& ev : model.events_) {
+        if (ev.ph == Phase::Complete) {
+            found = true;
+            EXPECT_DOUBLE_EQ(ev.ts, 5000.0);
+            EXPECT_DOUBLE_EQ(ev.dur, 2000.0);
+        }
+    }
+    EXPECT_TRUE(found);
+}
+
 TEST_F(ParserTest, InvalidFileReturnsError) {
     EXPECT_FALSE(parser.parse("/nonexistent/file.json", model));
     EXPECT_FALSE(parser.error_message.empty());

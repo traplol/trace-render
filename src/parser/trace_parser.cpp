@@ -8,6 +8,7 @@ using json = nlohmann::json;
 struct SaxHandler : json::json_sax_t {
     TraceModel& model;
     std::function<void(float)>& on_progress;
+    double time_divisor = 1.0;
     size_t file_size = 0;
     size_t bytes_read = 0;
 
@@ -202,8 +203,8 @@ struct SaxHandler : json::json_sax_t {
         }
         if (state == State::Skipping) return true;
         if (state == State::InEvent) {
-            if (current_key == "ts") current_event.ts = val;
-            else if (current_key == "dur") current_event.dur = val;
+            if (current_key == "ts") current_event.ts = val / time_divisor;
+            else if (current_key == "dur") current_event.dur = val / time_divisor;
             else if (current_key == "pid") current_event.pid = (uint32_t)val;
             else if (current_key == "tid") current_event.tid = (uint32_t)val;
             else if (current_key == "id") current_event.id = (uint64_t)val;
@@ -420,6 +421,7 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
     model.intern_string("");
 
     SaxHandler handler(model, on_progress);
+    handler.time_divisor = time_unit_ns ? 1000.0 : 1.0;
     handler.file_size = file_size;
 
     bool result = json::sax_parse(content, &handler);
