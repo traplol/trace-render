@@ -65,13 +65,7 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
             const std::string& name = model.get_string(ev.name_idx);
             if (selected_name_ != name) {
                 select_function_by_name(name, model);
-            }
-            // Set cursor to the selected event
-            for (int i = 0; i < (int)instances_.size(); i++) {
-                if (instances_[i] == (uint32_t)view.selected_event_idx) {
-                    instance_cursor_ = i;
-                    break;
-                }
+                instances_dirty_ = true;
             }
         }
     } else if (view.selected_event_idx < 0 && last_selected_event_ >= 0) {
@@ -112,6 +106,10 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
         ImGui::TableHeadersRow();
 
         if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
+            if (instances_dirty_) {
+                sort_specs->SpecsDirty = true;
+                instances_dirty_ = false;
+            }
             if (sort_specs->SpecsDirty) {
                 sort_specs->SpecsDirty = false;
                 if (sort_specs->SpecsCount > 0) {
@@ -129,6 +127,16 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                             }
                             return asc ? (cmp < 0) : (cmp > 0);
                         });
+                }
+                // Re-find cursor after sort
+                if (view.selected_event_idx >= 0) {
+                    instance_cursor_ = -1;
+                    for (int i = 0; i < (int)instances_.size(); i++) {
+                        if (instances_[i] == (uint32_t)view.selected_event_idx) {
+                            instance_cursor_ = i;
+                            break;
+                        }
+                    }
                 }
             }
         }

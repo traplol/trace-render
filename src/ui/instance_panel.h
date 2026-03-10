@@ -13,6 +13,7 @@ private:
     std::vector<uint32_t> instances_;
     int32_t instance_cursor_ = -1;
     int32_t last_selected_event_ = -1;
+    bool instances_dirty_ = false;
 
     void select_function_by_name(const std::string& name, const TraceModel& model);
     void navigate_to_instance(int32_t idx, const TraceModel& model, ViewState& view);
