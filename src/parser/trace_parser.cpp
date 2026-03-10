@@ -8,7 +8,7 @@ using json = nlohmann::json;
 
 struct SaxHandler : json::json_sax_t {
     TraceModel& model;
-    std::function<void(float)>& on_progress;
+    std::function<void(const char*, float)>& on_progress;
     double time_divisor = 1.0;
     size_t file_size = 0;
     size_t bytes_read = 0;
@@ -35,10 +35,19 @@ struct SaxHandler : json::json_sax_t {
     // Counter args accumulation
     std::vector<std::pair<std::string, double>> counter_values;
 
-    SaxHandler(TraceModel& m, std::function<void(float)>& prog)
+    uint64_t event_count = 0;
+    uint64_t estimated_events = 0;
+
+    SaxHandler(TraceModel& m, std::function<void(const char*, float)>& prog)
         : model(m), on_progress(prog) {}
 
     void finish_event() {
+        event_count++;
+        if (on_progress && (event_count & 0xFFFF) == 0 && estimated_events > 0) {
+            float p = std::min(0.99f, (float)event_count / (float)estimated_events);
+            on_progress("Parsing JSON", p);
+        }
+
         if (current_event.ph == Phase::Metadata) {
             handle_metadata();
             return;
@@ -413,29 +422,49 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
     size_t file_size = file.tellg();
     file.seekg(0, std::ios::beg);
 
-    // Read entire file into memory for SAX parsing
+    if (on_progress) on_progress("Reading file", 0.0f);
+
+    // Read file in chunks to report progress
     std::string content(file_size, '\0');
-    file.read(&content[0], file_size);
+    constexpr size_t CHUNK = 4 * 1024 * 1024; // 4MB chunks
+    size_t read_so_far = 0;
+    while (read_so_far < file_size) {
+        size_t to_read = std::min(CHUNK, file_size - read_so_far);
+        file.read(&content[read_so_far], to_read);
+        read_so_far += to_read;
+        if (on_progress) {
+            on_progress("Reading file", (float)read_so_far / (float)file_size);
+        }
+    }
     file.close();
 
     model.clear();
     // Intern empty string at index 0
     model.intern_string("");
 
+    if (on_progress) on_progress("Parsing JSON", 0.0f);
+
     SaxHandler handler(model, on_progress);
     handler.time_divisor = time_unit_ns ? 1000.0 : 1.0;
     handler.file_size = file_size;
+    // Rough estimate: ~100 bytes per event in JSON
+    handler.estimated_events = file_size / 100;
 
     bool result = json::sax_parse(content, &handler);
+
+    // Free the raw JSON string before building the index
+    content.clear();
+    content.shrink_to_fit();
 
     if (!result) {
         error_message = "JSON parse error";
         return false;
     }
 
+    if (on_progress) on_progress("Building index", 0.5f);
     model.build_index();
 
-    if (on_progress) on_progress(1.0f);
+    if (on_progress) on_progress("Done", 1.0f);
 
     return true;
 }

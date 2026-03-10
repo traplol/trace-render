@@ -48,7 +48,11 @@ void App::open_file(const std::string& path) {
         TRACE_SCOPE_CAT("OpenFile", "io");
 
         TraceParser parser;
-        parser.on_progress = [this](float p) {
+        parser.on_progress = [this](const char* phase, float p) {
+            {
+                std::lock_guard<std::mutex> lock(phase_mutex_);
+                loading_phase_ = phase;
+            }
             load_progress_.store(p, std::memory_order_relaxed);
         };
         parser.time_unit_ns = time_ns;
@@ -56,9 +60,19 @@ void App::open_file(const std::string& path) {
         TraceModel new_model;
         bool ok = parser.parse(path, new_model);
 
+        if (ok) {
+            // Build query DB on background thread too
+            {
+                std::lock_guard<std::mutex> lock(phase_mutex_);
+                loading_phase_ = "Building query DB";
+            }
+            load_progress_.store(0.5f, std::memory_order_relaxed);
+        }
+
         std::lock_guard<std::mutex> lock(load_mutex_);
         if (ok) {
             model_ = std::move(new_model);
+            query_db_.load(model_);
             load_success_ = true;
         } else {
             load_success_ = false;
@@ -87,7 +101,6 @@ void App::finish_load() {
         if (model_.min_ts_ < model_.max_ts_) {
             view_.zoom_to_fit(model_.min_ts_, model_.max_ts_);
         }
-        query_db_.load(model_);
         status_message_ = "Loaded: " + loading_filename_ + " (" +
                           std::to_string(model_.events_.size()) + " events, " +
                           std::to_string(model_.processes_.size()) + " processes)";
@@ -117,20 +130,41 @@ void App::render_loading_overlay() {
 
     float progress = load_progress_.load(std::memory_order_relaxed);
 
+    // Get current phase
+    std::string phase;
+    {
+        std::lock_guard<std::mutex> lock(phase_mutex_);
+        phase = loading_phase_;
+    }
+
     // Center the loading content
     float content_w = 600.0f;
-    float content_h = 120.0f;
+    float content_h = 160.0f;
     ImGui::SetCursorPos(ImVec2((vp->WorkSize.x - content_w) / 2,
                                 (vp->WorkSize.y - content_h) / 2));
 
     ImGui::BeginGroup();
 
-    // Loading text
+    // Spinner + filename
+    float time = (float)ImGui::GetTime();
+    const char* spinner_frames[] = { "|", "/", "-", "\\" };
+    int frame = (int)(time * 4.0f) % 4;
+
     char loading_text[256];
-    snprintf(loading_text, sizeof(loading_text), "Loading %s...", loading_filename_.c_str());
+    snprintf(loading_text, sizeof(loading_text), "%s  Loading %s",
+             spinner_frames[frame], loading_filename_.c_str());
     ImVec2 text_size = ImGui::CalcTextSize(loading_text);
     ImGui::SetCursorPosX((vp->WorkSize.x - text_size.x) / 2);
     ImGui::Text("%s", loading_text);
+
+    ImGui::Spacing();
+
+    // Phase text
+    if (!phase.empty()) {
+        ImVec2 phase_size = ImGui::CalcTextSize(phase.c_str());
+        ImGui::SetCursorPosX((vp->WorkSize.x - phase_size.x) / 2);
+        ImGui::TextDisabled("%s", phase.c_str());
+    }
 
     ImGui::Spacing();
 
@@ -144,14 +178,6 @@ void App::render_loading_overlay() {
     ImVec2 pct_size = ImGui::CalcTextSize(pct_text);
     ImGui::SetCursorPosX((vp->WorkSize.x - pct_size.x) / 2);
     ImGui::TextDisabled("%s", pct_text);
-
-    // Spinner animation
-    float time = (float)ImGui::GetTime();
-    const char* spinner_frames[] = { "|", "/", "-", "\\" };
-    int frame = (int)(time * 4.0f) % 4;
-    ImVec2 spin_size = ImGui::CalcTextSize(spinner_frames[0]);
-    ImGui::SetCursorPosX((vp->WorkSize.x - spin_size.x) / 2);
-    ImGui::Text("%s", spinner_frames[frame]);
 
     ImGui::EndGroup();
 

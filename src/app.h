@@ -60,6 +60,8 @@ private:
     bool load_success_ = false;
     std::string load_error_;
     std::string loading_filename_;
+    std::string loading_phase_;
+    std::mutex phase_mutex_;
     std::thread load_thread_;
     std::mutex load_mutex_;
 
