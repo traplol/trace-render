@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(perfetto_imgui LANGUAGES CXX)
+project(perfetto_imgui LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -31,7 +31,16 @@ FetchContent_Declare(imgui
   GIT_SHALLOW    TRUE
 )
 
-FetchContent_MakeAvailable(json SDL3 imgui)
+# --- SQLite (amalgamation) ---
+FetchContent_Declare(sqlite3
+  URL        https://www.sqlite.org/2024/sqlite-amalgamation-3450100.zip
+)
+FetchContent_MakeAvailable(json SDL3 imgui sqlite3)
+
+# Build SQLite as a static library
+add_library(sqlite3_lib STATIC ${sqlite3_SOURCE_DIR}/sqlite3.c)
+target_include_directories(sqlite3_lib PUBLIC ${sqlite3_SOURCE_DIR})
+target_compile_definitions(sqlite3_lib PRIVATE SQLITE_THREADSAFE=0 SQLITE_OMIT_LOAD_EXTENSION)
 
 # Build ImGui as a static library
 add_library(imgui_lib STATIC
@@ -58,6 +67,7 @@ target_include_directories(perfetto_imgui PRIVATE src)
 target_link_libraries(perfetto_imgui PRIVATE
   imgui_lib
   nlohmann_json::nlohmann_json
+  sqlite3_lib
   SDL3::SDL3-static
   OpenGL::GL
 )
@@ -87,6 +97,7 @@ if(BUILD_TESTS)
     GTest::gtest_main
     imgui_lib
     nlohmann_json::nlohmann_json
+    sqlite3_lib
     SDL3::SDL3-static
     OpenGL::GL
   )

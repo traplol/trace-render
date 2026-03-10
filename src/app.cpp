@@ -45,6 +45,7 @@ void App::open_file(const std::string& path) {
         std::string filename = path;
         auto pos = path.find_last_of("/\\");
         if (pos != std::string::npos) filename = path.substr(pos + 1);
+        query_db_.load(model_);
         status_message_ = "Loaded: " + filename + " (" +
                           std::to_string(model_.events_.size()) + " events, " +
                           std::to_string(model_.processes_.size()) + " processes)";
@@ -101,6 +102,7 @@ void App::update() {
         ImGui::DockBuilderDockWindow("Filters", dock_right_bottom);
         ImGui::DockBuilderDockWindow("Search", dock_bottom);
         ImGui::DockBuilderDockWindow("Statistics", dock_bottom);
+        ImGui::DockBuilderDockWindow("SQL Query", dock_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
     } else {
@@ -135,6 +137,7 @@ void App::update() {
         search_.render(model_, view_);
         filter_.render(model_, view_);
         stats_.render(model_, view_);
+        query_.render(query_db_, view_);
     } else {
         // Welcome screen
         ImGui::Begin("Timeline");
@@ -158,6 +161,10 @@ void App::update() {
         ImGui::End();
 
         ImGui::Begin("Statistics");
+        ImGui::TextDisabled("No trace loaded.");
+        ImGui::End();
+
+        ImGui::Begin("SQL Query");
         ImGui::TextDisabled("No trace loaded.");
         ImGui::End();
     }
