@@ -14,6 +14,10 @@ private:
     float total_content_height_ = 0.0f;
     std::vector<uint32_t> visible_events_;
 
+    // Go-to-time popup
+    bool show_goto_ = false;
+    char goto_buf_[128] = {};
+
     CounterTrackRenderer counter_renderer_;
     FlowRenderer flow_renderer_;
 

@@ -4,6 +4,8 @@
 #include <cmath>
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 // Format a duration (e.g. for tooltips, detail panel)
 static void format_time(double us, char* buf, size_t buf_size) {
@@ -493,6 +495,57 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
             view.selected_event_idx = -1;
         }
+        if (ImGui::IsKeyPressed(ImGuiKey_G)) {
+            show_goto_ = true;
+            goto_buf_[0] = '\0';
+        }
+    }
+
+    // Go-to-time popup
+    if (show_goto_) {
+        ImGui::OpenPopup("Go to Time");
+        show_goto_ = false;
+    }
+    if (ImGui::BeginPopup("Go to Time")) {
+        ImGui::Text("Enter time (e.g. 63.4231s, 500ms, 1234us, 5000ns):");
+        ImGui::SetNextItemWidth(400);
+        bool submitted = ImGui::InputText("##goto_time", goto_buf_, sizeof(goto_buf_),
+                                           ImGuiInputTextFlags_EnterReturnsTrue);
+        if (ImGui::IsWindowAppearing()) {
+            ImGui::SetKeyboardFocusHere(-1);
+        }
+        ImGui::SameLine();
+        if (submitted || ImGui::Button("Go")) {
+            // Parse time string to microseconds
+            char* end = nullptr;
+            double val = std::strtod(goto_buf_, &end);
+            if (end != goto_buf_) {
+                // Skip whitespace
+                while (*end == ' ') end++;
+                double target_us = 0.0;
+                if (strncmp(end, "ns", 2) == 0) {
+                    target_us = val / 1000.0;
+                } else if (strncmp(end, "us", 2) == 0 || *end == '\0') {
+                    target_us = val;
+                } else if (strncmp(end, "ms", 2) == 0) {
+                    target_us = val * 1000.0;
+                } else if (*end == 's') {
+                    target_us = val * 1000000.0;
+                } else {
+                    target_us = val; // default to us
+                }
+                // Center view on target, keep current zoom level
+                double range = view.view_end_ts - view.view_start_ts;
+                view.view_start_ts = target_us - range / 2.0;
+                view.view_end_ts = target_us + range / 2.0;
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 
     // Render timeline content
