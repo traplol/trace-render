@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cmath>
+#include <cstdlib>
 
 static void format_time_stats(double us, char* buf, size_t buf_size) {
     double abs_us = std::abs(us);
@@ -131,6 +132,7 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
     int col_count = (int)result_.columns.size();
 
     if (ImGui::BeginTable("QueryResults", col_count,
+            ImGuiTableFlags_Sortable |
             ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
             ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollX |
             ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable |
@@ -139,9 +141,39 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
 
         ImGui::TableSetupScrollFreeze(0, 1);
         for (int c = 0; c < col_count; c++) {
-            ImGui::TableSetupColumn(result_.columns[c].c_str());
+            ImGui::TableSetupColumn(result_.columns[c].c_str(), ImGuiTableColumnFlags_None, 0.0f, (ImGuiID)c);
         }
         ImGui::TableHeadersRow();
+
+        if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
+            if (sort_specs->SpecsDirty) {
+                sort_specs->SpecsDirty = false;
+                if (sort_specs->SpecsCount > 0) {
+                    const auto& spec = sort_specs->Specs[0];
+                    int sort_col = (int)spec.ColumnUserID;
+                    bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
+                    std::sort(result_.rows.begin(), result_.rows.end(),
+                        [&](const std::vector<std::string>& a, const std::vector<std::string>& b) {
+                            if (sort_col >= (int)a.size() || sort_col >= (int)b.size()) return false;
+                            const std::string& sa = a[sort_col];
+                            const std::string& sb = b[sort_col];
+                            // Try numeric comparison first
+                            char* end_a = nullptr;
+                            char* end_b = nullptr;
+                            double da = strtod(sa.c_str(), &end_a);
+                            double db = strtod(sb.c_str(), &end_b);
+                            int cmp;
+                            if (end_a != sa.c_str() && *end_a == '\0' &&
+                                end_b != sb.c_str() && *end_b == '\0') {
+                                cmp = (da < db) ? -1 : (da > db) ? 1 : 0;
+                            } else {
+                                cmp = sa.compare(sb);
+                            }
+                            return asc ? (cmp < 0) : (cmp > 0);
+                        });
+                }
+            }
+        }
 
         ImGuiListClipper clipper;
         clipper.Begin((int)result_.rows.size());
