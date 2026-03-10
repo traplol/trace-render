@@ -3,6 +3,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include <nlohmann/json.hpp>
+#include <SDL3/SDL.h>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -10,8 +11,10 @@
 #include <algorithm>
 
 void App::init(SDL_Window* window) {
+    window_ = window;
     toolbar_.set_window(window);
     load_settings();
+    SDL_GL_SetSwapInterval(vsync_ ? 1 : 0);
 }
 
 void App::shutdown() {
@@ -227,6 +230,10 @@ void App::render_settings_modal() {
 
         ImGui::Checkbox("Show Flow Arrows", &view_.show_flows);
 
+        if (ImGui::Checkbox("VSync", &vsync_)) {
+            SDL_GL_SetSwapInterval(vsync_ ? 1 : 0);
+        }
+
         ImGui::SeparatorText("Parser");
 
         ImGui::Checkbox("Interpret timestamps as nanoseconds", &view_.time_unit_ns);
@@ -287,6 +294,7 @@ void App::save_settings() {
     j["proc_header_height"] = view_.proc_header_height;
     j["scrollbar_scale"] = view_.scrollbar_scale;
     j["dark_theme"] = dark_theme_;
+    j["vsync"] = vsync_;
     j["query_tabs"] = stats_.save_tabs();
 
     std::ofstream f(path);
@@ -330,6 +338,8 @@ void App::load_settings() {
             else
                 ImGui::StyleColorsLight();
         }
+        if (j.contains("vsync"))
+            vsync_ = j["vsync"].get<bool>();
         if (j.contains("query_tabs")) {
             stats_.load_tabs(j["query_tabs"]);
         }

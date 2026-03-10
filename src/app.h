@@ -47,6 +47,8 @@ private:
     bool first_layout_ = true;
     bool show_settings_ = false;
     bool dark_theme_ = true;
+    bool vsync_ = true;
+    SDL_Window* window_ = nullptr;
 
     void render_settings_modal();
     void load_settings();
