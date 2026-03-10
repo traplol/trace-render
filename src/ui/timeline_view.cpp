@@ -296,20 +296,22 @@ int32_t TimelineView::hit_test(float click_x, float click_y, ImVec2 area_min, Im
             continue;
         if (click_x < track_left) continue;
 
-        // Which depth level?
+        const auto& proc = model.processes_[layout.proc_idx];
+        const auto& thread = proc.threads[layout.thread_idx];
+
+        // Check if click is within the actual slice rows (not in padding below)
+        float rows_height = (thread.max_depth + 1) * view.track_height;
         float rel_y = click_y - layout.y_start;
+        if (rel_y >= rows_height) return -1; // In padding area
+
         int clicked_depth = (int)(rel_y / view.track_height);
 
         double click_time = view.x_to_time(click_x, track_left, track_width);
 
-        const auto& proc = model.processes_[layout.proc_idx];
-        const auto& thread = proc.threads[layout.thread_idx];
-
         // Find the best matching event at this depth and time
         int32_t best = -1;
-        int64_t best_dur = INT64_MAX;
+        double best_dur = 1e18;
 
-        // Search visible events
         std::vector<uint32_t> candidates;
         model.query_visible(thread, click_time - 1.0, click_time + 1.0, candidates);
 
@@ -321,20 +323,6 @@ int32_t TimelineView::hit_test(float click_x, float click_y, ImVec2 area_min, Im
                 if (ev.dur < best_dur) {
                     best_dur = ev.dur;
                     best = (int32_t)idx;
-                }
-            }
-        }
-
-        // If no exact depth match, try any depth
-        if (best == -1) {
-            for (uint32_t idx : candidates) {
-                const auto& ev = model.events_[idx];
-                if (ev.is_end_event) continue;
-                if (click_time >= ev.ts && click_time <= ev.end_ts()) {
-                    if (ev.dur < best_dur) {
-                        best_dur = ev.dur;
-                        best = (int32_t)idx;
-                    }
                 }
             }
         }
