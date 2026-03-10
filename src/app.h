@@ -41,4 +41,7 @@ private:
     bool dark_theme_ = true;
 
     void render_settings_modal();
+    void load_settings();
+    void save_settings();
+    std::string settings_path() const;
 };

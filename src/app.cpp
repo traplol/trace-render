@@ -1,12 +1,16 @@
 #include "app.h"
 #include "imgui.h"
 #include "imgui_internal.h"
+#include <nlohmann/json.hpp>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <algorithm>
 
 void App::init(SDL_Window* window) {
     toolbar_.set_window(window);
+    load_settings();
 }
 
 void App::open_file(const std::string& path) {
@@ -207,10 +211,74 @@ void App::render_settings_modal() {
         ImGui::Spacing();
 
         if (ImGui::Button("Close", ImVec2(200, 0))) {
+            save_settings();
             show_settings_ = false;
             ImGui::CloseCurrentPopup();
         }
 
         ImGui::EndPopup();
+    }
+}
+
+std::string App::settings_path() const {
+    std::string dir;
+    if (const char* xdg = std::getenv("XDG_CONFIG_HOME")) {
+        dir = std::string(xdg) + "/perfetto-imgui";
+    } else if (const char* home = std::getenv("HOME")) {
+        dir = std::string(home) + "/.config/perfetto-imgui";
+    } else {
+        dir = ".";
+    }
+    return dir + "/settings.json";
+}
+
+void App::save_settings() {
+    std::string path = settings_path();
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path());
+
+    nlohmann::json j;
+    j["font_scale"] = ImGui::GetIO().FontGlobalScale;
+    j["track_height"] = view_.track_height;
+    j["track_padding"] = view_.track_padding;
+    j["counter_track_height"] = view_.counter_track_height;
+    j["label_width"] = view_.label_width;
+    j["show_flows"] = view_.show_flows;
+    j["dark_theme"] = dark_theme_;
+
+    std::ofstream f(path);
+    if (f.is_open()) {
+        f << j.dump(2);
+    }
+}
+
+void App::load_settings() {
+    std::string path = settings_path();
+    std::ifstream f(path);
+    if (!f.is_open()) return;
+
+    try {
+        nlohmann::json j = nlohmann::json::parse(f);
+
+        if (j.contains("font_scale"))
+            ImGui::GetIO().FontGlobalScale = j["font_scale"].get<float>();
+        if (j.contains("track_height"))
+            view_.track_height = j["track_height"].get<float>();
+        if (j.contains("track_padding"))
+            view_.track_padding = j["track_padding"].get<float>();
+        if (j.contains("counter_track_height"))
+            view_.counter_track_height = j["counter_track_height"].get<float>();
+        if (j.contains("label_width"))
+            view_.label_width = j["label_width"].get<float>();
+        if (j.contains("show_flows"))
+            view_.show_flows = j["show_flows"].get<bool>();
+        if (j.contains("dark_theme")) {
+            dark_theme_ = j["dark_theme"].get<bool>();
+            if (dark_theme_)
+                ImGui::StyleColorsDark();
+            else
+                ImGui::StyleColorsLight();
+        }
+    } catch (...) {
+        // Ignore malformed settings file
     }
 }
