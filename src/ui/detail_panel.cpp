@@ -172,9 +172,11 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
     // Children & time dominance
     if (ev.dur > 0) {
-        // Rebuild children cache when selection changes
-        if (cached_event_idx_ != view.selected_event_idx) {
+        // Rebuild children cache when selection or descendants flag changes
+        if (cached_event_idx_ != view.selected_event_idx ||
+            cached_descendants_flag_ != include_all_descendants_) {
             cached_event_idx_ = view.selected_event_idx;
+            cached_descendants_flag_ = include_all_descendants_;
             rebuild_children(model, ev);
         }
 
@@ -186,6 +188,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 char self_buf[64];
                 format_time_detail(self_time_, self_buf, sizeof(self_buf));
                 ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Self: %s (%.1f%%)", self_buf, self_pct_);
+                ImGui::Checkbox("Include all descendants", &include_all_descendants_);
 
                 ImGui::Spacing();
 
@@ -270,8 +273,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
 void DetailPanel::rebuild_children(const TraceModel& model, const TraceEvent& ev) {
     children_.clear();
-    double children_total = 0.0;
-    uint8_t child_depth = ev.depth + 1;
+    double immediate_children_total = 0.0;
 
     for (const auto& proc : model.processes_) {
         if (proc.pid != ev.pid) continue;
@@ -279,12 +281,22 @@ void DetailPanel::rebuild_children(const TraceModel& model, const TraceEvent& ev
             if (thread.tid != ev.tid) continue;
             for (uint32_t idx : thread.event_indices) {
                 const auto& child = model.events_[idx];
-                if (child.depth != child_depth) continue;
-                if (child.ts >= ev.ts && child.end_ts() <= ev.end_ts() && child.dur > 0) {
+                if (child.depth <= ev.depth) {
+                    if (child.ts > ev.end_ts()) break;
+                    continue;
+                }
+                if (child.ts < ev.ts || child.end_ts() > ev.end_ts()) continue;
+                if (child.dur <= 0) continue;
+
+                if (child.depth == ev.depth + 1) {
+                    immediate_children_total += child.dur;
+                }
+
+                if (include_all_descendants_ || child.depth == ev.depth + 1) {
                     float pct = (float)(child.dur / ev.dur * 100.0);
                     children_.push_back({idx, child.name_idx, child.dur, pct});
-                    children_total += child.dur;
                 }
+
                 if (child.ts > ev.end_ts()) break;
             }
             break;
@@ -292,6 +304,6 @@ void DetailPanel::rebuild_children(const TraceModel& model, const TraceEvent& ev
         break;
     }
 
-    self_time_ = ev.dur - children_total;
+    self_time_ = ev.dur - immediate_children_total;
     self_pct_ = (float)(self_time_ / ev.dur * 100.0);
 }
