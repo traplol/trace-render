@@ -67,6 +67,7 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                 select_function_by_name(name, model);
                 instances_dirty_ = true;
             }
+            scroll_to_cursor_ = true;
         }
     } else if (view.selected_event_idx < 0 && last_selected_event_ >= 0) {
         last_selected_event_ = -1;
@@ -144,6 +145,9 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
         char buf[64];
         ImGuiListClipper clipper;
         clipper.Begin((int)instances_.size());
+        if (scroll_to_cursor_ && instance_cursor_ >= 0) {
+            clipper.IncludeItemByIndex(instance_cursor_);
+        }
         while (clipper.Step()) {
             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
                 uint32_t ev_idx = instances_[i];
@@ -158,6 +162,10 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                 if (ImGui::Selectable(id_buf, is_selected,
                         ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
                     navigate_to_instance(i, model, view);
+                }
+                if (scroll_to_cursor_ && i == instance_cursor_) {
+                    ImGui::SetScrollHereY(0.5f);
+                    scroll_to_cursor_ = false;
                 }
 
                 ImGui::TableNextColumn();
