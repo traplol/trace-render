@@ -1,4 +1,5 @@
 #include "toolbar.h"
+#include "tracing.h"
 #include "imgui.h"
 #include <SDL3/SDL.h>
 
@@ -16,6 +17,7 @@ void Toolbar::on_file_selected(const char* path) {
 }
 
 void Toolbar::render(const TraceModel& model, ViewState& view) {
+    TRACE_SCOPE_CAT("Toolbar", "ui");
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Open...", "Ctrl+O")) {

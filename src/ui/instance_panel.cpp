@@ -1,4 +1,5 @@
 #include "instance_panel.h"
+#include "tracing.h"
 #include "imgui.h"
 #include <algorithm>
 #include <cstdio>
@@ -49,6 +50,7 @@ void InstancePanel::navigate_to_instance(int32_t idx, const TraceModel& model, V
 }
 
 void InstancePanel::render(const TraceModel& model, ViewState& view) {
+    TRACE_SCOPE_CAT("Instances", "ui");
     ImGui::Begin("Instances");
 
     if (model.events_.empty()) {

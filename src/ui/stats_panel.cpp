@@ -1,4 +1,5 @@
 #include "stats_panel.h"
+#include "tracing.h"
 #include "imgui.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -76,6 +77,7 @@ void StatsPanel::load_tabs(const nlohmann::json& j) {
 }
 
 void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
+    TRACE_SCOPE_CAT("Statistics", "ui");
     ImGui::Begin("Statistics");
 
     if (!db.is_loaded()) {

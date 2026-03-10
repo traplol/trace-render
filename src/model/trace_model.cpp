@@ -1,8 +1,10 @@
 #include "trace_model.h"
+#include "tracing.h"
 #include <stack>
 #include <algorithm>
 
 void TraceModel::build_index() {
+    TRACE_SCOPE_CAT("BuildIndex", "model");
     // Sort events within each thread by timestamp
     for (auto& proc : processes_) {
         for (auto& thread : proc.threads) {

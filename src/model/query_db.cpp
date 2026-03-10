@@ -1,4 +1,5 @@
 #include "query_db.h"
+#include "tracing.h"
 #include <sqlite3.h>
 
 QueryDb::QueryDb() {
@@ -10,6 +11,7 @@ QueryDb::~QueryDb() {
 }
 
 void QueryDb::load(const TraceModel& model) {
+    TRACE_SCOPE_CAT("QueryDb::load", "model");
     if (!db_) return;
 
     // Drop existing tables

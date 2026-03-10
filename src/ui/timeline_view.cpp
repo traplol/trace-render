@@ -1,4 +1,5 @@
 #include "timeline_view.h"
+#include "tracing.h"
 #include "model/color_palette.h"
 #include "imgui.h"
 #include <cmath>
@@ -78,6 +79,7 @@ static void format_ruler_time(double us, double tick_interval, char* buf, size_t
 
 void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max,
                                      const ViewState& view) {
+    TRACE_SCOPE_CAT("TimeRuler", "timeline");
     float ruler_height = view.ruler_height;
     float width = area_max.x - area_min.x;
     double range = view.view_end_ts - view.view_start_ts;
@@ -131,6 +133,7 @@ void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 are
 
 void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max,
                                  const TraceModel& model, ViewState& view) {
+    TRACE_SCOPE_CAT("RenderTracks", "timeline");
     float ruler_height = view.ruler_height;
     float width = area_max.x - area_min.x;
     float y = area_min.y + ruler_height - scroll_y_;
@@ -338,6 +341,7 @@ int32_t TimelineView::hit_test(float click_x, float click_y, ImVec2 area_min, Im
 }
 
 void TimelineView::render(const TraceModel& model, ViewState& view) {
+    TRACE_SCOPE_CAT("Timeline", "ui");
     ImGui::Begin("Timeline", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
     ImVec2 canvas_min = ImGui::GetCursorScreenPos();

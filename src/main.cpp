@@ -1,4 +1,5 @@
 #include "app.h"
+#include "tracing.h"
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_opengl3.h"
@@ -67,14 +68,22 @@ int main(int argc, char* argv[]) {
 
     // Parse command-line arguments
     const char* file_arg = nullptr;
+    const char* trace_output = nullptr;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-ns") == 0) {
             app.set_time_unit_ns(true);
         } else if (strcmp(argv[i], "-us") == 0) {
             app.set_time_unit_ns(false);
+        } else if (strcmp(argv[i], "--trace") == 0 && i + 1 < argc) {
+            trace_output = argv[++i];
         } else {
             file_arg = argv[i];
         }
+    }
+
+    if (trace_output) {
+        Tracer::instance().set_output(trace_output);
+        printf("Tracing to: %s\n", trace_output);
     }
 
     if (file_arg) {
@@ -82,22 +91,28 @@ int main(int argc, char* argv[]) {
     }
 
     bool running = true;
+    uint64_t frame_num = 0;
     while (running) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL3_ProcessEvent(&event);
-            if (event.type == SDL_EVENT_QUIT) {
-                running = false;
-            }
-            if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
-                event.window.windowID == SDL_GetWindowID(window)) {
-                running = false;
-            }
-            // Handle file drop
-            if (event.type == SDL_EVENT_DROP_FILE) {
-                const char* file = event.drop.data;
-                if (file) {
-                    app.open_file(file);
+        TRACE_SCOPE("Frame");
+
+        {
+            TRACE_SCOPE_CAT("PollEvents", "input");
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                ImGui_ImplSDL3_ProcessEvent(&event);
+                if (event.type == SDL_EVENT_QUIT) {
+                    running = false;
+                }
+                if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
+                    event.window.windowID == SDL_GetWindowID(window)) {
+                    running = false;
+                }
+                // Handle file drop
+                if (event.type == SDL_EVENT_DROP_FILE) {
+                    const char* file = event.drop.data;
+                    if (file) {
+                        app.open_file(file);
+                    }
                 }
             }
         }
@@ -107,23 +122,43 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplSDL3_NewFrame();
-        ImGui::NewFrame();
+        {
+            TRACE_SCOPE_CAT("NewFrame", "imgui");
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplSDL3_NewFrame();
+            ImGui::NewFrame();
+        }
 
-        app.update();
+        {
+            TRACE_SCOPE_CAT("AppUpdate", "app");
+            app.update();
+        }
 
-        ImGui::Render();
-        int display_w, display_h;
-        SDL_GetWindowSizeInPixels(window, &display_w, &display_h);
-        glViewport(0, 0, display_w, display_h);
-        glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        {
+            TRACE_SCOPE_CAT("Render", "imgui");
+            ImGui::Render();
+            int display_w, display_h;
+            SDL_GetWindowSizeInPixels(window, &display_w, &display_h);
+            glViewport(0, 0, display_w, display_h);
+            glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        }
 
-        SDL_GL_SwapWindow(window);
+        {
+            TRACE_SCOPE_CAT("SwapBuffers", "gl");
+            SDL_GL_SwapWindow(window);
+        }
+
+        // Write FPS counter event every frame
+        if (Tracer::instance().enabled()) {
+            Tracer::instance().write_counter("FPS", "perf",
+                Tracer::instance().now_us(), "fps", (double)io.Framerate);
+        }
+        frame_num++;
     }
 
+    Tracer::instance().close();
     app.shutdown();
 
     ImGui_ImplOpenGL3_Shutdown();

@@ -1,8 +1,10 @@
 #include "filter_panel.h"
+#include "tracing.h"
 #include "imgui.h"
 #include <set>
 
 void FilterPanel::render(const TraceModel& model, ViewState& view) {
+    TRACE_SCOPE_CAT("Filters", "ui");
     ImGui::Begin("Filters");
 
     // Process / Thread tree

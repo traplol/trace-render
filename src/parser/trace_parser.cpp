@@ -1,4 +1,5 @@
 #include "trace_parser.h"
+#include "tracing.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <sstream>
@@ -402,6 +403,7 @@ struct SaxHandler : json::json_sax_t {
 };
 
 bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
+    TRACE_SCOPE_CAT("Parse", "io");
     std::ifstream file(filepath, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
         error_message = "Could not open file: " + filepath;

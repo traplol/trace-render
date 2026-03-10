@@ -1,4 +1,5 @@
 #include "detail_panel.h"
+#include "tracing.h"
 #include "imgui.h"
 #include <nlohmann/json.hpp>
 #include <cstdio>
@@ -68,6 +69,7 @@ static void render_json_value(const nlohmann::json& j, int depth = 0) {
 }
 
 void DetailPanel::render(const TraceModel& model, ViewState& view) {
+    TRACE_SCOPE_CAT("Details", "ui");
     ImGui::Begin("Details");
 
     if (view.selected_event_idx < 0 ||

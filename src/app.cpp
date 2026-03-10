@@ -1,4 +1,5 @@
 #include "app.h"
+#include "tracing.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include <nlohmann/json.hpp>
@@ -18,6 +19,7 @@ void App::shutdown() {
 }
 
 void App::open_file(const std::string& path) {
+    TRACE_SCOPE_CAT("OpenFile", "io");
     status_message_ = "Loading: " + path;
     loading_ = true;
 
@@ -58,6 +60,7 @@ void App::open_file(const std::string& path) {
 }
 
 void App::update() {
+    TRACE_SCOPE("App::update");
     // Set up dockspace over the entire viewport
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);

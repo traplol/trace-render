@@ -1,4 +1,5 @@
 #include "search_panel.h"
+#include "tracing.h"
 #include "imgui.h"
 #include <algorithm>
 #include <cctype>
@@ -28,6 +29,7 @@ static void format_time_search(double us, char* buf, size_t buf_size) {
 }
 
 void SearchPanel::render(const TraceModel& model, ViewState& view) {
+    TRACE_SCOPE_CAT("Search", "ui");
     ImGui::Begin("Search");
 
     // Focus on Ctrl+F
