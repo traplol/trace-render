@@ -170,14 +170,15 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
         }
     }
 
-    // Children & time dominance
-    if (ev.dur > 0) {
+    // Children & time dominance (re-fetch ev in case Parent button changed selection)
+    const auto& current_ev = model.events_[view.selected_event_idx];
+    if (current_ev.dur > 0) {
         // Rebuild children cache when selection or descendants flag changes
         if (cached_event_idx_ != view.selected_event_idx ||
             cached_descendants_flag_ != include_all_descendants_) {
             cached_event_idx_ = view.selected_event_idx;
             cached_descendants_flag_ = include_all_descendants_;
-            rebuild_children(model, ev);
+            rebuild_children(model, current_ev);
         }
 
         if (!children_.empty()) {
