@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
+#include <chrono>
 
 void App::init(SDL_Window* window) {
     window_ = window;
@@ -18,22 +19,62 @@ void App::init(SDL_Window* window) {
 }
 
 void App::shutdown() {
+    if (load_thread_.joinable()) load_thread_.join();
     save_settings();
 }
 
 void App::open_file(const std::string& path) {
-    TRACE_SCOPE_CAT("OpenFile", "io");
-    status_message_ = "Loading: " + path;
+    // Don't start a new load while one is in progress
+    if (loading_) return;
+
+    // Join any previous load thread
+    if (load_thread_.joinable()) load_thread_.join();
+
+    // Extract filename for display
+    loading_filename_ = path;
+    auto pos = path.find_last_of("/\\");
+    if (pos != std::string::npos) loading_filename_ = path.substr(pos + 1);
+
+    status_message_ = "Loading: " + loading_filename_;
     loading_ = true;
+    load_progress_ = 0.0f;
+    load_finished_ = false;
+    load_success_ = false;
+    load_error_.clear();
 
-    parser_.on_progress = [this](float p) {
-        load_progress_ = p;
-    };
-    parser_.time_unit_ns = view_.time_unit_ns;
+    bool time_ns = view_.time_unit_ns;
 
-    if (parser_.parse(path, model_)) {
+    load_thread_ = std::thread([this, path, time_ns]() {
+        TRACE_SCOPE_CAT("OpenFile", "io");
+
+        TraceParser parser;
+        parser.on_progress = [this](float p) {
+            load_progress_.store(p, std::memory_order_relaxed);
+        };
+        parser.time_unit_ns = time_ns;
+
+        TraceModel new_model;
+        bool ok = parser.parse(path, new_model);
+
+        std::lock_guard<std::mutex> lock(load_mutex_);
+        if (ok) {
+            model_ = std::move(new_model);
+            load_success_ = true;
+        } else {
+            load_success_ = false;
+            load_error_ = parser.error_message;
+        }
+        load_finished_ = true;
+    });
+}
+
+void App::finish_load() {
+    if (load_thread_.joinable()) load_thread_.join();
+
+    std::lock_guard<std::mutex> lock(load_mutex_);
+
+    if (load_success_) {
         has_trace_ = true;
-        // Reset view but preserve layout settings
         view_.view_start_ts = 0.0;
         view_.view_end_ts = 1000.0;
         view_.selected_event_idx = -1;
@@ -46,24 +87,85 @@ void App::open_file(const std::string& path) {
         if (model_.min_ts_ < model_.max_ts_) {
             view_.zoom_to_fit(model_.min_ts_, model_.max_ts_);
         }
-        // Extract filename for status
-        std::string filename = path;
-        auto pos = path.find_last_of("/\\");
-        if (pos != std::string::npos) filename = path.substr(pos + 1);
         query_db_.load(model_);
-        status_message_ = "Loaded: " + filename + " (" +
+        status_message_ = "Loaded: " + loading_filename_ + " (" +
                           std::to_string(model_.events_.size()) + " events, " +
                           std::to_string(model_.processes_.size()) + " processes)";
     } else {
-        status_message_ = "Error: " + parser_.error_message;
+        status_message_ = "Error: " + load_error_;
         has_trace_ = false;
     }
 
     loading_ = false;
+    load_finished_ = false;
+}
+
+void App::render_loading_overlay() {
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 center = vp->GetCenter();
+
+    // Semi-transparent fullscreen overlay
+    ImGui::SetNextWindowPos(vp->WorkPos);
+    ImGui::SetNextWindowSize(vp->WorkSize);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.7f));
+    ImGui::Begin("##LoadingOverlay", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+                 ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings |
+                 ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
+    ImGui::PopStyleColor();
+
+    float progress = load_progress_.load(std::memory_order_relaxed);
+
+    // Center the loading content
+    float content_w = 600.0f;
+    float content_h = 120.0f;
+    ImGui::SetCursorPos(ImVec2((vp->WorkSize.x - content_w) / 2,
+                                (vp->WorkSize.y - content_h) / 2));
+
+    ImGui::BeginGroup();
+
+    // Loading text
+    char loading_text[256];
+    snprintf(loading_text, sizeof(loading_text), "Loading %s...", loading_filename_.c_str());
+    ImVec2 text_size = ImGui::CalcTextSize(loading_text);
+    ImGui::SetCursorPosX((vp->WorkSize.x - text_size.x) / 2);
+    ImGui::Text("%s", loading_text);
+
+    ImGui::Spacing();
+
+    // Progress bar
+    ImGui::SetCursorPosX((vp->WorkSize.x - content_w) / 2);
+    ImGui::ProgressBar(progress, ImVec2(content_w, 0));
+
+    // Percentage text
+    char pct_text[32];
+    snprintf(pct_text, sizeof(pct_text), "%.0f%%", progress * 100.0f);
+    ImVec2 pct_size = ImGui::CalcTextSize(pct_text);
+    ImGui::SetCursorPosX((vp->WorkSize.x - pct_size.x) / 2);
+    ImGui::TextDisabled("%s", pct_text);
+
+    // Spinner animation
+    float time = (float)ImGui::GetTime();
+    const char* spinner_frames[] = { "|", "/", "-", "\\" };
+    int frame = (int)(time * 4.0f) % 4;
+    ImVec2 spin_size = ImGui::CalcTextSize(spinner_frames[0]);
+    ImGui::SetCursorPosX((vp->WorkSize.x - spin_size.x) / 2);
+    ImGui::Text("%s", spinner_frames[frame]);
+
+    ImGui::EndGroup();
+
+    ImGui::End();
 }
 
 void App::update() {
     TRACE_SCOPE("App::update");
+
+    // Check if background load is complete
+    if (load_finished_.load(std::memory_order_acquire)) {
+        finish_load();
+    }
+
     // Set up dockspace over the entire viewport
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -138,7 +240,7 @@ void App::update() {
         render_settings_modal();
     }
 
-    if (has_trace_) {
+    if (has_trace_ && !loading_) {
         timeline_.render(model_, view_);
         detail_.render(model_, view_);
         search_.render(model_, view_);
@@ -150,11 +252,13 @@ void App::update() {
     } else {
         // Welcome screen
         ImGui::Begin("Timeline");
-        ImVec2 avail = ImGui::GetContentRegionAvail();
-        ImVec2 text_size = ImGui::CalcTextSize("Open a Chrome trace file (Ctrl+O) or drag & drop");
-        ImGui::SetCursorPos(ImVec2((avail.x - text_size.x) / 2,
-                                    (avail.y - text_size.y) / 2));
-        ImGui::TextDisabled("Open a Chrome trace file (Ctrl+O) or drag & drop");
+        if (!loading_) {
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            ImVec2 text_size = ImGui::CalcTextSize("Open a Chrome trace file (Ctrl+O) or drag & drop");
+            ImGui::SetCursorPos(ImVec2((avail.x - text_size.x) / 2,
+                                        (avail.y - text_size.y) / 2));
+            ImGui::TextDisabled("Open a Chrome trace file (Ctrl+O) or drag & drop");
+        }
         ImGui::End();
 
         ImGui::Begin("Details");
@@ -180,6 +284,11 @@ void App::update() {
         diagnostics_.render(model_, view_);
     }
 
+    // Loading overlay (drawn on top of everything)
+    if (loading_) {
+        render_loading_overlay();
+    }
+
     // Status bar
     {
         ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -194,9 +303,10 @@ void App::update() {
         ImGui::Text("%s", status_message_.c_str());
         if (loading_) {
             ImGui::SameLine();
-            ImGui::ProgressBar(load_progress_, ImVec2(200, 0));
+            float progress = load_progress_.load(std::memory_order_relaxed);
+            ImGui::ProgressBar(progress, ImVec2(200, 0));
         }
-        if (has_trace_ && view_.selected_event_idx >= 0) {
+        if (has_trace_ && !loading_ && view_.selected_event_idx >= 0) {
             ImGui::SameLine(ImGui::GetWindowWidth() - 900);
             const auto& ev = model_.events_[view_.selected_event_idx];
             ImGui::Text("Selected: %s", model_.get_string(ev.name_idx).c_str());

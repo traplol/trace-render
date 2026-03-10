@@ -14,6 +14,9 @@
 #include "ui/diagnostics_panel.h"
 #include "model/query_db.h"
 #include <string>
+#include <thread>
+#include <atomic>
+#include <mutex>
 
 struct SDL_Window;
 
@@ -43,8 +46,6 @@ private:
     QueryDb query_db_;
 
     bool has_trace_ = false;
-    bool loading_ = false;
-    float load_progress_ = 0.0f;
     std::string status_message_;
     bool first_layout_ = true;
     bool show_settings_ = false;
@@ -52,6 +53,18 @@ private:
     bool vsync_ = true;
     SDL_Window* window_ = nullptr;
 
+    // Background loading
+    std::atomic<bool> loading_{false};
+    std::atomic<float> load_progress_{0.0f};
+    std::atomic<bool> load_finished_{false};
+    bool load_success_ = false;
+    std::string load_error_;
+    std::string loading_filename_;
+    std::thread load_thread_;
+    std::mutex load_mutex_;
+
+    void finish_load();
+    void render_loading_overlay();
     void render_settings_modal();
     void load_settings();
     void save_settings();
