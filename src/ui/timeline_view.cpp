@@ -113,10 +113,12 @@ void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 are
                    ImVec2(x, area_max.y),
                    IM_COL32(60, 60, 60, 100));
 
-        // Time label
+        // Time label (clip to ruler area so last label doesn't overflow)
         char buf[64];
         format_ruler_time(t, nice_tick, buf, sizeof(buf));
+        dl->PushClipRect(area_min, ImVec2(area_max.x, area_min.y + ruler_height), true);
         dl->AddText(ImVec2(x + 6, area_min.y + 6), IM_COL32(200, 200, 200, 255), buf);
+        dl->PopClipRect();
     }
 
     // Ruler bottom border

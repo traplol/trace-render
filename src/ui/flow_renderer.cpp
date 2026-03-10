@@ -9,7 +9,8 @@ void FlowRenderer::render(ImDrawList* dl, const TraceModel& model, const ViewSta
     float track_width = (area_max.x - area_min.x) - label_width;
     ImU32 flow_color = IM_COL32(255, 180, 50, 160);
 
-    dl->PushClipRect(ImVec2(track_left, area_min.y), area_max, true);
+    float ruler_height = 90.0f;
+    dl->PushClipRect(ImVec2(track_left, area_min.y + ruler_height), area_max, true);
 
     for (const auto& [id, indices] : model.flow_groups_) {
         if (indices.size() < 2) continue;

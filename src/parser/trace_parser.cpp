@@ -53,12 +53,17 @@ struct SaxHandler : json::json_sax_t {
 
         // Handle counter events
         if (current_event.ph == Phase::Counter) {
-            for (auto& [name, val] : counter_values) {
-                std::string key = std::to_string(current_event.pid) + ":" + name;
+            const std::string& event_name = model.get_string(current_event.name_idx);
+            for (auto& [arg_key, val] : counter_values) {
+                // Use event name; append arg key if multiple values
+                std::string series_name = event_name;
+                if (counter_values.size() > 1) {
+                    series_name += "." + arg_key;
+                }
                 // Find or create counter series
                 CounterSeries* cs = nullptr;
                 for (auto& s : model.counter_series_) {
-                    if (s.pid == current_event.pid && s.name == name) {
+                    if (s.pid == current_event.pid && s.name == series_name) {
                         cs = &s;
                         break;
                     }
@@ -67,7 +72,7 @@ struct SaxHandler : json::json_sax_t {
                     model.counter_series_.push_back({});
                     cs = &model.counter_series_.back();
                     cs->pid = current_event.pid;
-                    cs->name = name;
+                    cs->name = series_name;
                 }
                 cs->points.push_back({current_event.ts, val});
             }
@@ -83,10 +88,15 @@ struct SaxHandler : json::json_sax_t {
 
         model.events_.push_back(current_event);
 
-        // Add to thread
-        auto& proc = model.get_or_create_process(current_event.pid);
-        auto& thread = proc.get_or_create_thread(current_event.tid);
-        thread.event_indices.push_back(ev_idx);
+        // Add to thread (skip counter events - they render as separate tracks)
+        if (current_event.ph != Phase::Counter) {
+            auto& proc = model.get_or_create_process(current_event.pid);
+            auto& thread = proc.get_or_create_thread(current_event.tid);
+            thread.event_indices.push_back(ev_idx);
+        } else {
+            // Ensure process exists for counter tracks
+            model.get_or_create_process(current_event.pid);
+        }
     }
 
     void handle_metadata() {

@@ -78,8 +78,8 @@ void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec
             if (have_prev) {
                 // Step function: horizontal then vertical
                 ImVec2 step_pt(x, prev_pt.y);
-                dl->AddLine(prev_pt, step_pt, color, 1.5f);
-                dl->AddLine(step_pt, ImVec2(x, y), color, 1.5f);
+                dl->AddLine(prev_pt, step_pt, color, 3.0f);
+                dl->AddLine(step_pt, ImVec2(x, y), color, 3.0f);
             }
             break;
         }
@@ -90,11 +90,11 @@ void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec
         if (have_prev) {
             // Step function
             ImVec2 step_pt(x, prev_pt.y);
-            dl->AddLine(prev_pt, step_pt, color, 1.5f);
-            dl->AddLine(step_pt, ImVec2(x, y), color, 1.5f);
+            dl->AddLine(prev_pt, step_pt, color, 3.0f);
+            dl->AddLine(step_pt, ImVec2(x, y), color, 3.0f);
 
             // Area fill (semi-transparent)
-            ImU32 fill_color = (color & 0x00FFFFFF) | 0x30000000;
+            ImU32 fill_color = (color & 0x00FFFFFF) | 0x70000000;
             ImVec2 quad[4] = {
                 prev_pt,
                 step_pt,
