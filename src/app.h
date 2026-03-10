@@ -37,4 +37,8 @@ private:
     float load_progress_ = 0.0f;
     std::string status_message_;
     bool first_layout_ = true;
+    bool show_settings_ = false;
+    bool dark_theme_ = true;
+
+    void render_settings_modal();
 };

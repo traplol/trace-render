@@ -3,6 +3,7 @@
 #include "imgui_internal.h"
 #include <cstdio>
 #include <filesystem>
+#include <algorithm>
 
 void App::init(SDL_Window* window) {
     toolbar_.set_window(window);
@@ -97,6 +98,17 @@ void App::update() {
         open_file(toolbar_.file_path());
         toolbar_.clear_request();
     }
+    if (toolbar_.settings_requested()) {
+        show_settings_ = true;
+        toolbar_.clear_settings_request();
+    }
+    // Ctrl+, shortcut
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Comma)) {
+        show_settings_ = true;
+    }
+    if (show_settings_) {
+        render_settings_modal();
+    }
 
     if (has_trace_) {
         timeline_.render(model_, view_);
@@ -149,5 +161,56 @@ void App::update() {
         }
         ImGui::End();
         ImGui::PopStyleVar();
+    }
+}
+
+void App::render_settings_modal() {
+    ImGui::OpenPopup("Settings");
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(800, 0), ImGuiCond_Appearing);
+
+    if (ImGui::BeginPopupModal("Settings", &show_settings_, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::SeparatorText("Display");
+
+        float font_scale = ImGui::GetIO().FontGlobalScale;
+        if (ImGui::SliderFloat("Font Scale", &font_scale, 0.5f, 6.0f, "%.1f")) {
+            ImGui::GetIO().FontGlobalScale = font_scale;
+        }
+
+        ImGui::SeparatorText("Timeline Layout");
+
+        ImGui::SliderFloat("Track Height", &view_.track_height, 20.0f, 200.0f, "%.0f px");
+        ImGui::SliderFloat("Track Padding", &view_.track_padding, 0.0f, 30.0f, "%.0f px");
+        ImGui::SliderFloat("Counter Track Height", &view_.counter_track_height, 60.0f, 400.0f, "%.0f px");
+        ImGui::SliderFloat("Label Gutter Width", &view_.label_width, 100.0f, 1200.0f, "%.0f px");
+
+        ImGui::SeparatorText("Rendering");
+
+        ImGui::Checkbox("Show Flow Arrows", &view_.show_flows);
+
+        ImGui::SeparatorText("Theme");
+
+        if (ImGui::RadioButton("Dark", dark_theme_)) {
+            dark_theme_ = true;
+            ImGui::StyleColorsDark();
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Light", !dark_theme_)) {
+            dark_theme_ = false;
+            ImGui::StyleColorsLight();
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Close", ImVec2(200, 0))) {
+            show_settings_ = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
     }
 }

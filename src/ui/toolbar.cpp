@@ -39,6 +39,10 @@ void Toolbar::render(const TraceModel& model, ViewState& view) {
                 }
             }
             ImGui::MenuItem("Show Flow Arrows", nullptr, &view.show_flows);
+            ImGui::Separator();
+            if (ImGui::MenuItem("Settings...", "Ctrl+,")) {
+                settings_requested_ = true;
+            }
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();

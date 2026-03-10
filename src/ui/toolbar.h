@@ -14,6 +14,9 @@ public:
     const std::string& file_path() const { return file_path_; }
     void clear_request() { file_open_requested_ = false; }
 
+    bool settings_requested() const { return settings_requested_; }
+    void clear_settings_request() { settings_requested_ = false; }
+
     // Called by SDL dialog callback
     void on_file_selected(const char* path);
 
@@ -23,4 +26,5 @@ private:
     bool file_open_requested_ = false;
     std::string file_path_;
     bool show_fallback_dialog_ = false;
+    bool settings_requested_ = false;
 };
