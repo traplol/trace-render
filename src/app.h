@@ -10,6 +10,7 @@
 #include "ui/counter_track.h"
 #include "ui/flow_renderer.h"
 #include "ui/stats_panel.h"
+#include "ui/instance_panel.h"
 #include "model/query_db.h"
 #include <string>
 
@@ -35,6 +36,7 @@ private:
     SearchPanel search_;
     FilterPanel filter_;
     StatsPanel stats_;
+    InstancePanel instances_;
     QueryDb query_db_;
 
     bool has_trace_ = false;

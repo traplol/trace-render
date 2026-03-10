@@ -12,13 +12,8 @@ struct QueryTab {
     QueryDb::QueryResult result;
     bool has_result = false;
 
-    // Instance browser for selected function name
-    std::string selected_name;
-    std::vector<uint32_t> instances;
-    int32_t instance_cursor = -1;
-
     // Internal: non-serialized runtime state
-    bool query_buf_dirty = true;  // need to copy query -> query_buf
+    bool query_buf_dirty = true;
     char query_buf[4096] = {};
 };
 
@@ -40,10 +35,7 @@ private:
 
     std::vector<QueryTab> tabs_;
     int active_tab_ = 0;
-    int32_t last_selected_event_ = -1;
 
     void ensure_default_tab();
     void render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db, ViewState& view);
-    void select_function_by_name(QueryTab& tab, const std::string& name, const TraceModel& model);
-    void navigate_to_instance(QueryTab& tab, int32_t idx, const TraceModel& model, ViewState& view);
 };
