@@ -158,6 +158,53 @@ TEST_F(TraceModelTest, BuildIndexComputesTimeRange) {
     EXPECT_DOUBLE_EQ(model.max_ts_, 1200.0);
 }
 
+TEST_F(TraceModelTest, BuildIndexDeduplicatesSameNameAndTimestamp) {
+    auto& proc = model.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    uint32_t name_idx = model.intern_string("task");
+
+    // Two events with same name and timestamp, different durations
+    TraceEvent ev1;
+    ev1.ph = Phase::Complete;
+    ev1.name_idx = name_idx;
+    ev1.ts = 100.0;
+    ev1.dur = 50.0;
+    ev1.pid = 1;
+    ev1.tid = 1;
+    model.events_.push_back(ev1);
+    thread.event_indices.push_back(0);
+
+    TraceEvent ev2;
+    ev2.ph = Phase::Complete;
+    ev2.name_idx = name_idx;
+    ev2.ts = 100.0;
+    ev2.dur = 80.0; // longer
+    ev2.pid = 1;
+    ev2.tid = 1;
+    model.events_.push_back(ev2);
+    thread.event_indices.push_back(1);
+
+    // Third event with different timestamp (should not be deduped)
+    TraceEvent ev3;
+    ev3.ph = Phase::Complete;
+    ev3.name_idx = name_idx;
+    ev3.ts = 300.0;
+    ev3.dur = 20.0;
+    ev3.pid = 1;
+    ev3.tid = 1;
+    model.events_.push_back(ev3);
+    thread.event_indices.push_back(2);
+
+    model.build_index();
+
+    // Should have 2 events: the longer duplicate and the distinct one
+    EXPECT_EQ(thread.event_indices.size(), 2u);
+    // First should be the longer-duration duplicate (index 1, dur=80)
+    EXPECT_DOUBLE_EQ(model.events_[thread.event_indices[0]].dur, 80.0);
+    EXPECT_DOUBLE_EQ(model.events_[thread.event_indices[1]].ts, 300.0);
+}
+
 TEST_F(TraceModelTest, BuildIndexSortsProcessesAndThreads) {
     auto& p2 = model.get_or_create_process(2);
     p2.sort_index = 10;

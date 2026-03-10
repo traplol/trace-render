@@ -45,6 +45,28 @@ void TraceModel::build_index() {
                     }),
                 thread.event_indices.end());
 
+            // Deduplicate events with the same name and timestamp (keep longer duration)
+            if (thread.event_indices.size() > 1) {
+                std::vector<uint32_t> deduped;
+                deduped.reserve(thread.event_indices.size());
+                deduped.push_back(thread.event_indices[0]);
+                for (size_t i = 1; i < thread.event_indices.size(); i++) {
+                    uint32_t prev_idx = deduped.back();
+                    uint32_t cur_idx = thread.event_indices[i];
+                    const auto& prev = events_[prev_idx];
+                    const auto& cur = events_[cur_idx];
+                    if (cur.name_idx == prev.name_idx && cur.ts == prev.ts) {
+                        // Keep the one with longer duration
+                        if (cur.dur > prev.dur) {
+                            deduped.back() = cur_idx;
+                        }
+                    } else {
+                        deduped.push_back(cur_idx);
+                    }
+                }
+                thread.event_indices = std::move(deduped);
+            }
+
             // Compute nesting depth using a stack of end timestamps
             std::vector<double> depth_stack;
             uint8_t max_depth = 0;
