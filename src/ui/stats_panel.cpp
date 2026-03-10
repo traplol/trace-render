@@ -177,6 +177,20 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
     if (!tab.result.ok || tab.result.columns.empty()) return;
 
     ImGui::Text("%zu rows", tab.result.rows.size());
+
+    // Find the "name" column index for click-to-browse
+    int name_col = -1;
+    for (int c = 0; c < (int)tab.result.columns.size(); c++) {
+        if (tab.result.columns[c] == "name") {
+            name_col = c;
+            break;
+        }
+    }
+    if (name_col >= 0) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(click a name to browse instances)");
+    }
+
     ImGui::Separator();
 
     int col_count = (int)tab.result.columns.size();
@@ -235,7 +249,35 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
 
                 for (int c = 0; c < col_count && c < (int)row.size(); c++) {
                     ImGui::TableNextColumn();
-                    render_cell(row[c], time_cols[c]);
+
+                    if (c == name_col) {
+                        char id_buf[32];
+                        snprintf(id_buf, sizeof(id_buf), "##r%d", i);
+                        if (ImGui::Selectable(id_buf, false,
+                                ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
+                            // Find first event with this name and select it
+                            const std::string& name = row[name_col];
+                            for (uint32_t ei = 0; ei < (uint32_t)model.events_.size(); ei++) {
+                                const auto& ev = model.events_[ei];
+                                if (ev.is_end_event || ev.ph == Phase::Metadata || ev.ph == Phase::Counter)
+                                    continue;
+                                if (ev.dur <= 0) continue;
+                                if (model.get_string(ev.name_idx) == name) {
+                                    view.selected_event_idx = ei;
+                                    break;
+                                }
+                            }
+                        }
+                        ImGui::SameLine();
+                        ImGui::TextUnformatted(row[c].c_str());
+                        for (int cc = c + 1; cc < col_count && cc < (int)row.size(); cc++) {
+                            ImGui::TableNextColumn();
+                            render_cell(row[cc], time_cols[cc]);
+                        }
+                        break;
+                    } else {
+                        render_cell(row[c], time_cols[c]);
+                    }
                 }
             }
         }
