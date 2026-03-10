@@ -27,6 +27,9 @@ struct ViewState {
     float track_padding = 12.0f;
     float counter_track_height = 180.0f;
     float label_width = 600.0f;
+    float ruler_height = 30.0f;
+    float proc_header_height = 22.0f;
+    float scrollbar_scale = 1.0f;
 
     // Show flow arrows
     bool show_flows = true;

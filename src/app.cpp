@@ -216,6 +216,9 @@ void App::render_settings_modal() {
         ImGui::SliderFloat("Track Padding", &view_.track_padding, 0.0f, 30.0f, "%.0f px");
         ImGui::SliderFloat("Counter Track Height", &view_.counter_track_height, 60.0f, 400.0f, "%.0f px");
         ImGui::SliderFloat("Label Gutter Width", &view_.label_width, 100.0f, 1200.0f, "%.0f px");
+        ImGui::SliderFloat("Ruler Height", &view_.ruler_height, 15.0f, 120.0f, "%.0f px");
+        ImGui::SliderFloat("Process Header Height", &view_.proc_header_height, 10.0f, 80.0f, "%.0f px");
+        ImGui::SliderFloat("Scrollbar Scale", &view_.scrollbar_scale, 0.5f, 5.0f, "%.1f");
 
         ImGui::SeparatorText("Rendering");
 
@@ -277,6 +280,9 @@ void App::save_settings() {
     j["label_width"] = view_.label_width;
     j["show_flows"] = view_.show_flows;
     j["time_unit_ns"] = view_.time_unit_ns;
+    j["ruler_height"] = view_.ruler_height;
+    j["proc_header_height"] = view_.proc_header_height;
+    j["scrollbar_scale"] = view_.scrollbar_scale;
     j["dark_theme"] = dark_theme_;
     j["query_tabs"] = stats_.save_tabs();
 
@@ -308,6 +314,12 @@ void App::load_settings() {
             view_.show_flows = j["show_flows"].get<bool>();
         if (j.contains("time_unit_ns"))
             view_.time_unit_ns = j["time_unit_ns"].get<bool>();
+        if (j.contains("ruler_height"))
+            view_.ruler_height = j["ruler_height"].get<float>();
+        if (j.contains("proc_header_height"))
+            view_.proc_header_height = j["proc_header_height"].get<float>();
+        if (j.contains("scrollbar_scale"))
+            view_.scrollbar_scale = j["scrollbar_scale"].get<float>();
         if (j.contains("dark_theme")) {
             dark_theme_ = j["dark_theme"].get<bool>();
             if (dark_theme_)

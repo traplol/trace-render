@@ -78,7 +78,7 @@ static void format_ruler_time(double us, double tick_interval, char* buf, size_t
 
 void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max,
                                      const ViewState& view) {
-    float ruler_height = 90.0f;
+    float ruler_height = view.ruler_height;
     float width = area_max.x - area_min.x;
     double range = view.view_end_ts - view.view_start_ts;
 
@@ -131,7 +131,7 @@ void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 are
 
 void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max,
                                  const TraceModel& model, ViewState& view) {
-    float ruler_height = 90.0f;
+    float ruler_height = view.ruler_height;
     float width = area_max.x - area_min.x;
     float y = area_min.y + ruler_height - scroll_y_;
     float clip_top = area_min.y + ruler_height;
@@ -146,7 +146,7 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
         if (view.hidden_pids.count(proc.pid)) continue;
 
         // Process header
-        float proc_header_h = 66.0f;
+        float proc_header_h = view.proc_header_height;
         if (y + proc_header_h > clip_top && y < clip_bottom) {
             dl->AddRectFilled(ImVec2(area_min.x, y),
                             ImVec2(area_max.x, y + proc_header_h),
@@ -343,7 +343,7 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
     ImVec2 canvas_min = ImGui::GetCursorScreenPos();
     ImVec2 canvas_size = ImGui::GetContentRegionAvail();
 
-    float scrollbar_size = ImGui::GetStyle().ScrollbarSize * 3.0f;
+    float scrollbar_size = ImGui::GetStyle().ScrollbarSize * view.scrollbar_scale;
 
     // Reserve space for scrollbars
     canvas_size.x -= scrollbar_size;
@@ -399,7 +399,7 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
             // Shift+wheel: vertical scroll
             scroll_y_ -= io.MouseWheel * view.track_height * 3.0f;
             scroll_y_ = std::max(0.0f, scroll_y_);
-            float max_scroll = std::max(0.0f, total_content_height_ - canvas_size.y + 90.0f);
+            float max_scroll = std::max(0.0f, total_content_height_ - canvas_size.y + view.ruler_height);
             scroll_y_ = std::min(scroll_y_, max_scroll);
         } else {
             // Wheel: horizontal time zoom
@@ -429,7 +429,7 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         view.view_end_ts -= dx_time;
         scroll_y_ -= io.MouseDelta.y;
         scroll_y_ = std::max(0.0f, scroll_y_);
-        float max_scroll = std::max(0.0f, total_content_height_ - canvas_size.y + 90.0f);
+        float max_scroll = std::max(0.0f, total_content_height_ - canvas_size.y + view.ruler_height);
         scroll_y_ = std::min(scroll_y_, max_scroll);
     }
 
@@ -460,7 +460,7 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         }
         if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
             scroll_y_ += view.track_height * 3.0f;
-            float max_scroll = std::max(0.0f, total_content_height_ - canvas_size.y + 90.0f);
+            float max_scroll = std::max(0.0f, total_content_height_ - canvas_size.y + view.ruler_height);
             scroll_y_ = std::min(scroll_y_, max_scroll);
         }
         if (ImGui::IsKeyPressed(ImGuiKey_W)) {
@@ -550,7 +550,7 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
 
     // --- Vertical scrollbar (right side) ---
     {
-        float visible_h = canvas_size.y - 90.0f; // subtract ruler
+        float visible_h = canvas_size.y - view.ruler_height; // subtract ruler
         float max_scroll = std::max(1.0f, total_content_height_ - visible_h);
         scroll_y_ = std::min(scroll_y_, std::max(0.0f, max_scroll));
 
