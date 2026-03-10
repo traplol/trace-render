@@ -179,6 +179,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
             cached_event_idx_ = view.selected_event_idx;
             cached_descendants_flag_ = include_all_descendants_;
             rebuild_children(model, current_ev);
+            children_dirty_ = true;
         }
 
         if (!children_.empty()) {
@@ -208,6 +209,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                     ImGui::TableHeadersRow();
 
                     if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
+                        if (children_dirty_) {
+                            sort_specs->SpecsDirty = true;
+                            children_dirty_ = false;
+                        }
                         if (sort_specs->SpecsDirty) {
                             sort_specs->SpecsDirty = false;
                             if (sort_specs->SpecsCount > 0) {

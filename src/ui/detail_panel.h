@@ -17,6 +17,7 @@ private:
     int32_t cached_event_idx_ = -1;
     bool include_all_descendants_ = false;
     bool cached_descendants_flag_ = false;
+    bool children_dirty_ = false;
     std::vector<ChildInfo> children_;
     double self_time_ = 0.0;
     float self_pct_ = 0.0f;
