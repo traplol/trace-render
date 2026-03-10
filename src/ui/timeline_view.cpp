@@ -209,11 +209,22 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
             dl->PushClipRect(ImVec2(track_left, y),
                            ImVec2(area_max.x, y + track_h), true);
 
+            // Merge threshold: slices narrower than this many pixels
+            // are candidates for merging with adjacent narrow slices
+            constexpr float MERGE_THRESHOLD_PX = 2.0f;
+
+            // Build per-depth merge runs for tiny slices, render large slices directly
+            struct MergeRun {
+                float x_start;
+                float x_end;
+                uint8_t depth;
+            };
+            std::vector<MergeRun> merge_runs;
+
             for (uint32_t ev_idx : visible_events_) {
                 const auto& ev = model.events_[ev_idx];
                 if (ev.is_end_event) continue;
                 if (ev.ph == Phase::Instant) {
-                    // Draw instant event as a thin diamond/line
                     float x = view.time_to_x(ev.ts, track_left, track_width);
                     float ey = y + ev.depth * view.track_height;
                     ImU32 col = ColorPalette::color_for_event(ev.cat_idx, ev.name_idx);
@@ -225,20 +236,29 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
 
                 float x1 = view.time_to_x(ev.ts, track_left, track_width);
                 float x2 = view.time_to_x(ev.end_ts(), track_left, track_width);
-                float ey = y + ev.depth * view.track_height;
 
-                // Clamp to visible area
                 x1 = std::max(x1, track_left);
                 x2 = std::min(x2, area_max.x);
 
                 float slice_w = x2 - x1;
-                if (slice_w < 0.5f) {
-                    // Sub-pixel: draw a thin line
-                    ImU32 col = ColorPalette::color_for_event(ev.cat_idx, ev.name_idx);
-                    dl->AddLine(ImVec2(x1, ey), ImVec2(x1, ey + view.track_height - 1), col);
+
+                if (slice_w < MERGE_THRESHOLD_PX) {
+                    // Try to extend an existing merge run at this depth
+                    bool merged = false;
+                    for (auto& run : merge_runs) {
+                        if (run.depth == ev.depth && x1 <= run.x_end + MERGE_THRESHOLD_PX) {
+                            run.x_end = std::max(run.x_end, x2);
+                            merged = true;
+                            break;
+                        }
+                    }
+                    if (!merged) {
+                        merge_runs.push_back({x1, std::max(x2, x1 + 1.0f), ev.depth});
+                    }
                     continue;
                 }
 
+                float ey = y + ev.depth * view.track_height;
                 ImU32 fill = ColorPalette::color_for_event(ev.cat_idx, ev.name_idx);
                 ImVec2 p1(x1, ey);
                 ImVec2 p2(x2, ey + view.track_height - 1);
@@ -263,6 +283,15 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
                     dl->AddText(ImVec2(x1 + 9, ey + 6), text_col, name.c_str());
                     dl->PopClipRect();
                 }
+            }
+
+            // Draw merged runs as single rectangles with a hatched/dim color
+            for (const auto& run : merge_runs) {
+                float ey = y + run.depth * view.track_height;
+                dl->AddRectFilled(
+                    ImVec2(run.x_start, ey),
+                    ImVec2(run.x_end, ey + view.track_height - 1),
+                    IM_COL32(120, 120, 140, 180));
             }
 
             dl->PopClipRect();
