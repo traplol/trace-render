@@ -17,6 +17,7 @@ class App {
 public:
     void init(SDL_Window* window);
     void update();
+    void shutdown();
     void open_file(const std::string& path);
 
     bool has_trace() const { return has_trace_; }

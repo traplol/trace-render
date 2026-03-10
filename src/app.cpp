@@ -13,6 +13,10 @@ void App::init(SDL_Window* window) {
     load_settings();
 }
 
+void App::shutdown() {
+    save_settings();
+}
+
 void App::open_file(const std::string& path) {
     status_message_ = "Loading: " + path;
     loading_ = true;
@@ -23,7 +27,16 @@ void App::open_file(const std::string& path) {
 
     if (parser_.parse(path, model_)) {
         has_trace_ = true;
-        view_ = ViewState{}; // Reset view
+        // Reset view but preserve layout settings
+        view_.view_start_ts = 0.0;
+        view_.view_end_ts = 1000.0;
+        view_.selected_event_idx = -1;
+        view_.hidden_pids.clear();
+        view_.hidden_tids.clear();
+        view_.hidden_cats.clear();
+        view_.search_query.clear();
+        view_.search_results.clear();
+        view_.search_current = -1;
         if (model_.min_ts_ < model_.max_ts_) {
             view_.zoom_to_fit(model_.min_ts_, model_.max_ts_);
         }
