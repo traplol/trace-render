@@ -131,6 +131,30 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
 
     ensure_default_tab();
 
+    // Track external selection changes and update active tab's instance browser
+    if (view.selected_event_idx != last_selected_event_ && view.selected_event_idx >= 0) {
+        last_selected_event_ = view.selected_event_idx;
+        const auto& ev = model.events_[view.selected_event_idx];
+        if (!ev.is_end_event && ev.ph != Phase::Metadata && ev.ph != Phase::Counter) {
+            const std::string& name = model.get_string(ev.name_idx);
+            if (active_tab_ >= 0 && active_tab_ < (int)tabs_.size()) {
+                auto& tab = tabs_[active_tab_];
+                if (tab.selected_name != name) {
+                    select_function_by_name(tab, name, model);
+                }
+                // Set cursor to the selected event
+                for (int i = 0; i < (int)tab.instances.size(); i++) {
+                    if (tab.instances[i] == (uint32_t)view.selected_event_idx) {
+                        tab.instance_cursor = i;
+                        break;
+                    }
+                }
+            }
+        }
+    } else if (view.selected_event_idx < 0 && last_selected_event_ >= 0) {
+        last_selected_event_ = -1;
+    }
+
     // Tab bar with + button
     int tab_to_remove = -1;
     if (ImGui::BeginTabBar("QueryTabs", ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_Reorderable)) {

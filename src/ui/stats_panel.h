@@ -40,6 +40,7 @@ private:
 
     std::vector<QueryTab> tabs_;
     int active_tab_ = 0;
+    int32_t last_selected_event_ = -1;
 
     void ensure_default_tab();
     void render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db, ViewState& view);
