@@ -172,48 +172,20 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
     // Children & time dominance
     if (ev.dur > 0) {
-        // Find direct children: events at depth+1 on the same thread within this event's range
-        struct ChildInfo {
-            uint32_t event_idx;
-            const char* name;
-            double dur;
-            float pct;
-        };
-        std::vector<ChildInfo> children;
-        double children_total = 0.0;
-        uint8_t child_depth = ev.depth + 1;
-
-        for (const auto& proc : model.processes_) {
-            if (proc.pid != ev.pid) continue;
-            for (const auto& thread : proc.threads) {
-                if (thread.tid != ev.tid) continue;
-                for (uint32_t idx : thread.event_indices) {
-                    const auto& child = model.events_[idx];
-                    if (child.depth != child_depth) continue;
-                    if (child.ts >= ev.ts && child.end_ts() <= ev.end_ts() && child.dur > 0) {
-                        float pct = (float)(child.dur / ev.dur * 100.0);
-                        children.push_back({idx, model.get_string(child.name_idx).c_str(), child.dur, pct});
-                        children_total += child.dur;
-                    }
-                    if (child.ts > ev.end_ts()) break;
-                }
-                break;
-            }
-            break;
+        // Rebuild children cache when selection changes
+        if (cached_event_idx_ != view.selected_event_idx) {
+            cached_event_idx_ = view.selected_event_idx;
+            rebuild_children(model, ev);
         }
 
-        if (!children.empty()) {
-            double self_time = ev.dur - children_total;
-            float self_pct = (float)(self_time / ev.dur * 100.0);
-
+        if (!children_.empty()) {
             ImGui::Separator();
             char header_buf[128];
-            snprintf(header_buf, sizeof(header_buf), "Children (%zu)", children.size());
+            snprintf(header_buf, sizeof(header_buf), "Children (%zu)", children_.size());
             if (ImGui::CollapsingHeader(header_buf, ImGuiTreeNodeFlags_DefaultOpen)) {
-                // Self time
                 char self_buf[64];
-                format_time_detail(self_time, self_buf, sizeof(self_buf));
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Self: %s (%.1f%%)", self_buf, self_pct);
+                format_time_detail(self_time_, self_buf, sizeof(self_buf));
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Self: %s (%.1f%%)", self_buf, self_pct_);
 
                 ImGui::Spacing();
 
@@ -222,7 +194,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                         ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
                         ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY |
                         ImGuiTableFlags_Resizable,
-                        ImVec2(0, std::min((float)(children.size() + 1) * ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeight(), ImGui::GetContentRegionAvail().y)))) {
+                        ImVec2(0, std::min((float)(children_.size() + 1) * ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeight(), ImGui::GetContentRegionAvail().y)))) {
 
                     ImGui::TableSetupScrollFreeze(0, 1);
                     ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_None, 0.0f, 0);
@@ -237,11 +209,16 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                             if (sort_specs->SpecsCount > 0) {
                                 const auto& spec = sort_specs->Specs[0];
                                 bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
-                                std::sort(children.begin(), children.end(),
+                                std::sort(children_.begin(), children_.end(),
                                     [&](const ChildInfo& a, const ChildInfo& b) {
                                         int cmp = 0;
                                         switch (spec.ColumnUserID) {
-                                            case 0: cmp = strcmp(a.name, b.name); break;
+                                            case 0: {
+                                                const auto& na = model.get_string(a.name_idx);
+                                                const auto& nb = model.get_string(b.name_idx);
+                                                cmp = na.compare(nb);
+                                                break;
+                                            }
                                             case 1: cmp = (a.dur < b.dur) ? -1 : (a.dur > b.dur) ? 1 : 0; break;
                                             case 2: cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0; break;
                                         }
@@ -252,8 +229,8 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                     }
 
                     char buf[64];
-                    for (size_t i = 0; i < children.size(); i++) {
-                        const auto& c = children[i];
+                    for (size_t i = 0; i < children_.size(); i++) {
+                        const auto& c = children_[i];
                         ImGui::TableNextRow();
 
                         ImGui::TableNextColumn();
@@ -269,14 +246,13 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                             view.view_end_ts = child_ev.end_ts() + pad;
                         }
                         ImGui::SameLine();
-                        ImGui::TextUnformatted(c.name);
+                        ImGui::TextUnformatted(model.get_string(c.name_idx).c_str());
 
                         ImGui::TableNextColumn();
                         format_time_detail(c.dur, buf, sizeof(buf));
                         ImGui::TextUnformatted(buf);
 
                         ImGui::TableNextColumn();
-                        // Progress bar for visual dominance
                         ImGui::ProgressBar(c.pct / 100.0f, ImVec2(-1, 0), "");
                         ImGui::SameLine(0, 0);
                         ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ImGui::GetItemRectSize().x);
@@ -290,4 +266,32 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
     }
 
     ImGui::End();
+}
+
+void DetailPanel::rebuild_children(const TraceModel& model, const TraceEvent& ev) {
+    children_.clear();
+    double children_total = 0.0;
+    uint8_t child_depth = ev.depth + 1;
+
+    for (const auto& proc : model.processes_) {
+        if (proc.pid != ev.pid) continue;
+        for (const auto& thread : proc.threads) {
+            if (thread.tid != ev.tid) continue;
+            for (uint32_t idx : thread.event_indices) {
+                const auto& child = model.events_[idx];
+                if (child.depth != child_depth) continue;
+                if (child.ts >= ev.ts && child.end_ts() <= ev.end_ts() && child.dur > 0) {
+                    float pct = (float)(child.dur / ev.dur * 100.0);
+                    children_.push_back({idx, child.name_idx, child.dur, pct});
+                    children_total += child.dur;
+                }
+                if (child.ts > ev.end_ts()) break;
+            }
+            break;
+        }
+        break;
+    }
+
+    self_time_ = ev.dur - children_total;
+    self_pct_ = (float)(self_time_ / ev.dur * 100.0);
 }
