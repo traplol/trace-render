@@ -5,6 +5,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_opengl.h>
 #include <cstdio>
+#include <cstring>
 
 int main(int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -64,9 +65,20 @@ int main(int argc, char* argv[]) {
     App app;
     app.init(window);
 
-    // Open file from command line if provided
-    if (argc > 1) {
-        app.open_file(argv[1]);
+    // Parse command-line arguments
+    const char* file_arg = nullptr;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-ns") == 0) {
+            app.set_time_unit_ns(true);
+        } else if (strcmp(argv[i], "-us") == 0) {
+            app.set_time_unit_ns(false);
+        } else {
+            file_arg = argv[i];
+        }
+    }
+
+    if (file_arg) {
+        app.open_file(file_arg);
     }
 
     bool running = true;

@@ -22,6 +22,7 @@ public:
     void update();
     void shutdown();
     void open_file(const std::string& path);
+    void set_time_unit_ns(bool ns) { view_.time_unit_ns = ns; }
 
     bool has_trace() const { return has_trace_; }
 
