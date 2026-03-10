@@ -4,6 +4,37 @@
 #include <cstdio>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
+
+static bool is_time_column(const std::string& name) {
+    // Columns containing "dur" or "ts" or "time" are time values in microseconds
+    if (name.find("dur") != std::string::npos) return true;
+    if (name == "ts" || name == "min_ts" || name == "max_ts") return true;
+    if (name.find("time") != std::string::npos) return true;
+    return false;
+}
+
+static void render_cell(const std::string& value, bool is_time) {
+    if (is_time) {
+        char* end = nullptr;
+        double v = strtod(value.c_str(), &end);
+        if (end != value.c_str() && *end == '\0') {
+            char buf[64];
+            double abs_v = std::abs(v);
+            if (abs_v < 1.0)
+                snprintf(buf, sizeof(buf), "%.1f ns", v * 1000.0);
+            else if (abs_v < 1000.0)
+                snprintf(buf, sizeof(buf), "%.3f us", v);
+            else if (abs_v < 1000000.0)
+                snprintf(buf, sizeof(buf), "%.3f ms", v / 1000.0);
+            else
+                snprintf(buf, sizeof(buf), "%.3f s", v / 1000000.0);
+            ImGui::TextUnformatted(buf);
+            return;
+        }
+    }
+    ImGui::TextUnformatted(value.c_str());
+}
 
 static void format_time_stats(double us, char* buf, size_t buf_size) {
     double abs_us = std::abs(us);
@@ -140,8 +171,10 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
             ImVec2(0, results_h > 0 ? avail_h - results_h : 0))) {
 
         ImGui::TableSetupScrollFreeze(0, 1);
+        std::vector<bool> time_cols(col_count, false);
         for (int c = 0; c < col_count; c++) {
             ImGui::TableSetupColumn(result_.columns[c].c_str(), ImGuiTableColumnFlags_None, 0.0f, (ImGuiID)c);
+            time_cols[c] = is_time_column(result_.columns[c]);
         }
         ImGui::TableHeadersRow();
 
@@ -202,11 +235,11 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
                         // Skip remaining columns since SpanAllColumns handles the click
                         for (int cc = c + 1; cc < col_count && cc < (int)row.size(); cc++) {
                             ImGui::TableNextColumn();
-                            ImGui::TextUnformatted(row[cc].c_str());
+                            render_cell(row[cc], time_cols[cc]);
                         }
                         break;
                     } else {
-                        ImGui::TextUnformatted(row[c].c_str());
+                        render_cell(row[c], time_cols[c]);
                     }
                 }
             }
