@@ -2,7 +2,7 @@
 
 A fast, native Chrome trace viewer built with C++ and [Dear ImGui](https://github.com/ocornut/imgui).
 
-![Screenshot](https://github.com/user-attachments/assets/placeholder.png)
+![Screenshot](screenshot.png)
 
 ## Features
 

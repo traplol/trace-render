@@ -5,4 +5,5 @@ perfetto_imgui.ini
 .cache/
 compile_commands.json
 *.png
+!screenshot.png
 *.jpg
