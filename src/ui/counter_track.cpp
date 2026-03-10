@@ -110,11 +110,12 @@ void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec
 
     // Min/max labels
     char buf[64];
+    float font_h = ImGui::GetFontSize();
     snprintf(buf, sizeof(buf), "%.1f", series.max_val);
-    dl->AddText(ImVec2(track_min.x + 3, track_min.y + 1),
+    dl->AddText(ImVec2(track_min.x + 6, track_min.y + 2),
                IM_COL32(140, 140, 140, 200), buf);
     snprintf(buf, sizeof(buf), "%.1f", series.min_val);
-    dl->AddText(ImVec2(track_min.x + 3, track_max.y - 14),
+    dl->AddText(ImVec2(track_min.x + 6, track_max.y - font_h - 4),
                IM_COL32(140, 140, 140, 200), buf);
 
     dl->PopClipRect();
