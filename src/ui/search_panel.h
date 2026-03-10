@@ -9,4 +9,8 @@ public:
 private:
     char search_buf_[256] = {};
     bool needs_search_ = false;
+
+    // Sorted view of search results
+    std::vector<uint32_t> sorted_results_;
+    bool needs_sort_ = false;
 };
