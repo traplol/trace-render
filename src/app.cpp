@@ -272,6 +272,7 @@ void App::save_settings() {
     j["show_flows"] = view_.show_flows;
     j["time_unit_ns"] = view_.time_unit_ns;
     j["dark_theme"] = dark_theme_;
+    j["query_tabs"] = stats_.save_tabs();
 
     std::ofstream f(path);
     if (f.is_open()) {
@@ -307,6 +308,9 @@ void App::load_settings() {
                 ImGui::StyleColorsDark();
             else
                 ImGui::StyleColorsLight();
+        }
+        if (j.contains("query_tabs")) {
+            stats_.load_tabs(j["query_tabs"]);
         }
     } catch (...) {
         // Ignore malformed settings file

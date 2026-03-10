@@ -1,5 +1,6 @@
 #include "stats_panel.h"
 #include "imgui.h"
+#include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cstdio>
 #include <cmath>
@@ -7,7 +8,6 @@
 #include <cstring>
 
 static bool is_time_column(const std::string& name) {
-    // Columns containing "dur" or "ts" or "time" are time values in microseconds
     if (name.find("dur") != std::string::npos) return true;
     if (name == "ts" || name == "min_ts" || name == "max_ts") return true;
     if (name.find("time") != std::string::npos) return true;
@@ -48,10 +48,21 @@ static void format_time_stats(double us, char* buf, size_t buf_size) {
         snprintf(buf, buf_size, "%.3f s", us / 1000000.0);
 }
 
-void StatsPanel::select_function_by_name(const std::string& name, const TraceModel& model) {
-    selected_name_ = name;
-    instances_.clear();
-    instance_cursor_ = -1;
+void StatsPanel::ensure_default_tab() {
+    if (tabs_.empty()) {
+        QueryTab tab;
+        tab.title = "Hot Functions";
+        tab.query = DEFAULT_QUERY;
+        tab.query_buf_dirty = true;
+        tabs_.push_back(std::move(tab));
+        active_tab_ = 0;
+    }
+}
+
+void StatsPanel::select_function_by_name(QueryTab& tab, const std::string& name, const TraceModel& model) {
+    tab.selected_name = name;
+    tab.instances.clear();
+    tab.instance_cursor = -1;
 
     for (uint32_t i = 0; i < (uint32_t)model.events_.size(); i++) {
         const auto& ev = model.events_[i];
@@ -59,25 +70,54 @@ void StatsPanel::select_function_by_name(const std::string& name, const TraceMod
             continue;
         if (ev.dur <= 0) continue;
         if (model.get_string(ev.name_idx) == name) {
-            instances_.push_back(i);
+            tab.instances.push_back(i);
         }
     }
 
-    std::sort(instances_.begin(), instances_.end(),
+    std::sort(tab.instances.begin(), tab.instances.end(),
         [&](uint32_t a, uint32_t b) {
             return model.events_[a].ts < model.events_[b].ts;
         });
 }
 
-void StatsPanel::navigate_to_instance(int32_t idx, const TraceModel& model, ViewState& view) {
-    if (idx < 0 || idx >= (int32_t)instances_.size()) return;
-    instance_cursor_ = idx;
-    uint32_t ev_idx = instances_[idx];
+void StatsPanel::navigate_to_instance(QueryTab& tab, int32_t idx, const TraceModel& model, ViewState& view) {
+    if (idx < 0 || idx >= (int32_t)tab.instances.size()) return;
+    tab.instance_cursor = idx;
+    uint32_t ev_idx = tab.instances[idx];
     view.selected_event_idx = ev_idx;
     const auto& ev = model.events_[ev_idx];
     double pad = std::max(ev.dur * 0.5, 100.0);
     view.view_start_ts = ev.ts - pad;
     view.view_end_ts = ev.end_ts() + pad;
+}
+
+nlohmann::json StatsPanel::save_tabs() const {
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto& tab : tabs_) {
+        nlohmann::json t;
+        t["title"] = tab.title;
+        // Save the live buffer content if it has been touched, otherwise the stored query
+        if (!tab.query_buf_dirty) {
+            t["query"] = std::string(tab.query_buf);
+        } else {
+            t["query"] = tab.query;
+        }
+        arr.push_back(t);
+    }
+    return arr;
+}
+
+void StatsPanel::load_tabs(const nlohmann::json& j) {
+    tabs_.clear();
+    if (!j.is_array()) return;
+    for (const auto& item : j) {
+        QueryTab tab;
+        if (item.contains("title")) tab.title = item["title"].get<std::string>();
+        if (item.contains("query")) tab.query = item["query"].get<std::string>();
+        tab.query_buf_dirty = true;
+        tabs_.push_back(std::move(tab));
+    }
+    active_tab_ = 0;
 }
 
 void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
@@ -89,78 +129,132 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
         return;
     }
 
+    ensure_default_tab();
+
+    // Tab bar with + button
+    int tab_to_remove = -1;
+    if (ImGui::BeginTabBar("QueryTabs", ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_Reorderable)) {
+        for (int t = 0; t < (int)tabs_.size(); t++) {
+            bool open = true;
+            // Don't allow closing the last tab
+            bool* p_open = (tabs_.size() > 1) ? &open : nullptr;
+
+            char tab_label[128];
+            snprintf(tab_label, sizeof(tab_label), "%s###tab%d", tabs_[t].title.c_str(), t);
+
+            if (ImGui::BeginTabItem(tab_label, p_open)) {
+                active_tab_ = t;
+                render_tab(tabs_[t], model, db, view);
+                ImGui::EndTabItem();
+            }
+
+            if (p_open && !open) {
+                tab_to_remove = t;
+            }
+        }
+
+        // "+" button to add new tab
+        if (ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing | ImGuiTabItemFlags_NoTooltip)) {
+            QueryTab tab;
+            tab.title = "Query " + std::to_string(tabs_.size() + 1);
+            tab.query = DEFAULT_QUERY;
+            tab.query_buf_dirty = true;
+            tabs_.push_back(std::move(tab));
+        }
+
+        ImGui::EndTabBar();
+    }
+
+    if (tab_to_remove >= 0) {
+        tabs_.erase(tabs_.begin() + tab_to_remove);
+        if (active_tab_ >= (int)tabs_.size()) active_tab_ = (int)tabs_.size() - 1;
+    }
+
+    ImGui::End();
+}
+
+void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db, ViewState& view) {
+    // Sync query string -> buffer on first render or after load
+    if (tab.query_buf_dirty) {
+        tab.query_buf_dirty = false;
+        snprintf(tab.query_buf, sizeof(tab.query_buf), "%s", tab.query.c_str());
+    }
+
     // Schema button
     ImGui::Text("Tables: events, processes, threads, counters");
     ImGui::SameLine();
     if (ImGui::SmallButton("Schema")) {
-        result_ = db.execute(
+        tab.result = db.execute(
             "SELECT 'events' as tbl, sql FROM sqlite_master WHERE name='events' "
             "UNION ALL SELECT 'processes', sql FROM sqlite_master WHERE name='processes' "
             "UNION ALL SELECT 'threads', sql FROM sqlite_master WHERE name='threads' "
             "UNION ALL SELECT 'counters', sql FROM sqlite_master WHERE name='counters'");
-        has_result_ = true;
-        selected_name_.clear();
-        instances_.clear();
-        instance_cursor_ = -1;
+        tab.has_result = true;
+        tab.selected_name.clear();
+        tab.instances.clear();
+        tab.instance_cursor = -1;
+    }
+
+    // Rename tab
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(150);
+    char title_buf[128];
+    snprintf(title_buf, sizeof(title_buf), "%s", tab.title.c_str());
+    if (ImGui::InputText("##tabtitle", title_buf, sizeof(title_buf))) {
+        tab.title = title_buf;
     }
 
     // SQL editor
-    ImGui::InputTextMultiline("##sql", query_buf_, sizeof(query_buf_),
+    ImGui::InputTextMultiline("##sql", tab.query_buf, sizeof(tab.query_buf),
                                ImVec2(-1, ImGui::GetTextLineHeight() * 6));
 
     if (ImGui::Button("Run (Ctrl+Enter)") ||
         (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
-        result_ = db.execute(query_buf_);
-        has_result_ = true;
-        selected_name_.clear();
-        instances_.clear();
-        instance_cursor_ = -1;
+        tab.result = db.execute(tab.query_buf);
+        tab.has_result = true;
+        tab.selected_name.clear();
+        tab.instances.clear();
+        tab.instance_cursor = -1;
     }
     ImGui::SameLine();
     if (ImGui::Button("Clear")) {
-        has_result_ = false;
-        result_ = {};
-        selected_name_.clear();
-        instances_.clear();
-        instance_cursor_ = -1;
+        tab.has_result = false;
+        tab.result = {};
+        tab.selected_name.clear();
+        tab.instances.clear();
+        tab.instance_cursor = -1;
     }
 
-    if (!has_result_) {
-        ImGui::End();
-        return;
+    if (!tab.has_result) return;
+
+    if (!tab.result.error.empty()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", tab.result.error.c_str());
     }
 
-    if (!result_.error.empty()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", result_.error.c_str());
-    }
+    if (!tab.result.ok || tab.result.columns.empty()) return;
 
-    if (!result_.ok || result_.columns.empty()) {
-        ImGui::End();
-        return;
-    }
-
-    ImGui::Text("%zu rows", result_.rows.size());
+    ImGui::Text("%zu rows", tab.result.rows.size());
 
     // Find the "name" column index for click-to-browse
     int name_col = -1;
-    for (int c = 0; c < (int)result_.columns.size(); c++) {
-        if (result_.columns[c] == "name") {
+    for (int c = 0; c < (int)tab.result.columns.size(); c++) {
+        if (tab.result.columns[c] == "name") {
             name_col = c;
             break;
         }
     }
-    if (name_col >= 0 && !selected_name_.empty()) {
+    if (name_col >= 0 && !tab.selected_name.empty()) {
         ImGui::SameLine();
         ImGui::TextDisabled("(click a name to browse instances)");
     }
 
     // Split: results table and instance browser
     float avail_h = ImGui::GetContentRegionAvail().y;
-    float results_h = !selected_name_.empty() ? avail_h * 0.5f : 0.0f;
+    float results_h = !tab.selected_name.empty() ? avail_h * 0.5f : 0.0f;
 
     ImGui::Separator();
 
-    int col_count = (int)result_.columns.size();
+    int col_count = (int)tab.result.columns.size();
 
     if (ImGui::BeginTable("QueryResults", col_count,
             ImGuiTableFlags_Sortable |
@@ -173,8 +267,8 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
         ImGui::TableSetupScrollFreeze(0, 1);
         std::vector<bool> time_cols(col_count, false);
         for (int c = 0; c < col_count; c++) {
-            ImGui::TableSetupColumn(result_.columns[c].c_str(), ImGuiTableColumnFlags_None, 0.0f, (ImGuiID)c);
-            time_cols[c] = is_time_column(result_.columns[c]);
+            ImGui::TableSetupColumn(tab.result.columns[c].c_str(), ImGuiTableColumnFlags_None, 0.0f, (ImGuiID)c);
+            time_cols[c] = is_time_column(tab.result.columns[c]);
         }
         ImGui::TableHeadersRow();
 
@@ -185,12 +279,11 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
                     const auto& spec = sort_specs->Specs[0];
                     int sort_col = (int)spec.ColumnUserID;
                     bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
-                    std::sort(result_.rows.begin(), result_.rows.end(),
+                    std::sort(tab.result.rows.begin(), tab.result.rows.end(),
                         [&](const std::vector<std::string>& a, const std::vector<std::string>& b) {
                             if (sort_col >= (int)a.size() || sort_col >= (int)b.size()) return false;
                             const std::string& sa = a[sort_col];
                             const std::string& sb = b[sort_col];
-                            // Try numeric comparison first
                             char* end_a = nullptr;
                             char* end_b = nullptr;
                             double da = strtod(sa.c_str(), &end_a);
@@ -209,30 +302,28 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
         }
 
         ImGuiListClipper clipper;
-        clipper.Begin((int)result_.rows.size());
+        clipper.Begin((int)tab.result.rows.size());
         while (clipper.Step()) {
             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                const auto& row = result_.rows[i];
+                const auto& row = tab.result.rows[i];
                 ImGui::TableNextRow();
 
                 for (int c = 0; c < col_count && c < (int)row.size(); c++) {
                     ImGui::TableNextColumn();
 
                     if (c == name_col) {
-                        // Clickable name cell
                         char id_buf[32];
                         snprintf(id_buf, sizeof(id_buf), "##r%d", i);
-                        bool is_selected = (row[c] == selected_name_);
+                        bool is_selected = (row[c] == tab.selected_name);
                         if (ImGui::Selectable(id_buf, is_selected,
                                 ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
-                            select_function_by_name(row[c], model);
-                            if (!instances_.empty()) {
-                                navigate_to_instance(0, model, view);
+                            select_function_by_name(tab, row[c], model);
+                            if (!tab.instances.empty()) {
+                                navigate_to_instance(tab, 0, model, view);
                             }
                         }
                         ImGui::SameLine();
                         ImGui::TextUnformatted(row[c].c_str());
-                        // Skip remaining columns since SpanAllColumns handles the click
                         for (int cc = c + 1; cc < col_count && cc < (int)row.size(); cc++) {
                             ImGui::TableNextColumn();
                             render_cell(row[cc], time_cols[cc]);
@@ -249,26 +340,26 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
     }
 
     // Instance browser
-    if (!selected_name_.empty() && !instances_.empty()) {
+    if (!tab.selected_name.empty() && !tab.instances.empty()) {
         ImGui::Separator();
 
-        ImGui::Text("Instances of \"%s\"", selected_name_.c_str());
+        ImGui::Text("Instances of \"%s\"", tab.selected_name.c_str());
         ImGui::SameLine();
-        ImGui::Text("(%d / %zu)", instance_cursor_ + 1, instances_.size());
+        ImGui::Text("(%d / %zu)", tab.instance_cursor + 1, tab.instances.size());
 
         ImGui::SameLine();
-        if (ImGui::Button("<##prev") && instance_cursor_ > 0) {
-            navigate_to_instance(instance_cursor_ - 1, model, view);
+        if (ImGui::Button("<##prev") && tab.instance_cursor > 0) {
+            navigate_to_instance(tab, tab.instance_cursor - 1, model, view);
         }
         ImGui::SameLine();
-        if (ImGui::Button(">##next") && instance_cursor_ < (int32_t)instances_.size() - 1) {
-            navigate_to_instance(instance_cursor_ + 1, model, view);
+        if (ImGui::Button(">##next") && tab.instance_cursor < (int32_t)tab.instances.size() - 1) {
+            navigate_to_instance(tab, tab.instance_cursor + 1, model, view);
         }
         ImGui::SameLine();
         if (ImGui::Button("Close##instances")) {
-            selected_name_.clear();
-            instances_.clear();
-            instance_cursor_ = -1;
+            tab.selected_name.clear();
+            tab.instances.clear();
+            tab.instance_cursor = -1;
         }
 
         if (ImGui::BeginTable("InstancesTable", 4,
@@ -291,7 +382,7 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
                     if (sort_specs->SpecsCount > 0) {
                         const auto& spec = sort_specs->Specs[0];
                         bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
-                        std::sort(instances_.begin(), instances_.end(),
+                        std::sort(tab.instances.begin(), tab.instances.end(),
                             [&](uint32_t a_idx, uint32_t b_idx) {
                                 const auto& a = model.events_[a_idx];
                                 const auto& b = model.events_[b_idx];
@@ -309,10 +400,10 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
 
             char buf[64];
             ImGuiListClipper clipper;
-            clipper.Begin((int)instances_.size());
+            clipper.Begin((int)tab.instances.size());
             while (clipper.Step()) {
                 for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                    uint32_t ev_idx = instances_[i];
+                    uint32_t ev_idx = tab.instances[i];
                     const auto& ev = model.events_[ev_idx];
 
                     ImGui::TableNextRow();
@@ -320,10 +411,10 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
                     ImGui::TableNextColumn();
                     char id_buf[32];
                     snprintf(id_buf, sizeof(id_buf), "%d##i%d", i + 1, i);
-                    bool is_selected = (instance_cursor_ == i);
+                    bool is_selected = (tab.instance_cursor == i);
                     if (ImGui::Selectable(id_buf, is_selected,
                             ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
-                        navigate_to_instance(i, model, view);
+                        navigate_to_instance(tab, i, model, view);
                     }
 
                     ImGui::TableNextColumn();
@@ -356,6 +447,4 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
             ImGui::EndTable();
         }
     }
-
-    ImGui::End();
 }
