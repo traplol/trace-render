@@ -308,18 +308,23 @@ int32_t TimelineView::hit_test(float click_x, float click_y, ImVec2 area_min, Im
 
         double click_time = view.x_to_time(click_x, track_left, track_width);
 
+        // Pixel tolerance: convert 3 pixels into time units for near-miss selection
+        double px_tolerance = 3.0;
+        double time_per_px = (view.view_end_ts - view.view_start_ts) / (double)track_width;
+        double tolerance = px_tolerance * time_per_px;
+
         // Find the best matching event at this depth and time
         int32_t best = -1;
         double best_dur = 1e18;
 
         std::vector<uint32_t> candidates;
-        model.query_visible(thread, click_time - 1.0, click_time + 1.0, candidates);
+        model.query_visible(thread, click_time - tolerance, click_time + tolerance, candidates);
 
         for (uint32_t idx : candidates) {
             const auto& ev = model.events_[idx];
             if (ev.is_end_event) continue;
             if (ev.depth != clicked_depth) continue;
-            if (click_time >= ev.ts && click_time <= ev.end_ts()) {
+            if (click_time >= ev.ts - tolerance && click_time <= ev.end_ts() + tolerance) {
                 if (ev.dur < best_dur) {
                     best_dur = ev.dur;
                     best = (int32_t)idx;
