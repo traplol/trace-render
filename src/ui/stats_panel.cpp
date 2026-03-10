@@ -157,8 +157,15 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
         tab.title = title_buf;
     }
 
+    // Check if async query completed
+    if (tab.query_running && db.is_query_done()) {
+        tab.result = db.take_result();
+        tab.has_result = true;
+        tab.query_running = false;
+    }
+
     // SQL editor
-    bool is_running = tab.query_running && db.is_query_running();
+    bool is_running = tab.query_running;
     if (is_running) {
         ImGui::BeginDisabled();
     }
@@ -190,13 +197,6 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
                      spinner[frame], rows, steps / 1000000.0);
         }
         ImGui::TextDisabled("%s", status);
-
-        // Check if done
-        if (db.is_query_done()) {
-            tab.result = db.take_result();
-            tab.has_result = true;
-            tab.query_running = false;
-        }
     } else {
         bool run = ImGui::Button("Run (Ctrl+Enter)") ||
             (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Enter));
