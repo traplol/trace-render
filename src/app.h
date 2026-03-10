@@ -9,6 +9,7 @@
 #include "ui/filter_panel.h"
 #include "ui/counter_track.h"
 #include "ui/flow_renderer.h"
+#include "ui/stats_panel.h"
 #include <string>
 
 struct SDL_Window;
@@ -32,6 +33,7 @@ private:
     DetailPanel detail_;
     SearchPanel search_;
     FilterPanel filter_;
+    StatsPanel stats_;
 
     bool has_trace_ = false;
     bool loading_ = false;

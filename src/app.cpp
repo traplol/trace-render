@@ -100,6 +100,7 @@ void App::update() {
         ImGui::DockBuilderDockWindow("Details", dock_right);
         ImGui::DockBuilderDockWindow("Filters", dock_right_bottom);
         ImGui::DockBuilderDockWindow("Search", dock_bottom);
+        ImGui::DockBuilderDockWindow("Statistics", dock_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
     } else {
@@ -133,6 +134,7 @@ void App::update() {
         detail_.render(model_, view_);
         search_.render(model_, view_);
         filter_.render(model_, view_);
+        stats_.render(model_, view_);
     } else {
         // Welcome screen
         ImGui::Begin("Timeline");
@@ -152,6 +154,10 @@ void App::update() {
         ImGui::End();
 
         ImGui::Begin("Filters");
+        ImGui::TextDisabled("No trace loaded.");
+        ImGui::End();
+
+        ImGui::Begin("Statistics");
         ImGui::TextDisabled("No trace loaded.");
         ImGui::End();
     }
