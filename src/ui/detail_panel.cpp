@@ -2,6 +2,9 @@
 #include "imgui.h"
 #include <nlohmann/json.hpp>
 #include <cstdio>
+#include <algorithm>
+#include <vector>
+#include <cmath>
 
 static void format_time_detail(double us, char* buf, size_t buf_size) {
     double abs_us = std::abs(us);
@@ -163,6 +166,125 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
             } catch (...) {
                 ImGui::TextDisabled("(could not parse args)");
                 ImGui::TextWrapped("%s", model.args_[ev.args_idx].c_str());
+            }
+        }
+    }
+
+    // Children & time dominance
+    if (ev.dur > 0) {
+        // Find direct children: events at depth+1 on the same thread within this event's range
+        struct ChildInfo {
+            uint32_t event_idx;
+            const char* name;
+            double dur;
+            float pct;
+        };
+        std::vector<ChildInfo> children;
+        double children_total = 0.0;
+        uint8_t child_depth = ev.depth + 1;
+
+        for (const auto& proc : model.processes_) {
+            if (proc.pid != ev.pid) continue;
+            for (const auto& thread : proc.threads) {
+                if (thread.tid != ev.tid) continue;
+                for (uint32_t idx : thread.event_indices) {
+                    const auto& child = model.events_[idx];
+                    if (child.depth != child_depth) continue;
+                    if (child.ts >= ev.ts && child.end_ts() <= ev.end_ts() && child.dur > 0) {
+                        float pct = (float)(child.dur / ev.dur * 100.0);
+                        children.push_back({idx, model.get_string(child.name_idx).c_str(), child.dur, pct});
+                        children_total += child.dur;
+                    }
+                    if (child.ts > ev.end_ts()) break;
+                }
+                break;
+            }
+            break;
+        }
+
+        if (!children.empty()) {
+            double self_time = ev.dur - children_total;
+            float self_pct = (float)(self_time / ev.dur * 100.0);
+
+            ImGui::Separator();
+            char header_buf[128];
+            snprintf(header_buf, sizeof(header_buf), "Children (%zu)", children.size());
+            if (ImGui::CollapsingHeader(header_buf, ImGuiTreeNodeFlags_DefaultOpen)) {
+                // Self time
+                char self_buf[64];
+                format_time_detail(self_time, self_buf, sizeof(self_buf));
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Self: %s (%.1f%%)", self_buf, self_pct);
+
+                ImGui::Spacing();
+
+                if (ImGui::BeginTable("ChildrenTable", 3,
+                        ImGuiTableFlags_Sortable |
+                        ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
+                        ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY |
+                        ImGuiTableFlags_Resizable,
+                        ImVec2(0, std::min((float)(children.size() + 1) * ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeight(), ImGui::GetContentRegionAvail().y)))) {
+
+                    ImGui::TableSetupScrollFreeze(0, 1);
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_None, 0.0f, 0);
+                    ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_DefaultSort |
+                                                        ImGuiTableColumnFlags_PreferSortDescending, 0.0f, 1);
+                    ImGui::TableSetupColumn("%", ImGuiTableColumnFlags_None, 0.0f, 2);
+                    ImGui::TableHeadersRow();
+
+                    if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
+                        if (sort_specs->SpecsDirty) {
+                            sort_specs->SpecsDirty = false;
+                            if (sort_specs->SpecsCount > 0) {
+                                const auto& spec = sort_specs->Specs[0];
+                                bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
+                                std::sort(children.begin(), children.end(),
+                                    [&](const ChildInfo& a, const ChildInfo& b) {
+                                        int cmp = 0;
+                                        switch (spec.ColumnUserID) {
+                                            case 0: cmp = strcmp(a.name, b.name); break;
+                                            case 1: cmp = (a.dur < b.dur) ? -1 : (a.dur > b.dur) ? 1 : 0; break;
+                                            case 2: cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0; break;
+                                        }
+                                        return asc ? (cmp < 0) : (cmp > 0);
+                                    });
+                            }
+                        }
+                    }
+
+                    char buf[64];
+                    for (size_t i = 0; i < children.size(); i++) {
+                        const auto& c = children[i];
+                        ImGui::TableNextRow();
+
+                        ImGui::TableNextColumn();
+                        char id_buf[32];
+                        snprintf(id_buf, sizeof(id_buf), "##c%zu", i);
+                        bool is_selected = (view.selected_event_idx == (int32_t)c.event_idx);
+                        if (ImGui::Selectable(id_buf, is_selected,
+                                ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
+                            view.selected_event_idx = c.event_idx;
+                            const auto& child_ev = model.events_[c.event_idx];
+                            double pad = std::max(child_ev.dur * 0.5, 100.0);
+                            view.view_start_ts = child_ev.ts - pad;
+                            view.view_end_ts = child_ev.end_ts() + pad;
+                        }
+                        ImGui::SameLine();
+                        ImGui::TextUnformatted(c.name);
+
+                        ImGui::TableNextColumn();
+                        format_time_detail(c.dur, buf, sizeof(buf));
+                        ImGui::TextUnformatted(buf);
+
+                        ImGui::TableNextColumn();
+                        // Progress bar for visual dominance
+                        ImGui::ProgressBar(c.pct / 100.0f, ImVec2(-1, 0), "");
+                        ImGui::SameLine(0, 0);
+                        ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ImGui::GetItemRectSize().x);
+                        ImGui::Text("%.1f%%", c.pct);
+                    }
+
+                    ImGui::EndTable();
+                }
             }
         }
     }
