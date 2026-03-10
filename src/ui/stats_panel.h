@@ -37,6 +37,9 @@ private:
     std::vector<QueryTab> tabs_;
     int active_tab_ = 0;
 
+    bool show_schema_ = false;
+
     void ensure_default_tab();
     void render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db, ViewState& view);
+    void render_schema_popup(QueryDb& db);
 };

@@ -127,7 +127,150 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
         if (active_tab_ >= (int)tabs_.size()) active_tab_ = (int)tabs_.size() - 1;
     }
 
+    render_schema_popup(db);
+
     ImGui::End();
+}
+
+void StatsPanel::render_schema_popup(QueryDb& db) {
+    if (show_schema_) {
+        ImGui::OpenPopup("Schema Browser");
+        show_schema_ = false;
+    }
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(700, 500), ImGuiCond_Appearing);
+
+    if (ImGui::BeginPopupModal("Schema Browser", nullptr, ImGuiWindowFlags_None)) {
+        struct TableDef {
+            const char* name;
+            const char* columns; // name:type pairs
+        };
+
+        static const TableDef tables[] = {
+            {"events", nullptr},
+            {"processes", nullptr},
+            {"threads", nullptr},
+            {"counters", nullptr},
+        };
+
+        struct ColInfo {
+            std::string name;
+            std::string type;
+        };
+
+        // Query PRAGMA for each table and display
+        for (const auto& tbl : tables) {
+            if (ImGui::CollapsingHeader(tbl.name, ImGuiTreeNodeFlags_DefaultOpen)) {
+                // Get column info
+                auto result = db.execute(
+                    std::string("PRAGMA table_info(") + tbl.name + ")");
+
+                if (result.ok && !result.rows.empty()) {
+                    // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
+                    if (ImGui::BeginTable(tbl.name, 4,
+                            ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                            ImGuiTableFlags_BordersOuter | ImGuiTableFlags_SizingStretchProp)) {
+                        ImGui::TableSetupColumn("Column", ImGuiTableColumnFlags_None, 3.0f);
+                        ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_None, 2.0f);
+                        ImGui::TableSetupColumn("PK", ImGuiTableColumnFlags_None, 0.5f);
+                        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_None, 1.5f);
+                        ImGui::TableHeadersRow();
+
+                        for (const auto& row : result.rows) {
+                            // row: [cid, name, type, notnull, dflt_value, pk]
+                            if (row.size() < 6) continue;
+                            ImGui::TableNextRow();
+
+                            ImGui::TableNextColumn();
+                            ImGui::Text("%s", row[1].c_str());
+
+                            ImGui::TableNextColumn();
+                            ImGui::TextDisabled("%s", row[2].c_str());
+
+                            ImGui::TableNextColumn();
+                            if (row[5] != "0") {
+                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "PK");
+                            }
+
+                            ImGui::TableNextColumn();
+                            char btn_id[64];
+                            snprintf(btn_id, sizeof(btn_id), "Copy##%s_%s", tbl.name, row[1].c_str());
+                            if (ImGui::SmallButton(btn_id)) {
+                                ImGui::SetClipboardText(row[1].c_str());
+                            }
+                        }
+                        ImGui::EndTable();
+                    }
+
+                    // Row count
+                    auto count_result = db.execute(
+                        std::string("SELECT COUNT(*) FROM ") + tbl.name);
+                    if (count_result.ok && !count_result.rows.empty()) {
+                        ImGui::TextDisabled("  %s rows", count_result.rows[0][0].c_str());
+                    }
+                }
+
+                ImGui::Spacing();
+            }
+        }
+
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Example queries section
+        if (ImGui::CollapsingHeader("Example Queries")) {
+            struct Example {
+                const char* name;
+                const char* sql;
+            };
+            static const Example examples[] = {
+                {"Hot Functions",
+                 "SELECT name, COUNT(*) as count, SUM(dur) as total_dur, AVG(dur) as avg_dur\n"
+                 "FROM events WHERE dur > 0\n"
+                 "GROUP BY name ORDER BY total_dur DESC LIMIT 50"},
+                {"Longest Events",
+                 "SELECT name, ts, dur, pid, tid\n"
+                 "FROM events ORDER BY dur DESC LIMIT 20"},
+                {"Events per Thread",
+                 "SELECT t.name as thread, p.name as process, COUNT(*) as count\n"
+                 "FROM events e\n"
+                 "JOIN threads t ON e.tid = t.tid AND e.pid = t.pid\n"
+                 "JOIN processes p ON e.pid = p.pid\n"
+                 "GROUP BY e.pid, e.tid ORDER BY count DESC"},
+                {"Category Breakdown",
+                 "SELECT category, COUNT(*) as count, SUM(dur) as total_dur\n"
+                 "FROM events WHERE dur > 0\n"
+                 "GROUP BY category ORDER BY total_dur DESC"},
+                {"Counter Summary",
+                 "SELECT name, pid, COUNT(*) as points,\n"
+                 "  MIN(value) as min_val, MAX(value) as max_val, AVG(value) as avg_val\n"
+                 "FROM counters GROUP BY name, pid"},
+            };
+
+            for (const auto& ex : examples) {
+                ImGui::PushID(ex.name);
+                if (ImGui::SmallButton("Use")) {
+                    if (active_tab_ >= 0 && active_tab_ < (int)tabs_.size()) {
+                        snprintf(tabs_[active_tab_].query_buf,
+                                sizeof(tabs_[active_tab_].query_buf), "%s", ex.sql);
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                ImGui::Text("%s", ex.name);
+                ImGui::PopID();
+            }
+        }
+
+        ImGui::Spacing();
+        if (ImGui::Button("Close", ImVec2(200, 0))) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
 }
 
 void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db, ViewState& view) {
@@ -137,16 +280,11 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
     }
 
     // Schema button
-    ImGui::Text("Tables: events, processes, threads, counters");
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Schema") && !db.is_query_running()) {
-        tab.result = db.execute(
-            "SELECT 'events' as tbl, sql FROM sqlite_master WHERE name='events' "
-            "UNION ALL SELECT 'processes', sql FROM sqlite_master WHERE name='processes' "
-            "UNION ALL SELECT 'threads', sql FROM sqlite_master WHERE name='threads' "
-            "UNION ALL SELECT 'counters', sql FROM sqlite_master WHERE name='counters'");
-        tab.has_result = true;
+    if (ImGui::SmallButton("Schema")) {
+        show_schema_ = true;
     }
+    ImGui::SameLine();
+    ImGui::TextDisabled("Tables: events, processes, threads, counters");
 
     // Rename tab
     ImGui::SameLine();
