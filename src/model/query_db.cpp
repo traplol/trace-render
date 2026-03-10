@@ -7,12 +7,18 @@ QueryDb::QueryDb() {
 }
 
 QueryDb::~QueryDb() {
+    cancel_query();
+    if (query_thread_.joinable()) query_thread_.join();
     if (db_) sqlite3_close(db_);
 }
 
 void QueryDb::load(const TraceModel& model) {
     TRACE_SCOPE_CAT("QueryDb::load", "model");
     if (!db_) return;
+
+    // Cancel any running query first
+    cancel_query();
+    if (query_thread_.joinable()) query_thread_.join();
 
     // Drop existing tables
     sqlite3_exec(db_, "DROP TABLE IF EXISTS events", nullptr, nullptr, nullptr);
@@ -190,4 +196,88 @@ QueryDb::QueryResult QueryDb::execute(const std::string& sql) {
     }
 
     return result;
+}
+
+int QueryDb::progress_callback(void* data) {
+    auto* self = static_cast<QueryDb*>(data);
+    self->query_steps_.fetch_add(1000, std::memory_order_relaxed);
+    // Return non-zero to cancel
+    return self->query_cancel_.load(std::memory_order_relaxed) ? 1 : 0;
+}
+
+void QueryDb::execute_async(const std::string& sql) {
+    // Wait for any previous query
+    if (query_thread_.joinable()) query_thread_.join();
+
+    query_running_ = true;
+    query_done_ = false;
+    query_cancel_ = false;
+    query_rows_ = 0;
+    query_steps_ = 0;
+
+    query_thread_ = std::thread([this, sql]() {
+        // Install progress handler: called every 1000 VM instructions
+        sqlite3_progress_handler(db_, 1000, progress_callback, this);
+
+        QueryResult result;
+        if (!db_ || !loaded_) {
+            result.error = "No trace loaded";
+        } else {
+            sqlite3_stmt* stmt = nullptr;
+            int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+            if (rc != SQLITE_OK) {
+                result.error = sqlite3_errmsg(db_);
+            } else {
+                int col_count = sqlite3_column_count(stmt);
+                for (int i = 0; i < col_count; i++) {
+                    const char* name = sqlite3_column_name(stmt, i);
+                    result.columns.push_back(name ? name : "");
+                }
+
+                int row_limit = 10000;
+                while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && row_limit-- > 0) {
+                    std::vector<std::string> row;
+                    for (int i = 0; i < col_count; i++) {
+                        const char* val = (const char*)sqlite3_column_text(stmt, i);
+                        row.push_back(val ? val : "NULL");
+                    }
+                    result.rows.push_back(std::move(row));
+                    query_rows_.store((int)result.rows.size(), std::memory_order_relaxed);
+                }
+
+                if (rc == SQLITE_INTERRUPT) {
+                    result.error = "Query cancelled";
+                }
+
+                sqlite3_finalize(stmt);
+                if (result.error.empty()) {
+                    result.ok = true;
+                    if (row_limit <= 0) {
+                        result.error = "Results truncated to 10000 rows";
+                    }
+                }
+            }
+        }
+
+        // Remove progress handler
+        sqlite3_progress_handler(db_, 0, nullptr, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(result_mutex_);
+            async_result_ = std::move(result);
+        }
+        query_running_ = false;
+        query_done_ = true;
+    });
+}
+
+void QueryDb::cancel_query() {
+    query_cancel_ = true;
+}
+
+QueryDb::QueryResult QueryDb::take_result() {
+    if (query_thread_.joinable()) query_thread_.join();
+    std::lock_guard<std::mutex> lock(result_mutex_);
+    query_done_ = false;
+    return std::move(async_result_);
 }

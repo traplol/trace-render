@@ -11,6 +11,7 @@ struct QueryTab {
     std::string query;
     QueryDb::QueryResult result;
     bool has_result = false;
+    bool query_running = false;
 
     // Internal: non-serialized runtime state
     bool query_buf_dirty = true;

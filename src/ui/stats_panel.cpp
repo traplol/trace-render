@@ -139,7 +139,7 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
     // Schema button
     ImGui::Text("Tables: events, processes, threads, counters");
     ImGui::SameLine();
-    if (ImGui::SmallButton("Schema")) {
+    if (ImGui::SmallButton("Schema") && !db.is_query_running()) {
         tab.result = db.execute(
             "SELECT 'events' as tbl, sql FROM sqlite_master WHERE name='events' "
             "UNION ALL SELECT 'processes', sql FROM sqlite_master WHERE name='processes' "
@@ -158,18 +158,57 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
     }
 
     // SQL editor
+    bool is_running = tab.query_running && db.is_query_running();
+    if (is_running) {
+        ImGui::BeginDisabled();
+    }
     ImGui::InputTextMultiline("##sql", tab.query_buf, sizeof(tab.query_buf),
                                ImVec2(-1, ImGui::GetTextLineHeight() * 6));
-
-    if (ImGui::Button("Run (Ctrl+Enter)") ||
-        (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
-        tab.result = db.execute(tab.query_buf);
-        tab.has_result = true;
+    if (is_running) {
+        ImGui::EndDisabled();
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Clear")) {
-        tab.has_result = false;
-        tab.result = {};
+
+    if (is_running) {
+        // Show progress while query runs
+        if (ImGui::Button("Cancel")) {
+            db.cancel_query();
+        }
+        ImGui::SameLine();
+
+        float time = (float)ImGui::GetTime();
+        const char* spinner[] = { "|", "/", "-", "\\" };
+        int frame = (int)(time * 4.0f) % 4;
+        int rows = db.query_rows_so_far();
+        uint64_t steps = db.query_steps();
+
+        char status[128];
+        if (steps < 1000000) {
+            snprintf(status, sizeof(status), "%s  Running... %d rows, %lluK steps",
+                     spinner[frame], rows, (unsigned long long)(steps / 1000));
+        } else {
+            snprintf(status, sizeof(status), "%s  Running... %d rows, %.1fM steps",
+                     spinner[frame], rows, steps / 1000000.0);
+        }
+        ImGui::TextDisabled("%s", status);
+
+        // Check if done
+        if (db.is_query_done()) {
+            tab.result = db.take_result();
+            tab.has_result = true;
+            tab.query_running = false;
+        }
+    } else {
+        bool run = ImGui::Button("Run (Ctrl+Enter)") ||
+            (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Enter));
+        if (run && !db.is_query_running()) {
+            db.execute_async(tab.query_buf);
+            tab.query_running = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear")) {
+            tab.has_result = false;
+            tab.result = {};
+        }
     }
 
     if (!tab.has_result) return;
