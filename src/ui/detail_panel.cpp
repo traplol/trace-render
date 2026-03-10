@@ -141,6 +141,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                     ImGui::SameLine();
                     if (ImGui::SmallButton("Parent")) {
                         view.selected_event_idx = parent_idx;
+                        const auto& parent = model.events_[parent_idx];
+                        double pad = std::max(parent.dur * 0.5, 100.0);
+                        view.view_start_ts = parent.ts - pad;
+                        view.view_end_ts = parent.end_ts() + pad;
                     }
                 }
                 goto done_parent;
