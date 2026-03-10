@@ -109,6 +109,7 @@ void App::update() {
         ImGui::DockBuilderDockWindow("Search", dock_bottom);
         ImGui::DockBuilderDockWindow("Statistics", dock_bottom);
         ImGui::DockBuilderDockWindow("Instances", dock_right_bottom);
+        ImGui::DockBuilderDockWindow("Diagnostics", dock_right_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
     } else {
@@ -144,6 +145,8 @@ void App::update() {
         filter_.render(model_, view_);
         stats_.render(model_, query_db_, view_);
         instances_.render(model_, view_);
+        diagnostics_.stats = timeline_.diag_stats;
+        diagnostics_.render(model_, view_);
     } else {
         // Welcome screen
         ImGui::Begin("Timeline");
@@ -173,6 +176,8 @@ void App::update() {
         ImGui::Begin("Instances");
         ImGui::TextDisabled("No trace loaded.");
         ImGui::End();
+
+        diagnostics_.render(model_, view_);
     }
 
     // Status bar

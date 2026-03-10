@@ -3,11 +3,15 @@
 #include "ui/view_state.h"
 #include "ui/counter_track.h"
 #include "ui/flow_renderer.h"
+#include "ui/diagnostics_panel.h"
 #include "imgui.h"
 
 class TimelineView {
 public:
     void render(const TraceModel& model, ViewState& view);
+
+    // Updated each frame, read by DiagnosticsPanel
+    DiagStats diag_stats;
 
 private:
     float scroll_y_ = 0.0f;

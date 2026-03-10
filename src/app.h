@@ -11,6 +11,7 @@
 #include "ui/flow_renderer.h"
 #include "ui/stats_panel.h"
 #include "ui/instance_panel.h"
+#include "ui/diagnostics_panel.h"
 #include "model/query_db.h"
 #include <string>
 
@@ -38,6 +39,7 @@ private:
     FilterPanel filter_;
     StatsPanel stats_;
     InstancePanel instances_;
+    DiagnosticsPanel diagnostics_;
     QueryDb query_db_;
 
     bool has_trace_ = false;

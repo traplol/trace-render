@@ -134,6 +134,7 @@ void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 are
 void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max,
                                  const TraceModel& model, ViewState& view) {
     TRACE_SCOPE_CAT("RenderTracks", "timeline");
+    diag_stats = {};
     float ruler_height = view.ruler_height;
     float width = area_max.x - area_min.x;
     float y = area_min.y + ruler_height - scroll_y_;
@@ -181,6 +182,8 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
                 continue;
             }
 
+            diag_stats.tracks_visible++;
+
             // Thread label background
             dl->AddRectFilled(ImVec2(area_min.x, y),
                             ImVec2(area_min.x + view.label_width, y + track_h - view.track_padding),
@@ -224,11 +227,13 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
             for (uint32_t ev_idx : visible_events_) {
                 const auto& ev = model.events_[ev_idx];
                 if (ev.is_end_event) continue;
+                diag_stats.visible_slices++;
                 if (ev.ph == Phase::Instant) {
                     float x = view.time_to_x(ev.ts, track_left, track_width);
                     float ey = y + ev.depth * view.track_height;
                     ImU32 col = ColorPalette::color_for_event(ev.cat_idx, ev.name_idx);
                     dl->AddLine(ImVec2(x, ey), ImVec2(x, ey + view.track_height - 1), col, 2.0f);
+                    diag_stats.instant_events++;
                     continue;
                 }
 
@@ -255,8 +260,11 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
                     if (!merged) {
                         merge_runs.push_back({x1, std::max(x2, x1 + 1.0f), ev.depth});
                     }
+                    diag_stats.merged_slices++;
                     continue;
                 }
+
+                diag_stats.drawn_slices++;
 
                 float ey = y + ev.depth * view.track_height;
                 ImU32 fill = ColorPalette::color_for_event(ev.cat_idx, ev.name_idx);
@@ -282,10 +290,12 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
                     dl->PushClipRect(ImVec2(x1 + 6, ey), ImVec2(x2 - 6, ey + view.track_height), true);
                     dl->AddText(ImVec2(x1 + 9, ey + 6), text_col, name.c_str());
                     dl->PopClipRect();
+                    diag_stats.labels_drawn++;
                 }
             }
 
             // Draw merged runs as single rectangles with a hatched/dim color
+            diag_stats.merge_runs += (int)merge_runs.size();
             for (const auto& run : merge_runs) {
                 float ey = y + run.depth * view.track_height;
                 dl->AddRectFilled(
