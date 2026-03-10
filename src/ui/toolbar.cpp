@@ -19,6 +19,8 @@ void Toolbar::on_file_selected(const char* path) {
 void Toolbar::render(const TraceModel& model, ViewState& view) {
     TRACE_SCOPE_CAT("Toolbar", "ui");
     if (ImGui::BeginMainMenuBar()) {
+        ImGui::TextDisabled("%.0f FPS", ImGui::GetIO().Framerate);
+        ImGui::Separator();
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Open...", "Ctrl+O")) {
                 if (window_) {
@@ -47,14 +49,6 @@ void Toolbar::render(const TraceModel& model, ViewState& view) {
             }
             ImGui::EndMenu();
         }
-        // FPS display on the right side
-        float fps = ImGui::GetIO().Framerate;
-        char fps_buf[32];
-        snprintf(fps_buf, sizeof(fps_buf), "%.0f FPS", fps);
-        float fps_w = ImGui::CalcTextSize(fps_buf).x + ImGui::GetStyle().ItemSpacing.x * 2;
-        ImGui::SameLine(ImGui::GetWindowWidth() - fps_w);
-        ImGui::TextDisabled("%s", fps_buf);
-
         ImGui::EndMainMenuBar();
     }
 
