@@ -61,3 +61,36 @@ target_link_libraries(perfetto_imgui PRIVATE
   SDL3::SDL3-static
   OpenGL::GL
 )
+
+# --- Tests ---
+option(BUILD_TESTS "Build unit tests" ON)
+if(BUILD_TESTS)
+  enable_testing()
+
+  FetchContent_Declare(googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG        v1.15.2
+    GIT_SHALLOW    TRUE
+  )
+  set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+  set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
+
+  # Collect non-main source files for linking with tests
+  file(GLOB_RECURSE LIB_SOURCES src/*.cpp)
+  list(FILTER LIB_SOURCES EXCLUDE REGEX "src/main\\.cpp$")
+
+  file(GLOB TEST_SOURCES tests/*.cpp)
+  add_executable(perfetto_tests ${TEST_SOURCES} ${LIB_SOURCES})
+  target_include_directories(perfetto_tests PRIVATE src)
+  target_link_libraries(perfetto_tests PRIVATE
+    GTest::gtest_main
+    imgui_lib
+    nlohmann_json::nlohmann_json
+    SDL3::SDL3-static
+    OpenGL::GL
+  )
+
+  include(GoogleTest)
+  gtest_discover_tests(perfetto_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+endif()
