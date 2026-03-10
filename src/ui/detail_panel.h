@@ -4,5 +4,5 @@
 
 class DetailPanel {
 public:
-    void render(const TraceModel& model, const ViewState& view);
+    void render(const TraceModel& model, ViewState& view);
 };

@@ -64,7 +64,7 @@ static void render_json_value(const nlohmann::json& j, int depth = 0) {
     }
 }
 
-void DetailPanel::render(const TraceModel& model, const ViewState& view) {
+void DetailPanel::render(const TraceModel& model, ViewState& view) {
     ImGui::Begin("Details");
 
     if (view.selected_event_idx < 0 ||
@@ -120,6 +120,34 @@ void DetailPanel::render(const TraceModel& model, const ViewState& view) {
     }
 
     ImGui::Text("Depth: %d", ev.depth);
+
+    // Parent button — find the enclosing event at depth-1 on the same thread
+    if (ev.depth > 0) {
+        for (const auto& proc : model.processes_) {
+            if (proc.pid != ev.pid) continue;
+            for (const auto& thread : proc.threads) {
+                if (thread.tid != ev.tid) continue;
+                int32_t parent_idx = -1;
+                for (uint32_t idx : thread.event_indices) {
+                    const auto& candidate = model.events_[idx];
+                    if (candidate.depth == ev.depth - 1 &&
+                        candidate.ts <= ev.ts &&
+                        candidate.end_ts() >= ev.end_ts()) {
+                        parent_idx = (int32_t)idx;
+                        break;
+                    }
+                }
+                if (parent_idx >= 0) {
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Parent")) {
+                        view.selected_event_idx = parent_idx;
+                    }
+                }
+                goto done_parent;
+            }
+        }
+        done_parent:;
+    }
 
     // Args
     if (ev.args_idx != UINT32_MAX && ev.args_idx < model.args_.size()) {
