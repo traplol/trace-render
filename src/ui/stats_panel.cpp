@@ -1,9 +1,7 @@
 #include "stats_panel.h"
 #include "imgui.h"
 #include <algorithm>
-#include <unordered_map>
 #include <cstdio>
-#include <cfloat>
 #include <cmath>
 
 static void format_time_stats(double us, char* buf, size_t buf_size) {
@@ -18,70 +16,21 @@ static void format_time_stats(double us, char* buf, size_t buf_size) {
         snprintf(buf, buf_size, "%.3f s", us / 1000000.0);
 }
 
-void StatsPanel::rebuild(const TraceModel& model, const ViewState& view) {
-    stats_.clear();
-    selected_func_ = -1;
-    instances_.clear();
-    instance_cursor_ = -1;
-    std::unordered_map<uint32_t, size_t> name_to_idx;
-
-    for (const auto& ev : model.events_) {
-        if (ev.is_end_event || ev.ph == Phase::Metadata || ev.ph == Phase::Counter)
-            continue;
-        if (ev.dur <= 0) continue;
-
-        if (view.hidden_pids.count(ev.pid)) continue;
-        if (view.hidden_tids.count(ev.tid)) continue;
-        if (view.hidden_cats.count(ev.cat_idx)) continue;
-
-        auto it = name_to_idx.find(ev.name_idx);
-        if (it == name_to_idx.end()) {
-            name_to_idx[ev.name_idx] = stats_.size();
-            FuncStats fs;
-            fs.name_idx = ev.name_idx;
-            fs.count = 1;
-            fs.total_dur = ev.dur;
-            fs.min_dur = ev.dur;
-            fs.max_dur = ev.dur;
-            stats_.push_back(fs);
-        } else {
-            auto& fs = stats_[it->second];
-            fs.count++;
-            fs.total_dur += ev.dur;
-            if (ev.dur < fs.min_dur) fs.min_dur = ev.dur;
-            if (ev.dur > fs.max_dur) fs.max_dur = ev.dur;
-        }
-    }
-
-    for (auto& fs : stats_) {
-        fs.avg_dur = fs.total_dur / fs.count;
-    }
-
-    last_event_count_ = (uint32_t)model.events_.size();
-    needs_rebuild_ = false;
-}
-
-void StatsPanel::select_function(int32_t func_idx, const TraceModel& model, const ViewState& view) {
-    selected_func_ = func_idx;
+void StatsPanel::select_function_by_name(const std::string& name, const TraceModel& model) {
+    selected_name_ = name;
     instances_.clear();
     instance_cursor_ = -1;
 
-    if (func_idx < 0 || func_idx >= (int32_t)stats_.size()) return;
-
-    uint32_t name_idx = stats_[func_idx].name_idx;
     for (uint32_t i = 0; i < (uint32_t)model.events_.size(); i++) {
         const auto& ev = model.events_[i];
         if (ev.is_end_event || ev.ph == Phase::Metadata || ev.ph == Phase::Counter)
             continue;
         if (ev.dur <= 0) continue;
-        if (ev.name_idx != name_idx) continue;
-        if (view.hidden_pids.count(ev.pid)) continue;
-        if (view.hidden_tids.count(ev.tid)) continue;
-        if (view.hidden_cats.count(ev.cat_idx)) continue;
-        instances_.push_back(i);
+        if (model.get_string(ev.name_idx) == name) {
+            instances_.push_back(i);
+        }
     }
 
-    // Sort instances by timestamp
     std::sort(instances_.begin(), instances_.end(),
         [&](uint32_t a, uint32_t b) {
             return model.events_[a].ts < model.events_[b].ts;
@@ -99,124 +48,135 @@ void StatsPanel::navigate_to_instance(int32_t idx, const TraceModel& model, View
     view.view_end_ts = ev.end_ts() + pad;
 }
 
-void StatsPanel::render(const TraceModel& model, ViewState& view) {
+void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
     ImGui::Begin("Statistics");
 
-    if (model.events_.empty()) {
+    if (!db.is_loaded()) {
         ImGui::TextDisabled("No trace loaded.");
         ImGui::End();
         return;
     }
 
-    if (needs_rebuild_ || last_event_count_ != (uint32_t)model.events_.size()) {
-        rebuild(model, view);
+    // Schema button
+    ImGui::Text("Tables: events, processes, threads, counters");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Schema")) {
+        result_ = db.execute(
+            "SELECT 'events' as tbl, sql FROM sqlite_master WHERE name='events' "
+            "UNION ALL SELECT 'processes', sql FROM sqlite_master WHERE name='processes' "
+            "UNION ALL SELECT 'threads', sql FROM sqlite_master WHERE name='threads' "
+            "UNION ALL SELECT 'counters', sql FROM sqlite_master WHERE name='counters'");
+        has_result_ = true;
+        selected_name_.clear();
+        instances_.clear();
+        instance_cursor_ = -1;
     }
 
-    if (ImGui::Button("Refresh")) {
-        rebuild(model, view);
+    // SQL editor
+    ImGui::InputTextMultiline("##sql", query_buf_, sizeof(query_buf_),
+                               ImVec2(-1, ImGui::GetTextLineHeight() * 6));
+
+    if (ImGui::Button("Run (Ctrl+Enter)") ||
+        (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
+        result_ = db.execute(query_buf_);
+        has_result_ = true;
+        selected_name_.clear();
+        instances_.clear();
+        instance_cursor_ = -1;
     }
     ImGui::SameLine();
-    ImGui::Text("%zu functions", stats_.size());
+    if (ImGui::Button("Clear")) {
+        has_result_ = false;
+        result_ = {};
+        selected_name_.clear();
+        instances_.clear();
+        instance_cursor_ = -1;
+    }
 
-    if (stats_.empty()) {
-        ImGui::TextDisabled("No duration events found.");
+    if (!has_result_) {
         ImGui::End();
         return;
     }
 
-    // Use a splitter: top half for summary table, bottom half for instance browser
-    float avail_h = ImGui::GetContentRegionAvail().y;
-    float table_h = (selected_func_ >= 0) ? avail_h * 0.5f : 0.0f;
+    if (!result_.error.empty()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", result_.error.c_str());
+    }
 
-    if (ImGui::BeginTable("StatsTable", 6,
-            ImGuiTableFlags_Sortable | ImGuiTableFlags_SortMulti |
+    if (!result_.ok || result_.columns.empty()) {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::Text("%zu rows", result_.rows.size());
+
+    // Find the "name" column index for click-to-browse
+    int name_col = -1;
+    for (int c = 0; c < (int)result_.columns.size(); c++) {
+        if (result_.columns[c] == "name") {
+            name_col = c;
+            break;
+        }
+    }
+    if (name_col >= 0 && !selected_name_.empty()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(click a name to browse instances)");
+    }
+
+    // Split: results table and instance browser
+    float avail_h = ImGui::GetContentRegionAvail().y;
+    float results_h = !selected_name_.empty() ? avail_h * 0.5f : 0.0f;
+
+    ImGui::Separator();
+
+    int col_count = (int)result_.columns.size();
+
+    if (ImGui::BeginTable("QueryResults", col_count,
             ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
-            ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY |
-            ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable,
-            ImVec2(0, table_h > 0 ? avail_h - table_h : 0))) {
+            ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollX |
+            ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable |
+            ImGuiTableFlags_Reorderable,
+            ImVec2(0, results_h > 0 ? avail_h - results_h : 0))) {
 
         ImGui::TableSetupScrollFreeze(0, 1);
-        ImGui::TableSetupColumn("Name",     ImGuiTableColumnFlags_None,              0.0f, 0);
-        ImGui::TableSetupColumn("Count",    ImGuiTableColumnFlags_None,              0.0f, 1);
-        ImGui::TableSetupColumn("Total",    ImGuiTableColumnFlags_DefaultSort |
-                                            ImGuiTableColumnFlags_PreferSortDescending, 0.0f, 2);
-        ImGui::TableSetupColumn("Avg",      ImGuiTableColumnFlags_None,              0.0f, 3);
-        ImGui::TableSetupColumn("Min",      ImGuiTableColumnFlags_None,              0.0f, 4);
-        ImGui::TableSetupColumn("Max",      ImGuiTableColumnFlags_None,              0.0f, 5);
+        for (int c = 0; c < col_count; c++) {
+            ImGui::TableSetupColumn(result_.columns[c].c_str());
+        }
         ImGui::TableHeadersRow();
 
-        if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
-            if (sort_specs->SpecsDirty) {
-                sort_specs->SpecsDirty = false;
-                if (sort_specs->SpecsCount > 0) {
-                    const auto& spec = sort_specs->Specs[0];
-                    bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
-                    std::sort(stats_.begin(), stats_.end(),
-                        [&](const FuncStats& a, const FuncStats& b) {
-                            int cmp = 0;
-                            switch (spec.ColumnUserID) {
-                                case 0: {
-                                    const auto& na = model.get_string(a.name_idx);
-                                    const auto& nb = model.get_string(b.name_idx);
-                                    cmp = na.compare(nb);
-                                    break;
-                                }
-                                case 1: cmp = (a.count < b.count) ? -1 : (a.count > b.count) ? 1 : 0; break;
-                                case 2: cmp = (a.total_dur < b.total_dur) ? -1 : (a.total_dur > b.total_dur) ? 1 : 0; break;
-                                case 3: cmp = (a.avg_dur < b.avg_dur) ? -1 : (a.avg_dur > b.avg_dur) ? 1 : 0; break;
-                                case 4: cmp = (a.min_dur < b.min_dur) ? -1 : (a.min_dur > b.min_dur) ? 1 : 0; break;
-                                case 5: cmp = (a.max_dur < b.max_dur) ? -1 : (a.max_dur > b.max_dur) ? 1 : 0; break;
-                            }
-                            return asc ? (cmp < 0) : (cmp > 0);
-                        });
-                    // Invalidate selected_func_ since sort changed indices
-                    selected_func_ = -1;
-                    instances_.clear();
-                    instance_cursor_ = -1;
-                }
-            }
-        }
-
-        char buf[64];
         ImGuiListClipper clipper;
-        clipper.Begin((int)stats_.size());
+        clipper.Begin((int)result_.rows.size());
         while (clipper.Step()) {
             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                const auto& fs = stats_[i];
+                const auto& row = result_.rows[i];
                 ImGui::TableNextRow();
 
-                ImGui::TableNextColumn();
-                char id_buf[32];
-                snprintf(id_buf, sizeof(id_buf), "##s%d", i);
-                bool is_selected = (selected_func_ == i);
-                if (ImGui::Selectable(id_buf, is_selected,
-                        ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
-                    select_function(i, model, view);
-                    if (!instances_.empty()) {
-                        navigate_to_instance(0, model, view);
+                for (int c = 0; c < col_count && c < (int)row.size(); c++) {
+                    ImGui::TableNextColumn();
+
+                    if (c == name_col) {
+                        // Clickable name cell
+                        char id_buf[32];
+                        snprintf(id_buf, sizeof(id_buf), "##r%d", i);
+                        bool is_selected = (row[c] == selected_name_);
+                        if (ImGui::Selectable(id_buf, is_selected,
+                                ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
+                            select_function_by_name(row[c], model);
+                            if (!instances_.empty()) {
+                                navigate_to_instance(0, model, view);
+                            }
+                        }
+                        ImGui::SameLine();
+                        ImGui::TextUnformatted(row[c].c_str());
+                        // Skip remaining columns since SpanAllColumns handles the click
+                        for (int cc = c + 1; cc < col_count && cc < (int)row.size(); cc++) {
+                            ImGui::TableNextColumn();
+                            ImGui::TextUnformatted(row[cc].c_str());
+                        }
+                        break;
+                    } else {
+                        ImGui::TextUnformatted(row[c].c_str());
                     }
                 }
-                ImGui::SameLine();
-                ImGui::TextUnformatted(model.get_string(fs.name_idx).c_str());
-
-                ImGui::TableNextColumn();
-                ImGui::Text("%u", fs.count);
-
-                ImGui::TableNextColumn();
-                format_time_stats(fs.total_dur, buf, sizeof(buf));
-                ImGui::TextUnformatted(buf);
-
-                ImGui::TableNextColumn();
-                format_time_stats(fs.avg_dur, buf, sizeof(buf));
-                ImGui::TextUnformatted(buf);
-
-                ImGui::TableNextColumn();
-                format_time_stats(fs.min_dur, buf, sizeof(buf));
-                ImGui::TextUnformatted(buf);
-
-                ImGui::TableNextColumn();
-                format_time_stats(fs.max_dur, buf, sizeof(buf));
-                ImGui::TextUnformatted(buf);
             }
         }
 
@@ -224,11 +184,10 @@ void StatsPanel::render(const TraceModel& model, ViewState& view) {
     }
 
     // Instance browser
-    if (selected_func_ >= 0 && selected_func_ < (int32_t)stats_.size()) {
+    if (!selected_name_.empty() && !instances_.empty()) {
         ImGui::Separator();
 
-        const auto& fs = stats_[selected_func_];
-        ImGui::Text("Instances of \"%s\"", model.get_string(fs.name_idx).c_str());
+        ImGui::Text("Instances of \"%s\"", selected_name_.c_str());
         ImGui::SameLine();
         ImGui::Text("(%d / %zu)", instance_cursor_ + 1, instances_.size());
 
@@ -242,7 +201,7 @@ void StatsPanel::render(const TraceModel& model, ViewState& view) {
         }
         ImGui::SameLine();
         if (ImGui::Button("Close##instances")) {
-            selected_func_ = -1;
+            selected_name_.clear();
             instances_.clear();
             instance_cursor_ = -1;
         }
@@ -311,7 +270,6 @@ void StatsPanel::render(const TraceModel& model, ViewState& view) {
                     ImGui::TextUnformatted(buf);
 
                     ImGui::TableNextColumn();
-                    // Find thread name
                     bool found_name = false;
                     for (const auto& proc : model.processes_) {
                         if (proc.pid != ev.pid) continue;
