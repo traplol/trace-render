@@ -1,4 +1,5 @@
 #include "diagnostics_panel.h"
+#include "format_time.h"
 #include "imgui.h"
 #include <cstdio>
 #include <cstdlib>
@@ -120,12 +121,7 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
 
         char dur_buf[64];
         double trace_dur = model.max_ts_ - model.min_ts_;
-        if (trace_dur < 1000.0)
-            snprintf(dur_buf, sizeof(dur_buf), "%.3f us", trace_dur);
-        else if (trace_dur < 1000000.0)
-            snprintf(dur_buf, sizeof(dur_buf), "%.3f ms", trace_dur / 1000.0);
-        else
-            snprintf(dur_buf, sizeof(dur_buf), "%.3f s", trace_dur / 1000000.0);
+        format_time(trace_dur, dur_buf, sizeof(dur_buf));
         ImGui::Text("Trace duration: %s", dur_buf);
     }
 
@@ -133,12 +129,7 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
     if (!model.events_.empty() && ImGui::CollapsingHeader("Render Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
         double view_dur = view.view_end_ts - view.view_start_ts;
         char vd_buf[64];
-        if (view_dur < 1000.0)
-            snprintf(vd_buf, sizeof(vd_buf), "%.3f us", view_dur);
-        else if (view_dur < 1000000.0)
-            snprintf(vd_buf, sizeof(vd_buf), "%.3f ms", view_dur / 1000.0);
-        else
-            snprintf(vd_buf, sizeof(vd_buf), "%.3f s", view_dur / 1000000.0);
+        format_time(view_dur, vd_buf, sizeof(vd_buf));
         ImGui::Text("Viewport span: %s", vd_buf);
 
         double total_dur = model.max_ts_ - model.min_ts_;

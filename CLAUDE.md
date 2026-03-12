@@ -32,6 +32,10 @@ cmake -B build
 cmake --build build
 ```
 
+## Time formatting
+
+Use `format_time()` from `src/ui/format_time.h` whenever displaying time values in the UI. Do not write inline time formatting or create local `format_time` variants. The function takes microseconds and auto-selects the appropriate unit (ns/us/ms/s). For ruler tick labels, use `format_ruler_time()` from the same header.
+
 ## Project Structure
 
 - `src/` — application source code

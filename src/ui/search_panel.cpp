@@ -1,4 +1,5 @@
 #include "search_panel.h"
+#include "format_time.h"
 #include "tracing.h"
 #include "imgui.h"
 #include <algorithm>
@@ -11,18 +12,6 @@ static bool contains_case_insensitive(const std::string& haystack, const std::st
         return std::tolower((unsigned char)a) == std::tolower((unsigned char)b);
     });
     return it != haystack.end();
-}
-
-static void format_time_search(double us, char* buf, size_t buf_size) {
-    double abs_us = std::abs(us);
-    if (abs_us < 1.0)
-        snprintf(buf, buf_size, "%.1f ns", us * 1000.0);
-    else if (abs_us < 1000.0)
-        snprintf(buf, buf_size, "%.3f us", us);
-    else if (abs_us < 1000000.0)
-        snprintf(buf, buf_size, "%.3f ms", us / 1000.0);
-    else
-        snprintf(buf, buf_size, "%.6f s", us / 1000000.0);
 }
 
 void SearchPanel::render(const TraceModel& model, ViewState& view) {
@@ -152,8 +141,8 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
 
                 char time_buf[64];
                 char dur_buf[64];
-                format_time_search(ev.ts, time_buf, sizeof(time_buf));
-                format_time_search(ev.dur, dur_buf, sizeof(dur_buf));
+                format_time(ev.ts, time_buf, sizeof(time_buf));
+                format_time(ev.dur, dur_buf, sizeof(dur_buf));
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();

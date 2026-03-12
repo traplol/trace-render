@@ -1,21 +1,10 @@
 #include "instance_panel.h"
+#include "format_time.h"
 #include "tracing.h"
 #include "imgui.h"
 #include <algorithm>
 #include <cstdio>
 #include <cmath>
-
-static void format_time(double us, char* buf, size_t buf_size) {
-    double abs_us = std::abs(us);
-    if (abs_us < 1.0)
-        snprintf(buf, buf_size, "%.1f ns", us * 1000.0);
-    else if (abs_us < 1000.0)
-        snprintf(buf, buf_size, "%.3f us", us);
-    else if (abs_us < 1000000.0)
-        snprintf(buf, buf_size, "%.3f ms", us / 1000.0);
-    else
-        snprintf(buf, buf_size, "%.3f s", us / 1000000.0);
-}
 
 void InstancePanel::select_function_by_name(const std::string& name, const TraceModel& model) {
     selected_name_ = name;
