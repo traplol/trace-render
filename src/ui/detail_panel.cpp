@@ -10,19 +10,6 @@
 #include <cmath>
 #include <unordered_map>
 
-static void format_time_detail(double us, char* buf, size_t buf_size) {
-    double abs_us = std::abs(us);
-    if (abs_us < 1.0) {
-        snprintf(buf, buf_size, "%.3f ns", us * 1000.0);
-    } else if (abs_us < 1000.0) {
-        snprintf(buf, buf_size, "%.3f us", us);
-    } else if (abs_us < 1000000.0) {
-        snprintf(buf, buf_size, "%.3f ms (%.0f us)", us / 1000.0, us);
-    } else {
-        snprintf(buf, buf_size, "%.3f s (%.0f us)", us / 1000000.0, us);
-    }
-}
-
 // Returns a color interpolated from blue (cool, 0%) through green/yellow to red (hot, 100%)
 static ImVec4 heat_color(float pct) {
     float t = std::min(std::max(pct / 100.0f, 0.0f), 1.0f);
@@ -135,6 +122,16 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
     const auto& ev = model.events_[view.selected_event_idx];
 
+    // Eagerly rebuild children cache so self/child time are available for duration display
+    if (ev.dur > 0) {
+        if (cached_event_idx_ != view.selected_event_idx || cached_descendants_flag_ != include_all_descendants_) {
+            cached_event_idx_ = view.selected_event_idx;
+            cached_descendants_flag_ = include_all_descendants_;
+            rebuild_children(model, ev);
+            children_dirty_ = true;
+        }
+    }
+
     ImGui::Text("Name: %s", model.get_string(ev.name_idx).c_str());
     ImGui::Separator();
 
@@ -147,7 +144,32 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
     if (ev.dur > 0) {
         format_time((double)ev.dur, time_buf, sizeof(time_buf));
-        ImGui::Text("Duration: %s", time_buf);
+        ImGui::Text("Wall Time: %s", time_buf);
+
+        double child_time = ev.dur - self_time_;
+        float child_pct = (float)(child_time / ev.dur * 100.0);
+
+        // Self time with heat bar
+        format_time(self_time_, time_buf, sizeof(time_buf));
+        ImGui::Text("Self Time: %s", time_buf);
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, heat_color(self_pct_));
+        ImGui::ProgressBar(self_pct_ / 100.0f, ImVec2(100, ImGui::GetTextLineHeight()), "");
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+        ImGui::TextDisabled("%.1f%%", self_pct_);
+
+        // Child time with heat bar
+        if (child_time > 0) {
+            format_time(child_time, time_buf, sizeof(time_buf));
+            ImGui::Text("Child Time: %s", time_buf);
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, heat_color(child_pct));
+            ImGui::ProgressBar(child_pct / 100.0f, ImVec2(100, ImGui::GetTextLineHeight()), "");
+            ImGui::PopStyleColor();
+            ImGui::SameLine();
+            ImGui::TextDisabled("%.1f%%", child_pct);
+        }
     }
 
     ImGui::Text("Process: %u", ev.pid);
@@ -224,10 +246,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
         }
     }
 
-    // Children & time dominance (re-fetch ev in case Parent button changed selection)
+    // Children table (re-fetch ev in case Parent button changed selection)
     const auto& current_ev = model.events_[view.selected_event_idx];
     if (current_ev.dur > 0) {
-        // Rebuild children cache when selection or descendants flag changes
+        // Re-check children cache in case Parent button changed selection
         if (cached_event_idx_ != view.selected_event_idx || cached_descendants_flag_ != include_all_descendants_) {
             cached_event_idx_ = view.selected_event_idx;
             cached_descendants_flag_ = include_all_descendants_;
@@ -254,9 +276,6 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 snprintf(header_buf, sizeof(header_buf), "Children (%zu)", children_.size());
             }
             if (ImGui::CollapsingHeader(header_buf, ImGuiTreeNodeFlags_DefaultOpen)) {
-                char self_buf[64];
-                format_time(self_time_, self_buf, sizeof(self_buf));
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Self: %s (%.1f%%)", self_buf, self_pct_);
                 ImGui::Checkbox("Include all descendants", &include_all_descendants_);
                 ImGui::SameLine();
                 ImGui::Checkbox("Group by name", &group_by_name_);
@@ -384,11 +403,11 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 ImGui::TextUnformatted(buf);
 
                                 ImGui::TableNextColumn();
-                                format_time_detail(ag.min_dur, buf, sizeof(buf));
+                                format_time(ag.min_dur, buf, sizeof(buf));
                                 ImGui::TextUnformatted(buf);
 
                                 ImGui::TableNextColumn();
-                                format_time_detail(ag.max_dur, buf, sizeof(buf));
+                                format_time(ag.max_dur, buf, sizeof(buf));
                                 ImGui::TextUnformatted(buf);
 
                                 ImGui::TableNextColumn();
