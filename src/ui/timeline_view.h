@@ -16,7 +16,6 @@ public:
 private:
     float scroll_y_ = 0.0f;
     float total_content_height_ = 0.0f;
-    std::vector<uint32_t> visible_events_;
 
     // Go-to-time popup
     bool show_goto_ = false;

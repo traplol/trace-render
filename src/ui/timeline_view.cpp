@@ -200,28 +200,16 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
             dl->AddLine(ImVec2(area_min.x, y + track_h - 1), ImVec2(area_max.x, y + track_h - 1),
                         IM_COL32(50, 50, 50, 255));
 
-            // Query visible events
-            {
-                TRACE_SCOPE_ARGS("RenderTracks_query", "timeline", "tid", thread.tid, "blocks",
-                                 (int)thread.block_index.blocks.size());
-                visible_events_.clear();
-                model.query_visible(thread, view.view_start_ts, view.view_end_ts, visible_events_);
-            }
-
-            // Render slices
+            // Render slices — iterate block index directly, no intermediate vector.
+            // For blocks that are entirely sub-pixel, skip individual events and
+            // just extend merge runs using the block's depth_mask.
             float track_left = area_min.x + view.label_width;
             float track_width = width - view.label_width;
 
             dl->PushClipRect(ImVec2(track_left, y), ImVec2(area_max.x, y + track_h), true);
 
-            // Merge threshold: slices narrower than this many pixels
-            // are candidates for merging with adjacent narrow slices
             constexpr float MERGE_THRESHOLD_PX = 2.0f;
 
-            // Depth-indexed merge tracking: O(1) lookup instead of linear scan.
-            // Each depth tracks one active merge run. When a gap is found,
-            // the completed run is flushed to the draw list immediately.
-            // sentinel x_end = -1e30f means "no active run at this depth".
             struct ActiveMerge {
                 float x_start;
                 float x_end;
@@ -233,102 +221,144 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
             }
 
             {
-                TRACE_SCOPE_ARGS("RenderTracks_visible_events", "timeline", "visible_events_.size()",
-                                 visible_events_.size());
-
-                // Cache frequently accessed values
+                const auto& bi = thread.block_index;
+                const auto& event_indices = thread.event_indices;
                 const float track_height = view.track_height;
                 const auto* events = model.events_.data();
                 const int32_t sel_idx = view.selected_event_idx;
                 const bool has_hidden_cats = !view.hidden_cats.empty();
+                const double view_start = view.view_start_ts;
+                const double view_end = view.view_end_ts;
+                const double view_range = view_end - view_start;
+                const double ppu = (view_range > 0.0) ? (double)track_width / view_range : 0.0;
 
-                for (uint32_t ev_idx : visible_events_) {
-                    const auto& ev = events[ev_idx];
-                    if (ev.is_end_event) continue;
-                    diag_stats.visible_slices++;
-                    if (ev.ph == Phase::Instant) {
-                        float x = view.time_to_x(ev.ts, track_left, track_width);
-                        float ey = y + ev.depth * track_height;
-                        ImU32 col = ColorPalette::color_for_event(ev.cat_idx, ev.name_idx);
-                        dl->AddLine(ImVec2(x, ey), ImVec2(x, ey + track_height - 1), col, 2.0f);
-                        diag_stats.instant_events++;
-                        continue;
-                    }
+                size_t first_block = bi.find_first_block(view_start);
 
-                    if (has_hidden_cats && view.hidden_cats.count(ev.cat_idx)) continue;
+                TRACE_SCOPE_ARGS("RenderTracks_blocks", "timeline", "first_block", (int)first_block,
+                                 "total_blocks", (int)bi.blocks.size());
 
-                    float x1 = view.time_to_x(ev.ts, track_left, track_width);
-                    float x2 = view.time_to_x(ev.end_ts(), track_left, track_width);
+                for (size_t bli = first_block; bli < bi.blocks.size(); bli++) {
+                    const auto& blk = bi.blocks[bli];
+                    if (blk.min_ts > view_end) break;
+                    if (blk.max_end_ts < view_start) continue;
 
-                    x1 = std::max(x1, track_left);
-                    x2 = std::min(x2, area_max.x);
+                    // Check if this block's entire time span is sub-pixel
+                    float blk_x1 = track_left + (float)((blk.min_ts - view_start) * ppu);
+                    float blk_x2 = track_left + (float)((blk.local_max_end_ts - view_start) * ppu);
+                    blk_x1 = std::max(blk_x1, track_left);
+                    blk_x2 = std::min(blk_x2, area_max.x);
+                    float blk_w = blk_x2 - blk_x1;
 
-                    float slice_w = x2 - x1;
-
-                    if (slice_w < MERGE_THRESHOLD_PX) {
-                        // O(1) depth-indexed merge
-                        auto& run = depth_merges[ev.depth];
-                        if (x1 <= run.x_end + MERGE_THRESHOLD_PX) {
-                            // Extend current run
-                            run.x_end = std::max(run.x_end, x2);
-                        } else {
-                            // Flush previous run if any
-                            if (run.x_end > -1e29f) {
-                                float ey = y + ev.depth * track_height;
-                                dl->AddRectFilled(ImVec2(run.x_start, ey),
-                                                  ImVec2(run.x_end, ey + track_height - 1),
-                                                  IM_COL32(120, 120, 140, 180));
-                                diag_stats.merge_runs++;
+                    if (blk_w < MERGE_THRESHOLD_PX && blk.count > 1) {
+                        // Entire block is sub-pixel — extend merge runs for all depths
+                        // present in this block without iterating individual events
+                        uint32_t mask = blk.depth_mask;
+                        while (mask) {
+                            int d = __builtin_ctz(mask);
+                            mask &= mask - 1;
+                            auto& run = depth_merges[d];
+                            if (blk_x1 <= run.x_end + MERGE_THRESHOLD_PX) {
+                                run.x_end = std::max(run.x_end, blk_x2);
+                            } else {
+                                if (run.x_end > -1e29f) {
+                                    float ey = y + d * track_height;
+                                    dl->AddRectFilled(ImVec2(run.x_start, ey),
+                                                      ImVec2(run.x_end, ey + track_height - 1),
+                                                      IM_COL32(120, 120, 140, 180));
+                                    diag_stats.merge_runs++;
+                                }
+                                run.x_start = blk_x1;
+                                run.x_end = std::max(blk_x2, blk_x1 + 1.0f);
                             }
-                            // Start new run
-                            run.x_start = x1;
-                            run.x_end = std::max(x2, x1 + 1.0f);
                         }
-                        diag_stats.merged_slices++;
+                        diag_stats.merged_slices += blk.count;
                         continue;
                     }
 
-                    diag_stats.drawn_slices++;
+                    // Expand individual events in this block
+                    for (uint32_t j = 0; j < blk.count; j++) {
+                        uint32_t ev_idx = event_indices[blk.start_idx + j];
+                        const auto& ev = events[ev_idx];
+                        if (ev.ts > view_end) break;
+                        if (ev.end_ts() < view_start) continue;
+                        if (ev.is_end_event) continue;
+                        diag_stats.visible_slices++;
 
-                    float ey = y + ev.depth * track_height;
-                    ImU32 fill = ColorPalette::color_for_event(ev.cat_idx, ev.name_idx);
-                    ImVec2 p1(x1, ey);
-                    ImVec2 p2(x2, ey + track_height - 1);
+                        if (ev.ph == Phase::Instant) {
+                            float x = track_left + (float)((ev.ts - view_start) * ppu);
+                            float ey = y + ev.depth * track_height;
+                            ImU32 col = ColorPalette::color_for_event(ev.cat_idx, ev.name_idx);
+                            dl->AddLine(ImVec2(x, ey), ImVec2(x, ey + track_height - 1), col, 2.0f);
+                            diag_stats.instant_events++;
+                            continue;
+                        }
 
-                    // Highlight selected
-                    if ((int32_t)ev_idx == sel_idx) {
-                        dl->AddRectFilled(ImVec2(x1 - 2, ey - 2), ImVec2(x2 + 2, ey + track_height + 1),
-                                          IM_COL32(255, 255, 255, 100));
-                    }
+                        if (has_hidden_cats && view.hidden_cats.count(ev.cat_idx)) continue;
 
-                    dl->AddRectFilled(p1, p2, fill);
-                    if (slice_w > 3.0f) {
-                        dl->AddRect(p1, p2, ColorPalette::border_color(fill));
-                    }
+                        float x1 = track_left + (float)((ev.ts - view_start) * ppu);
+                        float x2 = track_left + (float)((ev.end_ts() - view_start) * ppu);
 
-                    // Text label if wide enough
-                    if (slice_w > 60.0f) {
-                        const std::string& name = model.get_string(ev.name_idx);
-                        ImU32 text_col = ColorPalette::text_color(fill);
-                        dl->PushClipRect(ImVec2(x1 + 6, ey), ImVec2(x2 - 6, ey + track_height), true);
-                        dl->AddText(ImVec2(x1 + 9, ey + 6), text_col, name.c_str());
-                        dl->PopClipRect();
-                        diag_stats.labels_drawn++;
+                        x1 = std::max(x1, track_left);
+                        x2 = std::min(x2, area_max.x);
+
+                        float slice_w = x2 - x1;
+
+                        if (slice_w < MERGE_THRESHOLD_PX) {
+                            auto& run = depth_merges[ev.depth];
+                            if (x1 <= run.x_end + MERGE_THRESHOLD_PX) {
+                                run.x_end = std::max(run.x_end, x2);
+                            } else {
+                                if (run.x_end > -1e29f) {
+                                    float ey = y + ev.depth * track_height;
+                                    dl->AddRectFilled(ImVec2(run.x_start, ey),
+                                                      ImVec2(run.x_end, ey + track_height - 1),
+                                                      IM_COL32(120, 120, 140, 180));
+                                    diag_stats.merge_runs++;
+                                }
+                                run.x_start = x1;
+                                run.x_end = std::max(x2, x1 + 1.0f);
+                            }
+                            diag_stats.merged_slices++;
+                            continue;
+                        }
+
+                        diag_stats.drawn_slices++;
+
+                        float ey = y + ev.depth * track_height;
+                        ImU32 fill = ColorPalette::color_for_event(ev.cat_idx, ev.name_idx);
+                        ImVec2 p1(x1, ey);
+                        ImVec2 p2(x2, ey + track_height - 1);
+
+                        if ((int32_t)ev_idx == sel_idx) {
+                            dl->AddRectFilled(ImVec2(x1 - 2, ey - 2), ImVec2(x2 + 2, ey + track_height + 1),
+                                              IM_COL32(255, 255, 255, 100));
+                        }
+
+                        dl->AddRectFilled(p1, p2, fill);
+                        if (slice_w > 3.0f) {
+                            dl->AddRect(p1, p2, ColorPalette::border_color(fill));
+                        }
+
+                        if (slice_w > 60.0f) {
+                            const std::string& name = model.get_string(ev.name_idx);
+                            ImU32 text_col = ColorPalette::text_color(fill);
+                            dl->PushClipRect(ImVec2(x1 + 6, ey), ImVec2(x2 - 6, ey + track_height), true);
+                            dl->AddText(ImVec2(x1 + 9, ey + 6), text_col, name.c_str());
+                            dl->PopClipRect();
+                            diag_stats.labels_drawn++;
+                        }
                     }
                 }
             }
 
             // Flush remaining active merge runs
-            {
-                TRACE_SCOPE_CAT("RenderTracks_flush_merges", "timeline");
-                for (uint8_t d = 0; d < num_depths; d++) {
-                    if (depth_merges[d].x_end > -1e29f) {
-                        diag_stats.merge_runs++;
-                        float ey = y + d * view.track_height;
-                        dl->AddRectFilled(ImVec2(depth_merges[d].x_start, ey),
-                                          ImVec2(depth_merges[d].x_end, ey + view.track_height - 1),
-                                          IM_COL32(120, 120, 140, 180));
-                    }
+            for (uint8_t d = 0; d < num_depths; d++) {
+                if (depth_merges[d].x_end > -1e29f) {
+                    diag_stats.merge_runs++;
+                    float ey = y + d * view.track_height;
+                    dl->AddRectFilled(ImVec2(depth_merges[d].x_start, ey),
+                                      ImVec2(depth_merges[d].x_end, ey + view.track_height - 1),
+                                      IM_COL32(120, 120, 140, 180));
                 }
             }
 
