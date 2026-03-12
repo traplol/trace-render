@@ -6,8 +6,61 @@
 #include <cstdio>
 #include <algorithm>
 #include <vector>
+#include <cctype>
 #include <cmath>
 #include <unordered_map>
+
+static void format_time_detail(double us, char* buf, size_t buf_size) {
+    double abs_us = std::abs(us);
+    if (abs_us < 1.0) {
+        snprintf(buf, buf_size, "%.3f ns", us * 1000.0);
+    } else if (abs_us < 1000.0) {
+        snprintf(buf, buf_size, "%.3f us", us);
+    } else if (abs_us < 1000000.0) {
+        snprintf(buf, buf_size, "%.3f ms (%.0f us)", us / 1000.0, us);
+    } else {
+        snprintf(buf, buf_size, "%.3f s (%.0f us)", us / 1000000.0, us);
+    }
+}
+
+// Returns a color interpolated from blue (cool, 0%) through green/yellow to red (hot, 100%)
+static ImVec4 heat_color(float pct) {
+    float t = std::min(std::max(pct / 100.0f, 0.0f), 1.0f);
+    // Blue -> Cyan -> Green -> Yellow -> Red
+    float r, g, b;
+    if (t < 0.25f) {
+        float s = t / 0.25f;
+        r = 0.0f;
+        g = s;
+        b = 1.0f;
+    } else if (t < 0.5f) {
+        float s = (t - 0.25f) / 0.25f;
+        r = 0.0f;
+        g = 1.0f;
+        b = 1.0f - s;
+    } else if (t < 0.75f) {
+        float s = (t - 0.5f) / 0.25f;
+        r = s;
+        g = 1.0f;
+        b = 0.0f;
+    } else {
+        float s = (t - 0.75f) / 0.25f;
+        r = 1.0f;
+        g = 1.0f - s;
+        b = 0.0f;
+    }
+    return ImVec4(r, g, b, 1.0f);
+}
+
+static void render_heat_bar(float pct) {
+    ImVec4 col = heat_color(pct);
+    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, col);
+    ImGui::ProgressBar(pct / 100.0f, ImVec2(-1, 0), "");
+    ImGui::PopStyleColor();
+    ImGui::SameLine(0, 0);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ImGui::GetItemRectSize().x);
+    ImGui::Text("%.1f%%", pct);
+}
 
 static const char* phase_name(Phase ph) {
     switch (ph) {
@@ -188,6 +241,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
             if (group_by_name_) {
                 rebuild_aggregated(model, current_ev.dur);
             }
+            rebuild_filter(model);
         }
 
         if (!children_.empty()) {
@@ -207,11 +261,21 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 ImGui::SameLine();
                 ImGui::Checkbox("Group by name", &group_by_name_);
 
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::InputTextWithHint("##filter", "Filter by name...", filter_buf_, sizeof(filter_buf_))) {
+                    rebuild_filter(model);
+                }
+                if (filter_buf_[0] != '\0') {
+                    size_t shown = group_by_name_ ? filtered_aggregated_.size() : filtered_children_.size();
+                    size_t total = group_by_name_ ? aggregated_.size() : children_.size();
+                    ImGui::TextDisabled("Showing %zu / %zu", shown, total);
+                }
+
                 ImGui::Spacing();
 
                 if (group_by_name_) {
                     // --- Aggregated table ---
-                    if (ImGui::BeginTable("AggChildrenTable", 5,
+                    if (ImGui::BeginTable("AggChildrenTable", 7,
                                           ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg |
                                               ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV |
                                               ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
@@ -223,7 +287,9 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                             "Total", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending,
                             0.0f, 2);
                         ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_None, 0.0f, 3);
-                        ImGui::TableSetupColumn("%", ImGuiTableColumnFlags_None, 0.0f, 4);
+                        ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_None, 0.0f, 4);
+                        ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_None, 0.0f, 5);
+                        ImGui::TableSetupColumn("%", ImGuiTableColumnFlags_None, 0.0f, 6);
                         ImGui::TableHeadersRow();
 
                         if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
@@ -236,8 +302,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 if (sort_specs->SpecsCount > 0) {
                                     const auto& spec = sort_specs->Specs[0];
                                     bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
-                                    std::sort(aggregated_.begin(), aggregated_.end(),
-                                              [&](const AggregatedChild& a, const AggregatedChild& b) {
+                                    std::sort(filtered_aggregated_.begin(), filtered_aggregated_.end(),
+                                              [&](size_t ai, size_t bi) {
+                                                  const auto& a = aggregated_[ai];
+                                                  const auto& b = aggregated_[bi];
                                                   int cmp = 0;
                                                   switch (spec.ColumnUserID) {
                                                       case 0: {
@@ -260,6 +328,16 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                                                                           : 0;
                                                           break;
                                                       case 4:
+                                                          cmp = (a.min_dur < b.min_dur)   ? -1
+                                                                : (a.min_dur > b.min_dur) ? 1
+                                                                                          : 0;
+                                                          break;
+                                                      case 5:
+                                                          cmp = (a.max_dur < b.max_dur)   ? -1
+                                                                : (a.max_dur > b.max_dur) ? 1
+                                                                                          : 0;
+                                                          break;
+                                                      case 6:
                                                           cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0;
                                                           break;
                                                   }
@@ -271,10 +349,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
                         char buf[64];
                         ImGuiListClipper clipper;
-                        clipper.Begin((int)aggregated_.size());
+                        clipper.Begin((int)filtered_aggregated_.size());
                         while (clipper.Step()) {
                             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                                const auto& ag = aggregated_[i];
+                                const auto& ag = aggregated_[filtered_aggregated_[i]];
                                 ImGui::TableNextRow();
 
                                 ImGui::TableNextColumn();
@@ -291,6 +369,8 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 }
                                 ImGui::SameLine();
                                 ImGui::TextUnformatted(model.get_string(ag.name_idx).c_str());
+                                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                                    ImGui::SetTooltip("%s", model.get_string(ag.name_idx).c_str());
 
                                 ImGui::TableNextColumn();
                                 ImGui::Text("%u", ag.count);
@@ -304,10 +384,15 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 ImGui::TextUnformatted(buf);
 
                                 ImGui::TableNextColumn();
-                                ImGui::ProgressBar(ag.pct / 100.0f, ImVec2(-1, 0), "");
-                                ImGui::SameLine(0, 0);
-                                ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ImGui::GetItemRectSize().x);
-                                ImGui::Text("%.1f%%", ag.pct);
+                                format_time_detail(ag.min_dur, buf, sizeof(buf));
+                                ImGui::TextUnformatted(buf);
+
+                                ImGui::TableNextColumn();
+                                format_time_detail(ag.max_dur, buf, sizeof(buf));
+                                ImGui::TextUnformatted(buf);
+
+                                ImGui::TableNextColumn();
+                                render_heat_bar(ag.pct);
                             }
                         }
 
@@ -338,8 +423,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 if (sort_specs->SpecsCount > 0) {
                                     const auto& spec = sort_specs->Specs[0];
                                     bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
-                                    std::sort(children_.begin(), children_.end(),
-                                              [&](const ChildInfo& a, const ChildInfo& b) {
+                                    std::sort(filtered_children_.begin(), filtered_children_.end(),
+                                              [&](size_t ai, size_t bi) {
+                                                  const auto& a = children_[ai];
+                                                  const auto& b = children_[bi];
                                                   int cmp = 0;
                                                   switch (spec.ColumnUserID) {
                                                       case 0: {
@@ -363,10 +450,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
                         char buf[64];
                         ImGuiListClipper clipper;
-                        clipper.Begin((int)children_.size());
+                        clipper.Begin((int)filtered_children_.size());
                         while (clipper.Step()) {
                             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                                const auto& c = children_[i];
+                                const auto& c = children_[filtered_children_[i]];
                                 ImGui::TableNextRow();
 
                                 ImGui::TableNextColumn();
@@ -384,16 +471,15 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 }
                                 ImGui::SameLine();
                                 ImGui::TextUnformatted(model.get_string(c.name_idx).c_str());
+                                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                                    ImGui::SetTooltip("%s", model.get_string(c.name_idx).c_str());
 
                                 ImGui::TableNextColumn();
                                 format_time(c.dur, buf, sizeof(buf));
                                 ImGui::TextUnformatted(buf);
 
                                 ImGui::TableNextColumn();
-                                ImGui::ProgressBar(c.pct / 100.0f, ImVec2(-1, 0), "");
-                                ImGui::SameLine(0, 0);
-                                ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ImGui::GetItemRectSize().x);
-                                ImGui::Text("%.1f%%", c.pct);
+                                render_heat_bar(c.pct);
                             }
                         }
 
@@ -455,11 +541,13 @@ void DetailPanel::rebuild_aggregated(const TraceModel& model, double parent_dur)
         auto it = name_to_idx.find(c.name_idx);
         if (it == name_to_idx.end()) {
             name_to_idx[c.name_idx] = aggregated_.size();
-            aggregated_.push_back({c.name_idx, 1, c.dur, 0.0, 0.0f, c.event_idx});
+            aggregated_.push_back({c.name_idx, 1, c.dur, 0.0, c.dur, c.dur, 0.0f, c.event_idx});
         } else {
             auto& ag = aggregated_[it->second];
             ag.count++;
             ag.total_dur += c.dur;
+            if (c.dur < ag.min_dur) ag.min_dur = c.dur;
+            if (c.dur > ag.max_dur) ag.max_dur = c.dur;
             if (c.dur > model.events_[ag.longest_idx].dur) {
                 ag.longest_idx = c.event_idx;
             }
@@ -469,5 +557,66 @@ void DetailPanel::rebuild_aggregated(const TraceModel& model, double parent_dur)
     for (auto& ag : aggregated_) {
         ag.avg_dur = ag.total_dur / ag.count;
         ag.pct = (float)(ag.total_dur / parent_dur * 100.0);
+    }
+}
+
+void DetailPanel::rebuild_filter(const TraceModel& model) {
+    active_filter_ = filter_buf_;
+
+    // Convert filter to lowercase for case-insensitive matching
+    std::string lower_filter = active_filter_;
+    for (auto& ch : lower_filter) ch = (char)std::tolower((unsigned char)ch);
+
+    filtered_children_.clear();
+    for (size_t i = 0; i < children_.size(); i++) {
+        if (lower_filter.empty()) {
+            filtered_children_.push_back(i);
+            continue;
+        }
+        const auto& name = model.get_string(children_[i].name_idx);
+        // Case-insensitive substring search
+        bool found = false;
+        if (name.size() >= lower_filter.size()) {
+            for (size_t j = 0; j <= name.size() - lower_filter.size(); j++) {
+                bool match = true;
+                for (size_t k = 0; k < lower_filter.size(); k++) {
+                    if ((char)std::tolower((unsigned char)name[j + k]) != lower_filter[k]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (found) filtered_children_.push_back(i);
+    }
+
+    filtered_aggregated_.clear();
+    for (size_t i = 0; i < aggregated_.size(); i++) {
+        if (lower_filter.empty()) {
+            filtered_aggregated_.push_back(i);
+            continue;
+        }
+        const auto& name = model.get_string(aggregated_[i].name_idx);
+        bool found = false;
+        if (name.size() >= lower_filter.size()) {
+            for (size_t j = 0; j <= name.size() - lower_filter.size(); j++) {
+                bool match = true;
+                for (size_t k = 0; k < lower_filter.size(); k++) {
+                    if ((char)std::tolower((unsigned char)name[j + k]) != lower_filter[k]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (found) filtered_aggregated_.push_back(i);
     }
 }

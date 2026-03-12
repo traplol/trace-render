@@ -19,6 +19,8 @@ private:
         uint32_t count;
         double total_dur;
         double avg_dur;
+        double min_dur;
+        double max_dur;
         float pct;             // total_dur as % of parent
         uint32_t longest_idx;  // event_idx of longest instance
     };
@@ -29,11 +31,16 @@ private:
     bool children_dirty_ = false;
     bool group_by_name_ = false;
     bool cached_group_flag_ = false;
+    char filter_buf_[256] = {};
+    std::string active_filter_;
     std::vector<ChildInfo> children_;
+    std::vector<size_t> filtered_children_;
     std::vector<AggregatedChild> aggregated_;
+    std::vector<size_t> filtered_aggregated_;
     double self_time_ = 0.0;
     float self_pct_ = 0.0f;
 
     void rebuild_children(const TraceModel& model, const TraceEvent& ev);
     void rebuild_aggregated(const TraceModel& model, double parent_dur);
+    void rebuild_filter(const TraceModel& model);
 };
