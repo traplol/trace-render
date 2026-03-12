@@ -39,7 +39,20 @@ struct BlockIndex {
 
     void query(double start_ts, double end_ts, const std::vector<uint32_t>& event_indices,
                const std::vector<TraceEvent>& events, std::vector<uint32_t>& out) const {
-        for (const auto& blk : blocks) {
+        if (blocks.empty()) return;
+
+        // Binary search: find first block whose max_end_ts >= start_ts
+        size_t lo = 0, hi = blocks.size();
+        while (lo < hi) {
+            size_t mid = lo + (hi - lo) / 2;
+            if (blocks[mid].max_end_ts < start_ts)
+                lo = mid + 1;
+            else
+                hi = mid;
+        }
+
+        for (size_t bi = lo; bi < blocks.size(); bi++) {
+            const auto& blk = blocks[bi];
             if (blk.min_ts > end_ts) break;
             if (blk.max_end_ts < start_ts) continue;
 
