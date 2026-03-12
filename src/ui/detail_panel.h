@@ -14,13 +14,26 @@ private:
         float pct;
     };
 
+    struct AggregatedChild {
+        uint32_t name_idx;
+        uint32_t count;
+        double total_dur;
+        double avg_dur;
+        float pct;             // total_dur as % of parent
+        uint32_t longest_idx;  // event_idx of longest instance
+    };
+
     int32_t cached_event_idx_ = -1;
     bool include_all_descendants_ = false;
     bool cached_descendants_flag_ = false;
     bool children_dirty_ = false;
+    bool group_by_name_ = false;
+    bool cached_group_flag_ = false;
     std::vector<ChildInfo> children_;
+    std::vector<AggregatedChild> aggregated_;
     double self_time_ = 0.0;
     float self_pct_ = 0.0f;
 
     void rebuild_children(const TraceModel& model, const TraceEvent& ev);
+    void rebuild_aggregated(const TraceModel& model, double parent_dur);
 };
