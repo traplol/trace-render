@@ -1,4 +1,5 @@
 #include "detail_panel.h"
+#include "format_time.h"
 #include "tracing.h"
 #include "imgui.h"
 #include <nlohmann/json.hpp>
@@ -7,19 +8,6 @@
 #include <vector>
 #include <cmath>
 #include <unordered_map>
-
-static void format_time_detail(double us, char* buf, size_t buf_size) {
-    double abs_us = std::abs(us);
-    if (abs_us < 1.0) {
-        snprintf(buf, buf_size, "%.3f ns", us * 1000.0);
-    } else if (abs_us < 1000.0) {
-        snprintf(buf, buf_size, "%.3f us", us);
-    } else if (abs_us < 1000000.0) {
-        snprintf(buf, buf_size, "%.3f ms (%.0f us)", us / 1000.0, us);
-    } else {
-        snprintf(buf, buf_size, "%.3f s (%.0f us)", us / 1000000.0, us);
-    }
-}
 
 static const char* phase_name(Phase ph) {
     switch (ph) {
@@ -101,11 +89,11 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
     ImGui::Text("Phase: %s", phase_name(ev.ph));
 
     char time_buf[128];
-    format_time_detail((double)ev.ts, time_buf, sizeof(time_buf));
+    format_time((double)ev.ts, time_buf, sizeof(time_buf));
     ImGui::Text("Timestamp: %s", time_buf);
 
     if (ev.dur > 0) {
-        format_time_detail((double)ev.dur, time_buf, sizeof(time_buf));
+        format_time((double)ev.dur, time_buf, sizeof(time_buf));
         ImGui::Text("Duration: %s", time_buf);
     }
 
@@ -213,7 +201,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
             }
             if (ImGui::CollapsingHeader(header_buf, ImGuiTreeNodeFlags_DefaultOpen)) {
                 char self_buf[64];
-                format_time_detail(self_time_, self_buf, sizeof(self_buf));
+                format_time(self_time_, self_buf, sizeof(self_buf));
                 ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Self: %s (%.1f%%)", self_buf, self_pct_);
                 ImGui::Checkbox("Include all descendants", &include_all_descendants_);
                 ImGui::SameLine();
@@ -308,11 +296,11 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 ImGui::Text("%u", ag.count);
 
                                 ImGui::TableNextColumn();
-                                format_time_detail(ag.total_dur, buf, sizeof(buf));
+                                format_time(ag.total_dur, buf, sizeof(buf));
                                 ImGui::TextUnformatted(buf);
 
                                 ImGui::TableNextColumn();
-                                format_time_detail(ag.avg_dur, buf, sizeof(buf));
+                                format_time(ag.avg_dur, buf, sizeof(buf));
                                 ImGui::TextUnformatted(buf);
 
                                 ImGui::TableNextColumn();
@@ -398,7 +386,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 ImGui::TextUnformatted(model.get_string(c.name_idx).c_str());
 
                                 ImGui::TableNextColumn();
-                                format_time_detail(c.dur, buf, sizeof(buf));
+                                format_time(c.dur, buf, sizeof(buf));
                                 ImGui::TextUnformatted(buf);
 
                                 ImGui::TableNextColumn();

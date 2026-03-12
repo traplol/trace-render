@@ -1,4 +1,5 @@
 #include "stats_panel.h"
+#include "format_time.h"
 #include "tracing.h"
 #include "imgui.h"
 #include <nlohmann/json.hpp>
@@ -21,15 +22,7 @@ static void render_cell(const std::string& value, bool is_time) {
         double v = strtod(value.c_str(), &end);
         if (end != value.c_str() && *end == '\0') {
             char buf[64];
-            double abs_v = std::abs(v);
-            if (abs_v < 1.0)
-                snprintf(buf, sizeof(buf), "%.1f ns", v * 1000.0);
-            else if (abs_v < 1000.0)
-                snprintf(buf, sizeof(buf), "%.3f us", v);
-            else if (abs_v < 1000000.0)
-                snprintf(buf, sizeof(buf), "%.3f ms", v / 1000.0);
-            else
-                snprintf(buf, sizeof(buf), "%.3f s", v / 1000000.0);
+            format_time(v, buf, sizeof(buf));
             ImGui::TextUnformatted(buf);
             return;
         }
