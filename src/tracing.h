@@ -1,11 +1,88 @@
 #pragma once
 #include <cstdio>
 #include <cstdint>
+#include <cmath>
 #include <chrono>
 #include <mutex>
 #include <thread>
 #include <vector>
 #include <string>
+
+// --- JSON arg serialization helpers ---
+namespace trace_detail {
+
+inline void escape_json_string(std::string& out, const char* s) {
+    out += '"';
+    for (; *s; ++s) {
+        switch (*s) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (static_cast<unsigned char>(*s) < 0x20) {
+                    char buf[8];
+                    snprintf(buf, sizeof(buf), "\\u%04x", (unsigned char)*s);
+                    out += buf;
+                } else {
+                    out += *s;
+                }
+                break;
+        }
+    }
+    out += '"';
+}
+
+// Value serialization overloads
+inline void append_arg_value(std::string& out, const char* v) {
+    if (!v) { out += "null"; return; }
+    escape_json_string(out, v);
+}
+inline void append_arg_value(std::string& out, const std::string& v) {
+    escape_json_string(out, v.c_str());
+}
+inline void append_arg_value(std::string& out, bool v) {
+    out += v ? "true" : "false";
+}
+inline void append_arg_value(std::string& out, int v) { out += std::to_string(v); }
+inline void append_arg_value(std::string& out, long v) { out += std::to_string(v); }
+inline void append_arg_value(std::string& out, long long v) { out += std::to_string(v); }
+inline void append_arg_value(std::string& out, unsigned int v) { out += std::to_string(v); }
+inline void append_arg_value(std::string& out, unsigned long v) { out += std::to_string(v); }
+inline void append_arg_value(std::string& out, unsigned long long v) { out += std::to_string(v); }
+inline void append_arg_value(std::string& out, float v) {
+    if (std::isnan(v) || std::isinf(v)) { out += "null"; return; }
+    char buf[32]; snprintf(buf, sizeof(buf), "%.6g", (double)v); out += buf;
+}
+inline void append_arg_value(std::string& out, double v) {
+    if (std::isnan(v) || std::isinf(v)) { out += "null"; return; }
+    char buf[32]; snprintf(buf, sizeof(buf), "%.6g", v); out += buf;
+}
+
+// Base case: no more pairs
+inline void append_args(std::string&) {}
+
+// Recursive: consume key-value pairs
+template<typename V, typename... Rest>
+void append_args(std::string& out, const char* key, const V& val, Rest&&... rest) {
+    if (!out.empty()) out += ',';
+    escape_json_string(out, key);
+    out += ':';
+    append_arg_value(out, val);
+    append_args(out, std::forward<Rest>(rest)...);
+}
+
+// Entry point: returns the inner JSON (without outer braces)
+// Returns empty string for zero args
+template<typename... Args>
+std::string make_args_json(Args&&... args) {
+    std::string out;
+    append_args(out, std::forward<Args>(args)...);
+    return out;
+}
+
+} // namespace trace_detail
 
 class Tracer {
 public:
@@ -33,7 +110,8 @@ public:
     bool enabled() const { return enabled_; }
 
     void write_complete(const char* name, const char* cat,
-                        uint64_t ts_us, uint64_t dur_us) {
+                        uint64_t ts_us, uint64_t dur_us,
+                        const char* args_json = nullptr) {
         if (!enabled_) return;
         std::lock_guard<std::mutex> lock(mutex_);
         if (!file_) return;
@@ -46,8 +124,14 @@ public:
         fprintf(file_,
             "{\"ph\":\"X\",\"name\":\"%s\",\"cat\":\"%s\","
             "\"ts\":%llu,\"dur\":%llu,"
-            "\"pid\":1,\"tid\":%u}",
+            "\"pid\":1,\"tid\":%u",
             name, cat, (unsigned long long)ts_us, (unsigned long long)dur_us, tid);
+
+        if (args_json && args_json[0]) {
+            fprintf(file_, ",\"args\":{%s}", args_json);
+        }
+
+        fprintf(file_, "}");
     }
 
     void write_counter(const char* name, const char* cat,
@@ -82,7 +166,6 @@ private:
     void close_file() {
         if (file_) {
             fprintf(file_, "\n],\n");
-            // Write metadata for thread names
             fprintf(file_, "\"displayTimeUnit\":\"us\"\n}\n");
             fclose(file_);
             file_ = nullptr;
@@ -91,7 +174,6 @@ private:
     }
 
     uint32_t get_tid() {
-        // Simple hash of thread id to a small number
         auto id = std::this_thread::get_id();
         std::hash<std::thread::id> hasher;
         return (uint32_t)(hasher(id) & 0xFFFF);
@@ -104,7 +186,7 @@ private:
     std::chrono::steady_clock::time_point epoch_;
 };
 
-// RAII scope tracer
+// RAII scope tracer (no args — zero overhead when disabled)
 class TraceScope {
 public:
     TraceScope(const char* name, const char* cat = "app")
@@ -131,5 +213,39 @@ private:
     bool active_ = false;
 };
 
+// RAII scope tracer with args (separate class to avoid heap alloc in the common path)
+class TraceScopeArgs {
+public:
+    TraceScopeArgs(const char* name, const char* cat, std::string args_json)
+        : name_(name), cat_(cat) {
+        if (Tracer::instance().enabled()) {
+            args_json_ = std::move(args_json);
+            start_ = Tracer::instance().now_us();
+            active_ = true;
+        }
+    }
+    ~TraceScopeArgs() {
+        if (active_) {
+            uint64_t end = Tracer::instance().now_us();
+            Tracer::instance().write_complete(
+                name_, cat_, start_, end - start_, args_json_.c_str());
+        }
+    }
+
+    TraceScopeArgs(const TraceScopeArgs&) = delete;
+    TraceScopeArgs& operator=(const TraceScopeArgs&) = delete;
+
+private:
+    const char* name_;
+    const char* cat_;
+    std::string args_json_;
+    uint64_t start_ = 0;
+    bool active_ = false;
+};
+
 #define TRACE_SCOPE(name) TraceScope _trace_scope_##__LINE__(name)
 #define TRACE_SCOPE_CAT(name, cat) TraceScope _trace_scope_##__LINE__(name, cat)
+#define TRACE_SCOPE_ARGS(name, cat, ...) \
+    TraceScopeArgs _trace_scope_args_##__LINE__( \
+        name, cat, \
+        Tracer::instance().enabled() ? trace_detail::make_args_json(__VA_ARGS__) : std::string())
