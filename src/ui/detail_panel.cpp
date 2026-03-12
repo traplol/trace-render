@@ -303,6 +303,8 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 }
                                 ImGui::SameLine();
                                 ImGui::TextUnformatted(model.get_string(ag.name_idx).c_str());
+                                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                                    ImGui::SetTooltip("%s", model.get_string(ag.name_idx).c_str());
 
                                 ImGui::TableNextColumn();
                                 ImGui::Text("%u", ag.count);
@@ -396,6 +398,8 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 }
                                 ImGui::SameLine();
                                 ImGui::TextUnformatted(model.get_string(c.name_idx).c_str());
+                                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                                    ImGui::SetTooltip("%s", model.get_string(c.name_idx).c_str());
 
                                 ImGui::TableNextColumn();
                                 format_time_detail(c.dur, buf, sizeof(buf));
