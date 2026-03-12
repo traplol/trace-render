@@ -573,9 +573,12 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
                 // layout.y_start is in screen coords: area_min.y + ruler_height - scroll_y_ + offset_within_content
                 // Recover the content-space offset of this track
                 float content_y = layout.y_start - (canvas_min.y + view.ruler_height) + scroll_y_;
+                // Offset to the specific depth row within the track
+                float row_y = content_y + ev.depth * view.track_height;
+                float row_h = view.track_height;
                 float visible_h = canvas_size.y - view.ruler_height;
-                // Center the track vertically
-                scroll_y_ = content_y - (visible_h - layout.height) * 0.5f;
+                // Center the event's row vertically in the visible area
+                scroll_y_ = row_y - (visible_h - row_h) * 0.5f;
                 float max_scroll = std::max(0.0f, total_content_height_ - visible_h);
                 scroll_y_ = std::max(0.0f, std::min(scroll_y_, max_scroll));
                 break;
