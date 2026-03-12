@@ -201,8 +201,12 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
                         IM_COL32(50, 50, 50, 255));
 
             // Query visible events
-            visible_events_.clear();
-            model.query_visible(thread, view.view_start_ts, view.view_end_ts, visible_events_);
+            {
+                TRACE_SCOPE_ARGS("RenderTracks_query", "timeline", "tid", thread.tid, "blocks",
+                                 (int)thread.block_index.blocks.size());
+                visible_events_.clear();
+                model.query_visible(thread, view.view_start_ts, view.view_end_ts, visible_events_);
+            }
 
             // Render slices
             float track_left = area_min.x + view.label_width;
@@ -315,13 +319,16 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
             }
 
             // Flush remaining active merge runs
-            for (uint8_t d = 0; d < num_depths; d++) {
-                if (depth_merges[d].x_end > -1e29f) {
-                    diag_stats.merge_runs++;
-                    float ey = y + d * view.track_height;
-                    dl->AddRectFilled(ImVec2(depth_merges[d].x_start, ey),
-                                      ImVec2(depth_merges[d].x_end, ey + view.track_height - 1),
-                                      IM_COL32(120, 120, 140, 180));
+            {
+                TRACE_SCOPE_CAT("RenderTracks_flush_merges", "timeline");
+                for (uint8_t d = 0; d < num_depths; d++) {
+                    if (depth_merges[d].x_end > -1e29f) {
+                        diag_stats.merge_runs++;
+                        float ey = y + d * view.track_height;
+                        dl->AddRectFilled(ImVec2(depth_merges[d].x_start, ey),
+                                          ImVec2(depth_merges[d].x_end, ey + view.track_height - 1),
+                                          IM_COL32(120, 120, 140, 180));
+                    }
                 }
             }
 
@@ -330,8 +337,11 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
         }
 
         // Counter tracks for this process
-        float counter_h = counter_renderer_.render(dl, area_min, y, width, model, proc.pid, view);
-        y += counter_h;
+        {
+            TRACE_SCOPE_CAT("RenderTracks_counters", "timeline");
+            float counter_h = counter_renderer_.render(dl, area_min, y, width, model, proc.pid, view);
+            y += counter_h;
+        }
     }
 
     dl->PopClipRect();
