@@ -17,8 +17,7 @@ struct BlockIndex {
 
     std::vector<Block> blocks;
 
-    void build(const std::vector<uint32_t>& event_indices,
-               const std::vector<TraceEvent>& events) {
+    void build(const std::vector<uint32_t>& event_indices, const std::vector<TraceEvent>& events) {
         blocks.clear();
         if (event_indices.empty()) return;
 
@@ -38,10 +37,8 @@ struct BlockIndex {
         }
     }
 
-    void query(double start_ts, double end_ts,
-               const std::vector<uint32_t>& event_indices,
-               const std::vector<TraceEvent>& events,
-               std::vector<uint32_t>& out) const {
+    void query(double start_ts, double end_ts, const std::vector<uint32_t>& event_indices,
+               const std::vector<TraceEvent>& events, std::vector<uint32_t>& out) const {
         for (const auto& blk : blocks) {
             if (blk.min_ts > end_ts) break;
             if (blk.max_end_ts < start_ts) continue;

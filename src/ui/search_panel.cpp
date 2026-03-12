@@ -7,12 +7,9 @@
 
 static bool contains_case_insensitive(const std::string& haystack, const std::string& needle) {
     if (needle.empty()) return true;
-    auto it = std::search(haystack.begin(), haystack.end(),
-                          needle.begin(), needle.end(),
-                          [](char a, char b) {
-                              return std::tolower((unsigned char)a) ==
-                                     std::tolower((unsigned char)b);
-                          });
+    auto it = std::search(haystack.begin(), haystack.end(), needle.begin(), needle.end(), [](char a, char b) {
+        return std::tolower((unsigned char)a) == std::tolower((unsigned char)b);
+    });
     return it != haystack.end();
 }
 
@@ -38,8 +35,7 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
     }
 
     ImGui::SetNextItemWidth(-60);
-    if (ImGui::InputText("##search", search_buf_, sizeof(search_buf_),
-                         ImGuiInputTextFlags_EnterReturnsTrue)) {
+    if (ImGui::InputText("##search", search_buf_, sizeof(search_buf_), ImGuiInputTextFlags_EnterReturnsTrue)) {
         needs_search_ = true;
     }
     ImGui::SameLine();
@@ -102,12 +98,10 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
     // Results table
     if (!sorted_results_.empty() &&
         ImGui::BeginTable("SearchResults", 3,
-            ImGuiTableFlags_Sortable | ImGuiTableFlags_SortMulti |
-            ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
-            ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY |
-            ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable,
-            ImVec2(0, 0))) {
-
+                          ImGuiTableFlags_Sortable | ImGuiTableFlags_SortMulti | ImGuiTableFlags_RowBg |
+                              ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY |
+                              ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable,
+                          ImVec2(0, 0))) {
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_DefaultSort, 0.0f, 0);
         ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_None, 0.0f, 1);
@@ -124,27 +118,26 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
                     const auto& spec = sort_specs->Specs[0];
                     bool ascending = (spec.SortDirection == ImGuiSortDirection_Ascending);
 
-                    std::sort(sorted_results_.begin(), sorted_results_.end(),
-                        [&](uint32_t a_idx, uint32_t b_idx) {
-                            const auto& a = model.events_[a_idx];
-                            const auto& b = model.events_[b_idx];
-                            int cmp = 0;
-                            switch (spec.ColumnUserID) {
-                                case 0: // Time
-                                    cmp = (a.ts < b.ts) ? -1 : (a.ts > b.ts) ? 1 : 0;
-                                    break;
-                                case 1: // Duration
-                                    cmp = (a.dur < b.dur) ? -1 : (a.dur > b.dur) ? 1 : 0;
-                                    break;
-                                case 2: { // Name
-                                    const auto& na = model.get_string(a.name_idx);
-                                    const auto& nb = model.get_string(b.name_idx);
-                                    cmp = na.compare(nb);
-                                    break;
-                                }
+                    std::sort(sorted_results_.begin(), sorted_results_.end(), [&](uint32_t a_idx, uint32_t b_idx) {
+                        const auto& a = model.events_[a_idx];
+                        const auto& b = model.events_[b_idx];
+                        int cmp = 0;
+                        switch (spec.ColumnUserID) {
+                            case 0:  // Time
+                                cmp = (a.ts < b.ts) ? -1 : (a.ts > b.ts) ? 1 : 0;
+                                break;
+                            case 1:  // Duration
+                                cmp = (a.dur < b.dur) ? -1 : (a.dur > b.dur) ? 1 : 0;
+                                break;
+                            case 2: {  // Name
+                                const auto& na = model.get_string(a.name_idx);
+                                const auto& nb = model.get_string(b.name_idx);
+                                cmp = na.compare(nb);
+                                break;
                             }
-                            return ascending ? (cmp < 0) : (cmp > 0);
-                        });
+                        }
+                        return ascending ? (cmp < 0) : (cmp > 0);
+                    });
                 }
             }
         }
@@ -170,7 +163,7 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
                 snprintf(id_buf, sizeof(id_buf), "##r%d", i);
                 bool selected = (view.selected_event_idx == (int32_t)ev_idx);
                 if (ImGui::Selectable(id_buf, selected,
-                        ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
+                                      ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
                     view.selected_event_idx = ev_idx;
                     double pad = std::max((double)ev.dur * 2.0, 1000.0);
                     view.view_start_ts = ev.ts - pad;

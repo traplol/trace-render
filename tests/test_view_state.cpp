@@ -34,7 +34,7 @@ TEST(ViewState, TimeToXWithOffset) {
     vs.view_end_ts = 1000.0;
 
     float x = vs.time_to_x(500.0, 200.0f, 800.0f);
-    EXPECT_FLOAT_EQ(x, 600.0f); // 200 + 400
+    EXPECT_FLOAT_EQ(x, 600.0f);  // 200 + 400
 }
 
 TEST(ViewState, XToTime) {

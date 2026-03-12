@@ -22,10 +22,8 @@ int main(int argc, char* argv[]) {
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
-    SDL_Window* window = SDL_CreateWindow(
-        "Perfetto Trace Viewer",
-        1600, 900,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
+    SDL_Window* window = SDL_CreateWindow("Perfetto Trace Viewer", 1600, 900,
+                                          SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
 
     if (!window) {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
@@ -38,7 +36,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     SDL_GL_MakeCurrent(window, gl_context);
-    SDL_GL_SetSwapInterval(1); // vsync
+    SDL_GL_SetSwapInterval(1);  // vsync
 
     // Setup ImGui
     IMGUI_CHECKVERSION();
@@ -152,8 +150,7 @@ int main(int argc, char* argv[]) {
 
         // Write FPS counter event every frame
         if (Tracer::instance().enabled()) {
-            Tracer::instance().write_counter("FPS", "perf",
-                Tracer::instance().now_us(), "fps", (double)io.Framerate);
+            Tracer::instance().write_counter("FPS", "perf", Tracer::instance().now_us(), "fps", (double)io.Framerate);
         }
         frame_num++;
     }

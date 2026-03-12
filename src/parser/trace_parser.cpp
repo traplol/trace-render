@@ -38,8 +38,7 @@ struct SaxHandler : json::json_sax_t {
     uint64_t event_count = 0;
     uint64_t estimated_events = 0;
 
-    SaxHandler(TraceModel& m, std::function<void(const char*, float)>& prog)
-        : model(m), on_progress(prog) {}
+    SaxHandler(TraceModel& m, std::function<void(const char*, float)>& prog) : model(m), on_progress(prog) {}
 
     void finish_event() {
         event_count++;
@@ -91,8 +90,7 @@ struct SaxHandler : json::json_sax_t {
         }
 
         // Handle flow events
-        if (current_event.ph == Phase::FlowStart ||
-            current_event.ph == Phase::FlowStep ||
+        if (current_event.ph == Phase::FlowStart || current_event.ph == Phase::FlowStep ||
             current_event.ph == Phase::FlowEnd) {
             model.flow_groups_[current_event.id].push_back(ev_idx);
         }
@@ -117,9 +115,8 @@ struct SaxHandler : json::json_sax_t {
         if (name == "process_name") {
             // Extract name from args
             if (current_event.args_idx != UINT32_MAX || !current_args_json.empty()) {
-                const std::string& args_str = current_args_json.empty()
-                    ? model.args_[current_event.args_idx]
-                    : current_args_json;
+                const std::string& args_str =
+                    current_args_json.empty() ? model.args_[current_event.args_idx] : current_args_json;
                 try {
                     auto args = json::parse(args_str);
                     if (args.contains("name")) {
@@ -185,13 +182,9 @@ struct SaxHandler : json::json_sax_t {
         return true;
     }
 
-    bool number_integer(number_integer_t val) override {
-        return handle_number((double)val, std::to_string(val));
-    }
+    bool number_integer(number_integer_t val) override { return handle_number((double)val, std::to_string(val)); }
 
-    bool number_unsigned(number_unsigned_t val) override {
-        return handle_number((double)val, std::to_string(val));
-    }
+    bool number_unsigned(number_unsigned_t val) override { return handle_number((double)val, std::to_string(val)); }
 
     bool number_float(number_float_t val, const string_t& s) override {
         return handle_number(val, s.empty() ? std::to_string(val) : s);
@@ -213,11 +206,16 @@ struct SaxHandler : json::json_sax_t {
         }
         if (state == State::Skipping) return true;
         if (state == State::InEvent) {
-            if (current_key == "ts") current_event.ts = val / time_divisor;
-            else if (current_key == "dur") current_event.dur = val / time_divisor;
-            else if (current_key == "pid") current_event.pid = (uint32_t)val;
-            else if (current_key == "tid") current_event.tid = (uint32_t)val;
-            else if (current_key == "id") current_event.id = (uint64_t)val;
+            if (current_key == "ts")
+                current_event.ts = val / time_divisor;
+            else if (current_key == "dur")
+                current_event.dur = val / time_divisor;
+            else if (current_key == "pid")
+                current_event.pid = (uint32_t)val;
+            else if (current_key == "tid")
+                current_event.tid = (uint32_t)val;
+            else if (current_key == "id")
+                current_event.id = (uint64_t)val;
         }
         return true;
     }
@@ -230,7 +228,9 @@ struct SaxHandler : json::json_sax_t {
                 first_args_key = false;
                 if (current_event.ph == Phase::Counter) {
                     // Try parsing string as number for counter
-                    try { counter_values.push_back({current_key, std::stod(val)}); } catch (...) {}
+                    try {
+                        counter_values.push_back({current_key, std::stod(val)});
+                    } catch (...) {}
                 }
             } else {
                 current_args_json += "\"" + escape_json_string(val) + "\"";
@@ -250,7 +250,9 @@ struct SaxHandler : json::json_sax_t {
                 if (val.size() > 2 && val[0] == '0' && (val[1] == 'x' || val[1] == 'X')) {
                     current_event.id = std::stoull(val, nullptr, 16);
                 } else {
-                    try { current_event.id = std::stoull(val); } catch (...) {}
+                    try {
+                        current_event.id = std::stoull(val);
+                    } catch (...) {}
                 }
             }
         }
@@ -263,7 +265,10 @@ struct SaxHandler : json::json_sax_t {
     bool binary(binary_t&) override { return true; }
 
     bool start_object(std::size_t) override {
-        if (state == State::Skipping) { skip_depth++; return true; }
+        if (state == State::Skipping) {
+            skip_depth++;
+            return true;
+        }
         if (state == State::TopLevel) {
             state = State::InTopObject;
             return true;
@@ -325,7 +330,10 @@ struct SaxHandler : json::json_sax_t {
     }
 
     bool start_array(std::size_t) override {
-        if (state == State::Skipping) { skip_depth++; return true; }
+        if (state == State::Skipping) {
+            skip_depth++;
+            return true;
+        }
         if (state == State::TopLevel) {
             state = State::InTraceEvents;
             return true;
@@ -361,7 +369,7 @@ struct SaxHandler : json::json_sax_t {
             return true;
         }
         if (state == State::InTraceEvents) {
-            state = State::InTopObject; // might have more top-level keys
+            state = State::InTopObject;  // might have more top-level keys
             return true;
         }
         return true;
@@ -380,9 +388,10 @@ struct SaxHandler : json::json_sax_t {
         return true;
     }
 
-    bool parse_error(std::size_t position, const std::string& last_token,
-                     const json::exception& ex) override {
-        (void)position; (void)last_token; (void)ex;
+    bool parse_error(std::size_t position, const std::string& last_token, const json::exception& ex) override {
+        (void)position;
+        (void)last_token;
+        (void)ex;
         return false;
     }
 
@@ -391,11 +400,21 @@ struct SaxHandler : json::json_sax_t {
         result.reserve(s.size());
         for (char c : s) {
             switch (c) {
-                case '"':  result += "\\\""; break;
-                case '\\': result += "\\\\"; break;
-                case '\n': result += "\\n"; break;
-                case '\r': result += "\\r"; break;
-                case '\t': result += "\\t"; break;
+                case '"':
+                    result += "\\\"";
+                    break;
+                case '\\':
+                    result += "\\\\";
+                    break;
+                case '\n':
+                    result += "\\n";
+                    break;
+                case '\r':
+                    result += "\\r";
+                    break;
+                case '\t':
+                    result += "\\t";
+                    break;
                 default:
                     if (static_cast<unsigned char>(c) < 0x20) {
                         char buf[8];
@@ -426,7 +445,7 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
 
     // Read file in chunks to report progress
     std::string content(file_size, '\0');
-    constexpr size_t CHUNK = 4 * 1024 * 1024; // 4MB chunks
+    constexpr size_t CHUNK = 4 * 1024 * 1024;  // 4MB chunks
     size_t read_so_far = 0;
     while (read_so_far < file_size) {
         size_t to_read = std::min(CHUNK, file_size - read_so_far);

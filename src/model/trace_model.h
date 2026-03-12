@@ -12,7 +12,7 @@
 struct ThreadInfo {
     uint32_t tid = 0;
     std::string name;
-    std::vector<uint32_t> event_indices; // indices into TraceModel::events_, sorted by ts
+    std::vector<uint32_t> event_indices;  // indices into TraceModel::events_, sorted by ts
     int32_t sort_index = 0;
     uint8_t max_depth = 0;
     BlockIndex block_index;
@@ -43,7 +43,7 @@ struct ProcessInfo {
 struct CounterSeries {
     uint32_t pid = 0;
     std::string name;
-    std::vector<std::pair<double, double>> points; // (timestamp, value)
+    std::vector<std::pair<double, double>> points;  // (timestamp, value)
     double min_val = 0.0;
     double max_val = 0.0;
 };
@@ -105,9 +105,7 @@ public:
 
     void build_index();
 
-    void query_visible(const ThreadInfo& thread,
-                       double start_ts, double end_ts,
-                       std::vector<uint32_t>& out) const {
+    void query_visible(const ThreadInfo& thread, double start_ts, double end_ts, std::vector<uint32_t>& out) const {
         thread.block_index.query(start_ts, end_ts, thread.event_indices, events_, out);
     }
 

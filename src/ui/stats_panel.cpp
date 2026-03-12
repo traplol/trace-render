@@ -100,7 +100,8 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
 
             if (ImGui::BeginTabItem(tab_label, p_open)) {
                 active_tab_ = t;
-                ImGui::BeginChild("##tabcontent", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
+                ImGui::BeginChild("##tabcontent", ImVec2(0, 0), ImGuiChildFlags_None,
+                                  ImGuiWindowFlags_HorizontalScrollbar);
                 render_tab(tabs_[t], model, db, view);
                 ImGui::EndChild();
                 ImGui::EndTabItem();
@@ -146,7 +147,7 @@ void StatsPanel::render_schema_popup(QueryDb& db) {
     if (ImGui::BeginPopupModal("Schema Browser", nullptr, ImGuiWindowFlags_None)) {
         struct TableDef {
             const char* name;
-            const char* columns; // name:type pairs
+            const char* columns;  // name:type pairs
         };
 
         static const TableDef tables[] = {
@@ -165,14 +166,13 @@ void StatsPanel::render_schema_popup(QueryDb& db) {
         for (const auto& tbl : tables) {
             if (ImGui::CollapsingHeader(tbl.name, ImGuiTreeNodeFlags_DefaultOpen)) {
                 // Get column info
-                auto result = db.execute(
-                    std::string("PRAGMA table_info(") + tbl.name + ")");
+                auto result = db.execute(std::string("PRAGMA table_info(") + tbl.name + ")");
 
                 if (result.ok && !result.rows.empty()) {
                     // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
                     if (ImGui::BeginTable(tbl.name, 4,
-                            ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
-                            ImGuiTableFlags_BordersOuter | ImGuiTableFlags_SizingStretchProp)) {
+                                          ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                                              ImGuiTableFlags_BordersOuter | ImGuiTableFlags_SizingStretchProp)) {
                         ImGui::TableSetupColumn("Column", ImGuiTableColumnFlags_None, 3.0f);
                         ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_None, 2.0f);
                         ImGui::TableSetupColumn("PK", ImGuiTableColumnFlags_None, 0.5f);
@@ -206,8 +206,7 @@ void StatsPanel::render_schema_popup(QueryDb& db) {
                     }
 
                     // Row count
-                    auto count_result = db.execute(
-                        std::string("SELECT COUNT(*) FROM ") + tbl.name);
+                    auto count_result = db.execute(std::string("SELECT COUNT(*) FROM ") + tbl.name);
                     if (count_result.ok && !count_result.rows.empty()) {
                         ImGui::TextDisabled("  %s rows", count_result.rows[0][0].c_str());
                     }
@@ -254,8 +253,7 @@ void StatsPanel::render_schema_popup(QueryDb& db) {
                 ImGui::PushID(ex.name);
                 if (ImGui::SmallButton("Use")) {
                     if (active_tab_ >= 0 && active_tab_ < (int)tabs_.size()) {
-                        snprintf(tabs_[active_tab_].query_buf,
-                                sizeof(tabs_[active_tab_].query_buf), "%s", ex.sql);
+                        snprintf(tabs_[active_tab_].query_buf, sizeof(tabs_[active_tab_].query_buf), "%s", ex.sql);
                     }
                     ImGui::CloseCurrentPopup();
                 }
@@ -313,7 +311,7 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
         ImGui::BeginDisabled();
     }
     ImGui::InputTextMultiline("##sql", tab.query_buf, sizeof(tab.query_buf),
-                               ImVec2(-1, ImGui::GetTextLineHeight() * 6));
+                              ImVec2(-1, ImGui::GetTextLineHeight() * 6));
     if (is_running) {
         ImGui::EndDisabled();
     }
@@ -326,23 +324,22 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
         ImGui::SameLine();
 
         float time = (float)ImGui::GetTime();
-        const char* spinner[] = { "|", "/", "-", "\\" };
+        const char* spinner[] = {"|", "/", "-", "\\"};
         int frame = (int)(time * 4.0f) % 4;
         int rows = db.query_rows_so_far();
         uint64_t steps = db.query_steps();
 
         char status[128];
         if (steps < 1000000) {
-            snprintf(status, sizeof(status), "%s  Running... %d rows, %lluK steps",
-                     spinner[frame], rows, (unsigned long long)(steps / 1000));
+            snprintf(status, sizeof(status), "%s  Running... %d rows, %lluK steps", spinner[frame], rows,
+                     (unsigned long long)(steps / 1000));
         } else {
-            snprintf(status, sizeof(status), "%s  Running... %d rows, %.1fM steps",
-                     spinner[frame], rows, steps / 1000000.0);
+            snprintf(status, sizeof(status), "%s  Running... %d rows, %.1fM steps", spinner[frame], rows,
+                     steps / 1000000.0);
         }
         ImGui::TextDisabled("%s", status);
     } else {
-        bool run = ImGui::Button("Run (Ctrl+Enter)") ||
-            (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Enter));
+        bool run = ImGui::Button("Run (Ctrl+Enter)") || (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Enter));
         if (run && !db.is_query_running()) {
             db.execute_async(tab.query_buf);
             tab.query_running = true;
@@ -382,13 +379,10 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
     int col_count = (int)tab.result.columns.size();
 
     if (ImGui::BeginTable("QueryResults", col_count,
-            ImGuiTableFlags_Sortable |
-            ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
-            ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollX |
-            ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable |
-            ImGuiTableFlags_Reorderable,
-            ImVec2(0, 0))) {
-
+                          ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
+                              ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY |
+                              ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable,
+                          ImVec2(0, 0))) {
         ImGui::TableSetupScrollFreeze(0, 1);
         std::vector<bool> time_cols(col_count, false);
         for (int c = 0; c < col_count; c++) {
@@ -405,23 +399,22 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
                     int sort_col = (int)spec.ColumnUserID;
                     bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
                     std::sort(tab.result.rows.begin(), tab.result.rows.end(),
-                        [&](const std::vector<std::string>& a, const std::vector<std::string>& b) {
-                            if (sort_col >= (int)a.size() || sort_col >= (int)b.size()) return false;
-                            const std::string& sa = a[sort_col];
-                            const std::string& sb = b[sort_col];
-                            char* end_a = nullptr;
-                            char* end_b = nullptr;
-                            double da = strtod(sa.c_str(), &end_a);
-                            double db = strtod(sb.c_str(), &end_b);
-                            int cmp;
-                            if (end_a != sa.c_str() && *end_a == '\0' &&
-                                end_b != sb.c_str() && *end_b == '\0') {
-                                cmp = (da < db) ? -1 : (da > db) ? 1 : 0;
-                            } else {
-                                cmp = sa.compare(sb);
-                            }
-                            return asc ? (cmp < 0) : (cmp > 0);
-                        });
+                              [&](const std::vector<std::string>& a, const std::vector<std::string>& b) {
+                                  if (sort_col >= (int)a.size() || sort_col >= (int)b.size()) return false;
+                                  const std::string& sa = a[sort_col];
+                                  const std::string& sb = b[sort_col];
+                                  char* end_a = nullptr;
+                                  char* end_b = nullptr;
+                                  double da = strtod(sa.c_str(), &end_a);
+                                  double db = strtod(sb.c_str(), &end_b);
+                                  int cmp;
+                                  if (end_a != sa.c_str() && *end_a == '\0' && end_b != sb.c_str() && *end_b == '\0') {
+                                      cmp = (da < db) ? -1 : (da > db) ? 1 : 0;
+                                  } else {
+                                      cmp = sa.compare(sb);
+                                  }
+                                  return asc ? (cmp < 0) : (cmp > 0);
+                              });
                 }
             }
         }
@@ -439,14 +432,14 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
                     if (c == name_col) {
                         char id_buf[32];
                         snprintf(id_buf, sizeof(id_buf), "##r%d", i);
-                        if (ImGui::Selectable(id_buf, false,
+                        if (ImGui::Selectable(
+                                id_buf, false,
                                 ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
                             // Find first event with this name and select it
                             const std::string& name = row[name_col];
                             for (uint32_t ei = 0; ei < (uint32_t)model.events_.size(); ei++) {
                                 const auto& ev = model.events_[ei];
-                                if (ev.is_end_event || ev.ph == Phase::Metadata || ev.ph == Phase::Counter)
-                                    continue;
+                                if (ev.is_end_event || ev.ph == Phase::Metadata || ev.ph == Phase::Counter) continue;
                                 if (ev.dur <= 0) continue;
                                 if (model.get_string(ev.name_idx) == name) {
                                     view.selected_event_idx = ei;
@@ -474,24 +467,24 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
 
 // --- Query Builder ---
 
-static const char* TABLE_NAMES[] = { "events", "processes", "threads", "counters" };
+static const char* TABLE_NAMES[] = {"events", "processes", "threads", "counters"};
 static const int NUM_TABLES = 4;
 
-static const char* EVENTS_COLS[] = { "id", "name", "category", "phase", "ts", "dur", "end_ts", "pid", "tid", "depth" };
-static const char* PROCESSES_COLS[] = { "pid", "name" };
-static const char* THREADS_COLS[] = { "tid", "pid", "name" };
-static const char* COUNTERS_COLS[] = { "pid", "name", "ts", "value" };
+static const char* EVENTS_COLS[] = {"id", "name", "category", "phase", "ts", "dur", "end_ts", "pid", "tid", "depth"};
+static const char* PROCESSES_COLS[] = {"pid", "name"};
+static const char* THREADS_COLS[] = {"tid", "pid", "name"};
+static const char* COUNTERS_COLS[] = {"pid", "name", "ts", "value"};
 
-static const char* const* TABLE_COLS[] = { EVENTS_COLS, PROCESSES_COLS, THREADS_COLS, COUNTERS_COLS };
-static const int TABLE_COL_COUNTS[] = { 10, 2, 3, 4 };
+static const char* const* TABLE_COLS[] = {EVENTS_COLS, PROCESSES_COLS, THREADS_COLS, COUNTERS_COLS};
+static const int TABLE_COL_COUNTS[] = {10, 2, 3, 4};
 
-static const char* AGG_NAMES[] = { "(none)", "COUNT", "SUM", "AVG", "MIN", "MAX" };
+static const char* AGG_NAMES[] = {"(none)", "COUNT", "SUM", "AVG", "MIN", "MAX"};
 static const int NUM_AGGS = 6;
 
-static const char* OP_NAMES[] = { "=", "!=", "<", ">", "<=", ">=", "LIKE", "NOT LIKE", "IN", "IS NULL", "IS NOT NULL" };
+static const char* OP_NAMES[] = {"=", "!=", "<", ">", "<=", ">=", "LIKE", "NOT LIKE", "IN", "IS NULL", "IS NOT NULL"};
 static const int NUM_OPS = 11;
 
-static const char* LOGIC_NAMES[] = { "AND", "OR" };
+static const char* LOGIC_NAMES[] = {"AND", "OR"};
 
 void QueryBuilderState::reset() {
     table_idx = 0;
@@ -630,8 +623,7 @@ void StatsPanel::render_builder_popup(QueryDb& db) {
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(900, 700), ImGuiCond_Appearing);
 
-    if (!ImGui::BeginPopupModal("Query Builder", nullptr, ImGuiWindowFlags_None))
-        return;
+    if (!ImGui::BeginPopupModal("Query Builder", nullptr, ImGuiWindowFlags_None)) return;
 
     auto& b = builder_;
     const char* const* cols = TABLE_COLS[b.table_idx];
@@ -718,8 +710,9 @@ void StatsPanel::render_builder_popup(QueryDb& db) {
         if (wc.op_idx < 9) {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(180);
-            const char* hint = (wc.op_idx == 6 || wc.op_idx == 7) ? "%pattern%" :
-                               (wc.op_idx == 8) ? "(1,2,3)" : "value";
+            const char* hint = (wc.op_idx == 6 || wc.op_idx == 7) ? "%pattern%"
+                               : (wc.op_idx == 8)                 ? "(1,2,3)"
+                                                                  : "value";
             ImGui::InputTextWithHint("##wval", hint, wc.value, sizeof(wc.value));
         }
 
@@ -763,7 +756,7 @@ void StatsPanel::render_builder_popup(QueryDb& db) {
 
             ImGui::SetNextItemWidth(100);
             // Skip "(none)" for HAVING - start at index 1
-            const char* having_aggs[] = { "COUNT", "SUM", "AVG", "MIN", "MAX" };
+            const char* having_aggs[] = {"COUNT", "SUM", "AVG", "MIN", "MAX"};
             int disp_agg = hc.agg_idx - 1;
             if (disp_agg < 0) disp_agg = 0;
             if (ImGui::Combo("##hagg", &disp_agg, having_aggs, 5)) {
@@ -776,7 +769,7 @@ void StatsPanel::render_builder_popup(QueryDb& db) {
             ImGui::SameLine();
 
             ImGui::SetNextItemWidth(80);
-            ImGui::Combo("##hop", &hc.op_idx, OP_NAMES, 6); // Only comparison ops
+            ImGui::Combo("##hop", &hc.op_idx, OP_NAMES, 6);  // Only comparison ops
             ImGui::SameLine();
 
             ImGui::SetNextItemWidth(120);
@@ -841,7 +834,7 @@ void StatsPanel::render_builder_popup(QueryDb& db) {
         }
         ImGui::SameLine();
 
-        const char* dir_items[] = { "ASC", "DESC" };
+        const char* dir_items[] = {"ASC", "DESC"};
         int dir = oc.descending ? 1 : 0;
         ImGui::SetNextItemWidth(80);
         if (ImGui::Combo("##odir", &dir, dir_items, 2)) {
@@ -883,16 +876,14 @@ void StatsPanel::render_builder_popup(QueryDb& db) {
     // Action buttons
     if (ImGui::Button("Use Query", ImVec2(200, 0))) {
         if (active_tab_ >= 0 && active_tab_ < (int)tabs_.size()) {
-            snprintf(tabs_[active_tab_].query_buf,
-                    sizeof(tabs_[active_tab_].query_buf), "%s", sql.c_str());
+            snprintf(tabs_[active_tab_].query_buf, sizeof(tabs_[active_tab_].query_buf), "%s", sql.c_str());
         }
         ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();
     if (ImGui::Button("Use & Run", ImVec2(200, 0))) {
         if (active_tab_ >= 0 && active_tab_ < (int)tabs_.size()) {
-            snprintf(tabs_[active_tab_].query_buf,
-                    sizeof(tabs_[active_tab_].query_buf), "%s", sql.c_str());
+            snprintf(tabs_[active_tab_].query_buf, sizeof(tabs_[active_tab_].query_buf), "%s", sql.c_str());
             if (!db.is_query_running()) {
                 db.execute_async(sql);
                 tabs_[active_tab_].query_running = true;

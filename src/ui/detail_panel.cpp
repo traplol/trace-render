@@ -22,19 +22,32 @@ static void format_time_detail(double us, char* buf, size_t buf_size) {
 
 static const char* phase_name(Phase ph) {
     switch (ph) {
-        case Phase::DurationBegin: return "Duration Begin (B)";
-        case Phase::DurationEnd:   return "Duration End (E)";
-        case Phase::Complete:      return "Complete (X)";
-        case Phase::Instant:       return "Instant (i)";
-        case Phase::Counter:       return "Counter (C)";
-        case Phase::AsyncBegin:    return "Async Begin (b)";
-        case Phase::AsyncEnd:      return "Async End (e)";
-        case Phase::AsyncInstant:  return "Async Instant (n)";
-        case Phase::FlowStart:    return "Flow Start (s)";
-        case Phase::FlowStep:     return "Flow Step (t)";
-        case Phase::FlowEnd:      return "Flow End (f)";
-        case Phase::Metadata:     return "Metadata (M)";
-        default:                  return "Unknown";
+        case Phase::DurationBegin:
+            return "Duration Begin (B)";
+        case Phase::DurationEnd:
+            return "Duration End (E)";
+        case Phase::Complete:
+            return "Complete (X)";
+        case Phase::Instant:
+            return "Instant (i)";
+        case Phase::Counter:
+            return "Counter (C)";
+        case Phase::AsyncBegin:
+            return "Async Begin (b)";
+        case Phase::AsyncEnd:
+            return "Async End (e)";
+        case Phase::AsyncInstant:
+            return "Async Instant (n)";
+        case Phase::FlowStart:
+            return "Flow Start (s)";
+        case Phase::FlowStep:
+            return "Flow Step (t)";
+        case Phase::FlowEnd:
+            return "Flow End (f)";
+        case Phase::Metadata:
+            return "Metadata (M)";
+        default:
+            return "Unknown";
     }
 }
 
@@ -72,8 +85,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
     TRACE_SCOPE_CAT("Details", "ui");
     ImGui::Begin("Details");
 
-    if (view.selected_event_idx < 0 ||
-        view.selected_event_idx >= (int32_t)model.events_.size()) {
+    if (view.selected_event_idx < 0 || view.selected_event_idx >= (int32_t)model.events_.size()) {
         ImGui::TextDisabled("Click a slice in the timeline to see details.");
         ImGui::End();
         return;
@@ -135,9 +147,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 int32_t parent_idx = -1;
                 for (uint32_t idx : thread.event_indices) {
                     const auto& candidate = model.events_[idx];
-                    if (candidate.depth == ev.depth - 1 &&
-                        candidate.ts <= ev.ts &&
-                        candidate.end_ts() >= ev.end_ts()) {
+                    if (candidate.depth == ev.depth - 1 && candidate.ts <= ev.ts && candidate.end_ts() >= ev.end_ts()) {
                         parent_idx = (int32_t)idx;
                         break;
                     }
@@ -155,7 +165,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 goto done_parent;
             }
         }
-        done_parent:;
+    done_parent:;
     }
 
     // Args
@@ -176,8 +186,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
     const auto& current_ev = model.events_[view.selected_event_idx];
     if (current_ev.dur > 0) {
         // Rebuild children cache when selection or descendants flag changes
-        if (cached_event_idx_ != view.selected_event_idx ||
-            cached_descendants_flag_ != include_all_descendants_) {
+        if (cached_event_idx_ != view.selected_event_idx || cached_descendants_flag_ != include_all_descendants_) {
             cached_event_idx_ = view.selected_event_idx;
             cached_descendants_flag_ = include_all_descendants_;
             rebuild_children(model, current_ev);
@@ -196,17 +205,18 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
                 ImGui::Spacing();
 
-                if (ImGui::BeginTable("ChildrenTable", 3,
-                        ImGuiTableFlags_Sortable |
-                        ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
-                        ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY |
-                        ImGuiTableFlags_Resizable,
-                        ImVec2(0, std::min((float)(children_.size() + 1) * ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeight(), ImGui::GetContentRegionAvail().y)))) {
-
+                if (ImGui::BeginTable(
+                        "ChildrenTable", 3,
+                        ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
+                            ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
+                        ImVec2(0, std::min((float)(children_.size() + 1) * ImGui::GetTextLineHeightWithSpacing() +
+                                               ImGui::GetFrameHeight(),
+                                           ImGui::GetContentRegionAvail().y)))) {
                     ImGui::TableSetupScrollFreeze(0, 1);
                     ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_None, 0.0f, 0);
-                    ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_DefaultSort |
-                                                        ImGuiTableColumnFlags_PreferSortDescending, 0.0f, 1);
+                    ImGui::TableSetupColumn(
+                        "Duration", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending,
+                        0.0f, 1);
                     ImGui::TableSetupColumn("%", ImGuiTableColumnFlags_None, 0.0f, 2);
                     ImGui::TableHeadersRow();
 
@@ -221,20 +231,24 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 const auto& spec = sort_specs->Specs[0];
                                 bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
                                 std::sort(children_.begin(), children_.end(),
-                                    [&](const ChildInfo& a, const ChildInfo& b) {
-                                        int cmp = 0;
-                                        switch (spec.ColumnUserID) {
-                                            case 0: {
-                                                const auto& na = model.get_string(a.name_idx);
-                                                const auto& nb = model.get_string(b.name_idx);
-                                                cmp = na.compare(nb);
-                                                break;
-                                            }
-                                            case 1: cmp = (a.dur < b.dur) ? -1 : (a.dur > b.dur) ? 1 : 0; break;
-                                            case 2: cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0; break;
-                                        }
-                                        return asc ? (cmp < 0) : (cmp > 0);
-                                    });
+                                          [&](const ChildInfo& a, const ChildInfo& b) {
+                                              int cmp = 0;
+                                              switch (spec.ColumnUserID) {
+                                                  case 0: {
+                                                      const auto& na = model.get_string(a.name_idx);
+                                                      const auto& nb = model.get_string(b.name_idx);
+                                                      cmp = na.compare(nb);
+                                                      break;
+                                                  }
+                                                  case 1:
+                                                      cmp = (a.dur < b.dur) ? -1 : (a.dur > b.dur) ? 1 : 0;
+                                                      break;
+                                                  case 2:
+                                                      cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0;
+                                                      break;
+                                              }
+                                              return asc ? (cmp < 0) : (cmp > 0);
+                                          });
                             }
                         }
                     }
@@ -248,7 +262,8 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                         char id_buf[32];
                         snprintf(id_buf, sizeof(id_buf), "##c%zu", i);
                         bool is_selected = (view.selected_event_idx == (int32_t)c.event_idx);
-                        if (ImGui::Selectable(id_buf, is_selected,
+                        if (ImGui::Selectable(
+                                id_buf, is_selected,
                                 ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
                             view.selected_event_idx = c.event_idx;
                             const auto& child_ev = model.events_[c.event_idx];

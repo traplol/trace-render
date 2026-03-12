@@ -20,13 +20,13 @@ static size_t get_rss_bytes() {
 static size_t get_rss_bytes() {
     mach_task_basic_info_data_t info;
     mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
-    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
-                  (task_info_t)&info, &count) != KERN_SUCCESS)
-        return 0;
+    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &count) != KERN_SUCCESS) return 0;
     return info.resident_size;
 }
 #else
-static size_t get_rss_bytes() { return 0; }
+static size_t get_rss_bytes() {
+    return 0;
+}
 #endif
 
 static void format_bytes(size_t bytes, char* buf, size_t buf_size) {
@@ -66,13 +66,12 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
         // FPS sparkline
         char overlay[32];
         snprintf(overlay, sizeof(overlay), "%.0f fps", current_fps);
-        ImGui::PlotLines("##fps", fps_history_, HISTORY_SIZE, history_idx_,
-                        overlay, 0.0f, 200.0f, ImVec2(-1, 50));
+        ImGui::PlotLines("##fps", fps_history_, HISTORY_SIZE, history_idx_, overlay, 0.0f, 200.0f, ImVec2(-1, 50));
 
         // Frame time sparkline
         snprintf(overlay, sizeof(overlay), "%.1f ms", current_dt);
-        ImGui::PlotLines("##frametime", frame_time_history_, HISTORY_SIZE, history_idx_,
-                        overlay, 0.0f, 50.0f, ImVec2(-1, 50));
+        ImGui::PlotLines("##frametime", frame_time_history_, HISTORY_SIZE, history_idx_, overlay, 0.0f, 50.0f,
+                         ImVec2(-1, 50));
     }
 
     // Memory section
@@ -104,22 +103,18 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
             ImGui::Text("Args pool: %s (%zu entries)", args_str, model.args_.size());
 
             size_t counter_points = 0;
-            for (const auto& cs : model.counter_series_)
-                counter_points += cs.points.size();
-            ImGui::Text("Counter series: %zu (%zu points)",
-                       model.counter_series_.size(), counter_points);
+            for (const auto& cs : model.counter_series_) counter_points += cs.points.size();
+            ImGui::Text("Counter series: %zu (%zu points)", model.counter_series_.size(), counter_points);
 
             ImGui::Text("Flow groups: %zu", model.flow_groups_.size());
         }
     }
 
     // Trace overview
-    if (!model.events_.empty() &&
-        ImGui::CollapsingHeader("Trace Overview", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (!model.events_.empty() && ImGui::CollapsingHeader("Trace Overview", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("Processes: %zu", model.processes_.size());
         int total_threads = 0;
-        for (const auto& proc : model.processes_)
-            total_threads += (int)proc.threads.size();
+        for (const auto& proc : model.processes_) total_threads += (int)proc.threads.size();
         ImGui::Text("Threads: %d", total_threads);
         ImGui::Text("Total events: %zu", model.events_.size());
 
@@ -135,8 +130,7 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
     }
 
     // Viewport / render stats
-    if (!model.events_.empty() &&
-        ImGui::CollapsingHeader("Render Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (!model.events_.empty() && ImGui::CollapsingHeader("Render Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
         double view_dur = view.view_end_ts - view.view_start_ts;
         char vd_buf[64];
         if (view_dur < 1000.0)
@@ -149,7 +143,7 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
 
         double total_dur = model.max_ts_ - model.min_ts_;
         if (total_dur > 0.0) {
-            ImGui::Text("Zoom level: %.1fx",  total_dur / view_dur);
+            ImGui::Text("Zoom level: %.1fx", total_dur / view_dur);
         }
 
         ImGui::Separator();

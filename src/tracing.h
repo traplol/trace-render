@@ -15,11 +15,21 @@ inline void escape_json_string(std::string& out, const char* s) {
     out += '"';
     for (; *s; ++s) {
         switch (*s) {
-            case '"':  out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n"; break;
-            case '\r': out += "\\r"; break;
-            case '\t': out += "\\t"; break;
+            case '"':
+                out += "\\\"";
+                break;
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
             default:
                 if (static_cast<unsigned char>(*s) < 0x20) {
                     char buf[8];
@@ -36,7 +46,10 @@ inline void escape_json_string(std::string& out, const char* s) {
 
 // Value serialization overloads
 inline void append_arg_value(std::string& out, const char* v) {
-    if (!v) { out += "null"; return; }
+    if (!v) {
+        out += "null";
+        return;
+    }
     escape_json_string(out, v);
 }
 inline void append_arg_value(std::string& out, const std::string& v) {
@@ -45,26 +58,48 @@ inline void append_arg_value(std::string& out, const std::string& v) {
 inline void append_arg_value(std::string& out, bool v) {
     out += v ? "true" : "false";
 }
-inline void append_arg_value(std::string& out, int v) { out += std::to_string(v); }
-inline void append_arg_value(std::string& out, long v) { out += std::to_string(v); }
-inline void append_arg_value(std::string& out, long long v) { out += std::to_string(v); }
-inline void append_arg_value(std::string& out, unsigned int v) { out += std::to_string(v); }
-inline void append_arg_value(std::string& out, unsigned long v) { out += std::to_string(v); }
-inline void append_arg_value(std::string& out, unsigned long long v) { out += std::to_string(v); }
+inline void append_arg_value(std::string& out, int v) {
+    out += std::to_string(v);
+}
+inline void append_arg_value(std::string& out, long v) {
+    out += std::to_string(v);
+}
+inline void append_arg_value(std::string& out, long long v) {
+    out += std::to_string(v);
+}
+inline void append_arg_value(std::string& out, unsigned int v) {
+    out += std::to_string(v);
+}
+inline void append_arg_value(std::string& out, unsigned long v) {
+    out += std::to_string(v);
+}
+inline void append_arg_value(std::string& out, unsigned long long v) {
+    out += std::to_string(v);
+}
 inline void append_arg_value(std::string& out, float v) {
-    if (std::isnan(v) || std::isinf(v)) { out += "null"; return; }
-    char buf[32]; snprintf(buf, sizeof(buf), "%.6g", (double)v); out += buf;
+    if (std::isnan(v) || std::isinf(v)) {
+        out += "null";
+        return;
+    }
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%.6g", (double)v);
+    out += buf;
 }
 inline void append_arg_value(std::string& out, double v) {
-    if (std::isnan(v) || std::isinf(v)) { out += "null"; return; }
-    char buf[32]; snprintf(buf, sizeof(buf), "%.6g", v); out += buf;
+    if (std::isnan(v) || std::isinf(v)) {
+        out += "null";
+        return;
+    }
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%.6g", v);
+    out += buf;
 }
 
 // Base case: no more pairs
 inline void append_args(std::string&) {}
 
 // Recursive: consume key-value pairs
-template<typename V, typename... Rest>
+template <typename V, typename... Rest>
 void append_args(std::string& out, const char* key, const V& val, Rest&&... rest) {
     if (!out.empty()) out += ',';
     escape_json_string(out, key);
@@ -75,14 +110,14 @@ void append_args(std::string& out, const char* key, const V& val, Rest&&... rest
 
 // Entry point: returns the inner JSON (without outer braces)
 // Returns empty string for zero args
-template<typename... Args>
+template <typename... Args>
 std::string make_args_json(Args&&... args) {
     std::string out;
     append_args(out, std::forward<Args>(args)...);
     return out;
 }
 
-} // namespace trace_detail
+}  // namespace trace_detail
 
 class Tracer {
 public:
@@ -109,8 +144,7 @@ public:
 
     bool enabled() const { return enabled_; }
 
-    void write_complete(const char* name, const char* cat,
-                        uint64_t ts_us, uint64_t dur_us,
+    void write_complete(const char* name, const char* cat, uint64_t ts_us, uint64_t dur_us,
                         const char* args_json = nullptr) {
         if (!enabled_) return;
         std::lock_guard<std::mutex> lock(mutex_);
@@ -122,10 +156,10 @@ public:
         first_event_ = false;
 
         fprintf(file_,
-            "{\"ph\":\"X\",\"name\":\"%s\",\"cat\":\"%s\","
-            "\"ts\":%llu,\"dur\":%llu,"
-            "\"pid\":1,\"tid\":%u",
-            name, cat, (unsigned long long)ts_us, (unsigned long long)dur_us, tid);
+                "{\"ph\":\"X\",\"name\":\"%s\",\"cat\":\"%s\","
+                "\"ts\":%llu,\"dur\":%llu,"
+                "\"pid\":1,\"tid\":%u",
+                name, cat, (unsigned long long)ts_us, (unsigned long long)dur_us, tid);
 
         if (args_json && args_json[0]) {
             fprintf(file_, ",\"args\":{%s}", args_json);
@@ -134,8 +168,7 @@ public:
         fprintf(file_, "}");
     }
 
-    void write_counter(const char* name, const char* cat,
-                       uint64_t ts_us, const char* key, double value) {
+    void write_counter(const char* name, const char* cat, uint64_t ts_us, const char* key, double value) {
         if (!enabled_) return;
         std::lock_guard<std::mutex> lock(mutex_);
         if (!file_) return;
@@ -146,17 +179,16 @@ public:
         first_event_ = false;
 
         fprintf(file_,
-            "{\"ph\":\"C\",\"name\":\"%s\",\"cat\":\"%s\","
-            "\"ts\":%llu,"
-            "\"pid\":1,\"tid\":%u,"
-            "\"args\":{\"%s\":%.2f}}",
-            name, cat, (unsigned long long)ts_us, tid, key, value);
+                "{\"ph\":\"C\",\"name\":\"%s\",\"cat\":\"%s\","
+                "\"ts\":%llu,"
+                "\"pid\":1,\"tid\":%u,"
+                "\"args\":{\"%s\":%.2f}}",
+                name, cat, (unsigned long long)ts_us, tid, key, value);
     }
 
     uint64_t now_us() const {
         auto now = std::chrono::steady_clock::now();
-        return (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(
-            now - epoch_).count();
+        return (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(now - epoch_).count();
     }
 
 private:
@@ -189,8 +221,7 @@ private:
 // RAII scope tracer (no args — zero overhead when disabled)
 class TraceScope {
 public:
-    TraceScope(const char* name, const char* cat = "app")
-        : name_(name), cat_(cat) {
+    TraceScope(const char* name, const char* cat = "app") : name_(name), cat_(cat) {
         if (Tracer::instance().enabled()) {
             start_ = Tracer::instance().now_us();
             active_ = true;
@@ -216,8 +247,7 @@ private:
 // RAII scope tracer with args (separate class to avoid heap alloc in the common path)
 class TraceScopeArgs {
 public:
-    TraceScopeArgs(const char* name, const char* cat, std::string args_json)
-        : name_(name), cat_(cat) {
+    TraceScopeArgs(const char* name, const char* cat, std::string args_json) : name_(name), cat_(cat) {
         if (Tracer::instance().enabled()) {
             args_json_ = std::move(args_json);
             start_ = Tracer::instance().now_us();
@@ -227,8 +257,7 @@ public:
     ~TraceScopeArgs() {
         if (active_) {
             uint64_t end = Tracer::instance().now_us();
-            Tracer::instance().write_complete(
-                name_, cat_, start_, end - start_, args_json_.c_str());
+            Tracer::instance().write_complete(name_, cat_, start_, end - start_, args_json_.c_str());
         }
     }
 
@@ -245,7 +274,6 @@ private:
 
 #define TRACE_SCOPE(name) TraceScope _trace_scope_##__LINE__(name)
 #define TRACE_SCOPE_CAT(name, cat) TraceScope _trace_scope_##__LINE__(name, cat)
-#define TRACE_SCOPE_ARGS(name, cat, ...) \
+#define TRACE_SCOPE_ARGS(name, cat, ...)         \
     TraceScopeArgs _trace_scope_args_##__LINE__( \
-        name, cat, \
-        Tracer::instance().enabled() ? trace_detail::make_args_json(__VA_ARGS__) : std::string())
+        name, cat, Tracer::instance().enabled() ? trace_detail::make_args_json(__VA_ARGS__) : std::string())

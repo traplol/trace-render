@@ -25,12 +25,10 @@ private:
     CounterTrackRenderer counter_renderer_;
     FlowRenderer flow_renderer_;
 
-    void render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max,
-                          const ViewState& view);
-    void render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max,
-                      const TraceModel& model, ViewState& view);
-    int32_t hit_test(float click_x, float click_y, ImVec2 area_min, ImVec2 area_max,
-                     const TraceModel& model, const ViewState& view);
+    void render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max, const ViewState& view);
+    void render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max, const TraceModel& model, ViewState& view);
+    int32_t hit_test(float click_x, float click_y, ImVec2 area_min, ImVec2 area_max, const TraceModel& model,
+                     const ViewState& view);
 
     struct TrackLayout {
         uint32_t pid;

@@ -101,8 +101,7 @@ void App::finish_load() {
         if (model_.min_ts_ < model_.max_ts_) {
             view_.zoom_to_fit(model_.min_ts_, model_.max_ts_);
         }
-        status_message_ = "Loaded: " + loading_filename_ + " (" +
-                          std::to_string(model_.events_.size()) + " events, " +
+        status_message_ = "Loaded: " + loading_filename_ + " (" + std::to_string(model_.events_.size()) + " events, " +
                           std::to_string(model_.processes_.size()) + " processes)";
     } else {
         status_message_ = "Error: " + load_error_;
@@ -122,10 +121,9 @@ void App::render_loading_overlay() {
     ImGui::SetNextWindowSize(vp->WorkSize);
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.7f));
     ImGui::Begin("##LoadingOverlay", nullptr,
-                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                 ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings |
-                 ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
     ImGui::PopStyleColor();
 
     float progress = load_progress_.load(std::memory_order_relaxed);
@@ -140,19 +138,17 @@ void App::render_loading_overlay() {
     // Center the loading content
     float content_w = 600.0f;
     float content_h = 160.0f;
-    ImGui::SetCursorPos(ImVec2((vp->WorkSize.x - content_w) / 2,
-                                (vp->WorkSize.y - content_h) / 2));
+    ImGui::SetCursorPos(ImVec2((vp->WorkSize.x - content_w) / 2, (vp->WorkSize.y - content_h) / 2));
 
     ImGui::BeginGroup();
 
     // Spinner + filename
     float time = (float)ImGui::GetTime();
-    const char* spinner_frames[] = { "|", "/", "-", "\\" };
+    const char* spinner_frames[] = {"|", "/", "-", "\\"};
     int frame = (int)(time * 4.0f) % 4;
 
     char loading_text[256];
-    snprintf(loading_text, sizeof(loading_text), "%s  Loading %s",
-             spinner_frames[frame], loading_filename_.c_str());
+    snprintf(loading_text, sizeof(loading_text), "%s  Loading %s", spinner_frames[frame], loading_filename_.c_str());
     ImVec2 text_size = ImGui::CalcTextSize(loading_text);
     ImGui::SetCursorPosX((vp->WorkSize.x - text_size.x) / 2);
     ImGui::Text("%s", loading_text);
@@ -198,11 +194,10 @@ void App::update() {
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::SetNextWindowViewport(viewport->ID);
 
-    ImGuiWindowFlags host_flags =
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoBringToFrontOnFocus |
-        ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground;
+    ImGuiWindowFlags host_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+                                  ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking |
+                                  ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
+                                  ImGuiWindowFlags_NoBackground;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
@@ -281,8 +276,7 @@ void App::update() {
         if (!loading_) {
             ImVec2 avail = ImGui::GetContentRegionAvail();
             ImVec2 text_size = ImGui::CalcTextSize("Open a Chrome trace file (Ctrl+O) or drag & drop");
-            ImGui::SetCursorPos(ImVec2((avail.x - text_size.x) / 2,
-                                        (avail.y - text_size.y) / 2));
+            ImGui::SetCursorPos(ImVec2((avail.x - text_size.x) / 2, (avail.y - text_size.y) / 2));
             ImGui::TextDisabled("Open a Chrome trace file (Ctrl+O) or drag & drop");
         }
         ImGui::End();
@@ -323,9 +317,8 @@ void App::update() {
         ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x, status_h));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 2));
         ImGui::Begin("##StatusBar", nullptr,
-                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                     ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                     ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings);
+                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings);
         ImGui::Text("%s", status_message_.c_str());
         if (loading_) {
             ImGui::SameLine();
@@ -452,26 +445,16 @@ void App::load_settings() {
     try {
         nlohmann::json j = nlohmann::json::parse(f);
 
-        if (j.contains("font_scale"))
-            ImGui::GetIO().FontGlobalScale = j["font_scale"].get<float>();
-        if (j.contains("track_height"))
-            view_.track_height = j["track_height"].get<float>();
-        if (j.contains("track_padding"))
-            view_.track_padding = j["track_padding"].get<float>();
-        if (j.contains("counter_track_height"))
-            view_.counter_track_height = j["counter_track_height"].get<float>();
-        if (j.contains("label_width"))
-            view_.label_width = j["label_width"].get<float>();
-        if (j.contains("show_flows"))
-            view_.show_flows = j["show_flows"].get<bool>();
-        if (j.contains("time_unit_ns"))
-            view_.time_unit_ns = j["time_unit_ns"].get<bool>();
-        if (j.contains("ruler_height"))
-            view_.ruler_height = j["ruler_height"].get<float>();
-        if (j.contains("proc_header_height"))
-            view_.proc_header_height = j["proc_header_height"].get<float>();
-        if (j.contains("scrollbar_scale"))
-            view_.scrollbar_scale = j["scrollbar_scale"].get<float>();
+        if (j.contains("font_scale")) ImGui::GetIO().FontGlobalScale = j["font_scale"].get<float>();
+        if (j.contains("track_height")) view_.track_height = j["track_height"].get<float>();
+        if (j.contains("track_padding")) view_.track_padding = j["track_padding"].get<float>();
+        if (j.contains("counter_track_height")) view_.counter_track_height = j["counter_track_height"].get<float>();
+        if (j.contains("label_width")) view_.label_width = j["label_width"].get<float>();
+        if (j.contains("show_flows")) view_.show_flows = j["show_flows"].get<bool>();
+        if (j.contains("time_unit_ns")) view_.time_unit_ns = j["time_unit_ns"].get<bool>();
+        if (j.contains("ruler_height")) view_.ruler_height = j["ruler_height"].get<float>();
+        if (j.contains("proc_header_height")) view_.proc_header_height = j["proc_header_height"].get<float>();
+        if (j.contains("scrollbar_scale")) view_.scrollbar_scale = j["scrollbar_scale"].get<float>();
         if (j.contains("dark_theme")) {
             dark_theme_ = j["dark_theme"].get<bool>();
             if (dark_theme_)
@@ -479,8 +462,7 @@ void App::load_settings() {
             else
                 ImGui::StyleColorsLight();
         }
-        if (j.contains("vsync"))
-            vsync_ = j["vsync"].get<bool>();
+        if (j.contains("vsync")) vsync_ = j["vsync"].get<bool>();
         if (j.contains("query_tabs")) {
             stats_.load_tabs(j["query_tabs"]);
         }

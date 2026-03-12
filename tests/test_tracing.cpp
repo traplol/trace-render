@@ -31,13 +31,7 @@ TEST(MakeArgsJson, BoolValues) {
 }
 
 TEST(MakeArgsJson, IntTypes) {
-    auto result = trace_detail::make_args_json(
-        "i", 42,
-        "l", 100L,
-        "ll", 200LL,
-        "u", 300U,
-        "ul", 400UL,
-        "ull", 500ULL);
+    auto result = trace_detail::make_args_json("i", 42, "l", 100L, "ll", 200LL, "u", 300U, "ul", 400UL, "ull", 500ULL);
     EXPECT_EQ(result, R"("i":42,"l":100,"ll":200,"u":300,"ul":400,"ull":500)");
 }
 
@@ -86,12 +80,8 @@ TEST(MakeArgsJson, ControlCharEscaping) {
 
 TEST(MakeArgsJson, ValidJson) {
     // Verify the output can be parsed as a JSON object when wrapped in braces
-    auto inner = trace_detail::make_args_json(
-        "name", "test\"func",
-        "count", 42,
-        "ratio", 3.14,
-        "ok", true,
-        "msg", "line1\nline2");
+    auto inner = trace_detail::make_args_json("name", "test\"func", "count", 42, "ratio", 3.14, "ok", true, "msg",
+                                              "line1\nline2");
     std::string full = "{" + inner + "}";
     auto j = json::parse(full);
     EXPECT_EQ(j["name"], "test\"func");
@@ -107,9 +97,7 @@ TEST(MakeArgsJson, NegativeNumbers) {
 }
 
 TEST(MakeArgsJson, LargeNumbers) {
-    auto result = trace_detail::make_args_json(
-        "big", 9223372036854775807LL,
-        "ubig", 18446744073709551615ULL);
+    auto result = trace_detail::make_args_json("big", 9223372036854775807LL, "ubig", 18446744073709551615ULL);
     auto full = "{" + result + "}";
     auto j = json::parse(full);
     EXPECT_EQ(j["big"], 9223372036854775807LL);
@@ -122,12 +110,8 @@ class TracingIntegration : public ::testing::Test {
 protected:
     std::string tmp_path_;
 
-    void SetUp() override {
-        tmp_path_ = "/tmp/test_tracing_" + std::to_string(getpid()) + ".json";
-    }
-    void TearDown() override {
-        std::remove(tmp_path_.c_str());
-    }
+    void SetUp() override { tmp_path_ = "/tmp/test_tracing_" + std::to_string(getpid()) + ".json"; }
+    void TearDown() override { std::remove(tmp_path_.c_str()); }
 
     json read_trace() {
         std::ifstream f(tmp_path_);
@@ -176,17 +160,13 @@ TEST_F(TracingIntegration, WriteCompleteEmptyArgs) {
 
 TEST_F(TracingIntegration, TraceScopeArgsDisabled) {
     // Tracing not enabled — should not crash, should not allocate
-    {
-        TRACE_SCOPE_ARGS("func", "cat", "key", 123);
-    }
+    { TRACE_SCOPE_ARGS("func", "cat", "key", 123); }
     // Just verify no crash
 }
 
 TEST_F(TracingIntegration, TraceScopeArgsEnabled) {
     Tracer::instance().set_output(tmp_path_);
-    {
-        TRACE_SCOPE_ARGS("my_func", "my_cat", "iterations", 1000, "name", "test");
-    }
+    { TRACE_SCOPE_ARGS("my_func", "my_cat", "iterations", 1000, "name", "test"); }
     Tracer::instance().close();
 
     auto j = read_trace();
@@ -196,17 +176,14 @@ TEST_F(TracingIntegration, TraceScopeArgsEnabled) {
     EXPECT_EQ(ev["cat"], "my_cat");
     EXPECT_EQ(ev["args"]["iterations"], 1000);
     EXPECT_EQ(ev["args"]["name"], "test");
-    EXPECT_GT(ev["dur"].get<int>(), 0); // dur should be >= 0
+    EXPECT_GE(ev["dur"].get<int>(), 0);  // dur can be 0 if scope completes within 1us
 }
 
 TEST_F(TracingIntegration, MultipleEvents) {
     Tracer::instance().set_output(tmp_path_);
     Tracer::instance().write_complete("a", "c", 100, 10);
-    {
-        TRACE_SCOPE_ARGS("b", "c", "x", 1);
-    }
-    Tracer::instance().write_complete("c", "c", 200, 20,
-        trace_detail::make_args_json("flag", true).c_str());
+    { TRACE_SCOPE_ARGS("b", "c", "x", 1); }
+    Tracer::instance().write_complete("c", "c", 200, 20, trace_detail::make_args_json("flag", true).c_str());
     Tracer::instance().close();
 
     auto j = read_trace();

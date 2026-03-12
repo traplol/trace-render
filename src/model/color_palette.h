@@ -72,9 +72,7 @@ struct ColorPalette {
     }
 
     // Fallback: color by category only
-    static ImU32 color_for_category(uint32_t cat_idx) {
-        return COLORS[cat_idx % NUM_COLORS];
-    }
+    static ImU32 color_for_category(uint32_t cat_idx) { return COLORS[cat_idx % NUM_COLORS]; }
 
     static ImU32 border_color(ImU32 fill) {
         int r = (fill >> 0) & 0xFF;

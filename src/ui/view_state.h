@@ -38,13 +38,11 @@ struct ViewState {
     bool time_unit_ns = false;
 
     float time_to_x(double ts, float timeline_left, float timeline_width) const {
-        return timeline_left + (float)((ts - view_start_ts) /
-               (view_end_ts - view_start_ts)) * timeline_width;
+        return timeline_left + (float)((ts - view_start_ts) / (view_end_ts - view_start_ts)) * timeline_width;
     }
 
     double x_to_time(float x, float timeline_left, float timeline_width) const {
-        return view_start_ts + (double)(x - timeline_left) /
-               timeline_width * (view_end_ts - view_start_ts);
+        return view_start_ts + (double)(x - timeline_left) / timeline_width * (view_end_ts - view_start_ts);
     }
 
     void zoom_to_fit(double min_ts, double max_ts) {

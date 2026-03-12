@@ -35,8 +35,10 @@ static void format_ruler_time(double us, double tick_interval, char* buf, size_t
     } else if (tick_interval < 1.0) {
         // Nanosecond ticks - show in us with enough decimals
         int decimals = 3;
-        if (tick_interval < 0.01) decimals = 4;
-        else if (tick_interval < 0.1) decimals = 3;
+        if (tick_interval < 0.01)
+            decimals = 4;
+        else if (tick_interval < 0.1)
+            decimals = 3;
         if (abs_us >= 1000000.0)
             snprintf(buf, buf_size, "%.*f s", decimals + 6, us / 1000000.0);
         else if (abs_us >= 1000.0)
@@ -48,13 +50,17 @@ static void format_ruler_time(double us, double tick_interval, char* buf, size_t
         if (abs_us >= 1000000.0) {
             // Show as seconds with enough decimal places to distinguish ticks
             int decimals = 6;
-            if (tick_interval >= 100.0) decimals = 4;
-            else if (tick_interval >= 10.0) decimals = 5;
+            if (tick_interval >= 100.0)
+                decimals = 4;
+            else if (tick_interval >= 10.0)
+                decimals = 5;
             snprintf(buf, buf_size, "%.*f s", decimals, us / 1000000.0);
         } else if (abs_us >= 1000.0) {
             int decimals = 3;
-            if (tick_interval >= 100.0) decimals = 1;
-            else if (tick_interval >= 10.0) decimals = 2;
+            if (tick_interval >= 100.0)
+                decimals = 1;
+            else if (tick_interval >= 10.0)
+                decimals = 2;
             snprintf(buf, buf_size, "%.*f ms", decimals, us / 1000.0);
         } else {
             snprintf(buf, buf_size, "%.1f us", us);
@@ -63,8 +69,10 @@ static void format_ruler_time(double us, double tick_interval, char* buf, size_t
         // Millisecond ticks
         if (abs_us >= 1000000.0) {
             int decimals = 3;
-            if (tick_interval >= 100000.0) decimals = 1;
-            else if (tick_interval >= 10000.0) decimals = 2;
+            if (tick_interval >= 100000.0)
+                decimals = 1;
+            else if (tick_interval >= 10000.0)
+                decimals = 2;
             snprintf(buf, buf_size, "%.*f s", decimals, us / 1000000.0);
         } else {
             snprintf(buf, buf_size, "%.1f ms", us / 1000.0);
@@ -77,8 +85,7 @@ static void format_ruler_time(double us, double tick_interval, char* buf, size_t
     }
 }
 
-void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max,
-                                     const ViewState& view) {
+void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max, const ViewState& view) {
     TRACE_SCOPE_CAT("TimeRuler", "timeline");
     float ruler_height = view.ruler_height;
     float width = area_max.x - area_min.x;
@@ -93,14 +100,17 @@ void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 are
     double magnitude = std::pow(10.0, std::floor(std::log10(min_tick_us)));
     double residual = min_tick_us / magnitude;
     double nice_tick;
-    if (residual <= 1.0) nice_tick = magnitude;
-    else if (residual <= 2.0) nice_tick = 2.0 * magnitude;
-    else if (residual <= 5.0) nice_tick = 5.0 * magnitude;
-    else nice_tick = 10.0 * magnitude;
+    if (residual <= 1.0)
+        nice_tick = magnitude;
+    else if (residual <= 2.0)
+        nice_tick = 2.0 * magnitude;
+    else if (residual <= 5.0)
+        nice_tick = 5.0 * magnitude;
+    else
+        nice_tick = 10.0 * magnitude;
 
     // Draw ruler background
-    dl->AddRectFilled(area_min, ImVec2(area_max.x, area_min.y + ruler_height),
-                      IM_COL32(40, 40, 40, 255));
+    dl->AddRectFilled(area_min, ImVec2(area_max.x, area_min.y + ruler_height), IM_COL32(40, 40, 40, 255));
 
     // Draw ticks
     double first_tick = std::ceil(view.view_start_ts / nice_tick) * nice_tick;
@@ -108,14 +118,11 @@ void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 are
         float x = view.time_to_x(t, area_min.x, width);
 
         // Major tick line extending into track area
-        dl->AddLine(ImVec2(x, area_min.y + ruler_height - 30),
-                   ImVec2(x, area_min.y + ruler_height),
-                   IM_COL32(180, 180, 180, 255));
+        dl->AddLine(ImVec2(x, area_min.y + ruler_height - 30), ImVec2(x, area_min.y + ruler_height),
+                    IM_COL32(180, 180, 180, 255));
 
         // Faint grid line through tracks
-        dl->AddLine(ImVec2(x, area_min.y + ruler_height),
-                   ImVec2(x, area_max.y),
-                   IM_COL32(60, 60, 60, 100));
+        dl->AddLine(ImVec2(x, area_min.y + ruler_height), ImVec2(x, area_max.y), IM_COL32(60, 60, 60, 100));
 
         // Time label (clip to ruler area so last label doesn't overflow)
         char buf[64];
@@ -126,13 +133,12 @@ void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 are
     }
 
     // Ruler bottom border
-    dl->AddLine(ImVec2(area_min.x, area_min.y + ruler_height),
-               ImVec2(area_max.x, area_min.y + ruler_height),
-               IM_COL32(80, 80, 80, 255));
+    dl->AddLine(ImVec2(area_min.x, area_min.y + ruler_height), ImVec2(area_max.x, area_min.y + ruler_height),
+                IM_COL32(80, 80, 80, 255));
 }
 
-void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max,
-                                 const TraceModel& model, ViewState& view) {
+void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max, const TraceModel& model,
+                                 ViewState& view) {
     TRACE_SCOPE_CAT("RenderTracks", "timeline");
     diag_stats = {};
     float ruler_height = view.ruler_height;
@@ -152,11 +158,8 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
         // Process header
         float proc_header_h = view.proc_header_height;
         if (y + proc_header_h > clip_top && y < clip_bottom) {
-            dl->AddRectFilled(ImVec2(area_min.x, y),
-                            ImVec2(area_max.x, y + proc_header_h),
-                            IM_COL32(50, 50, 60, 255));
-            dl->AddText(ImVec2(area_min.x + 15, y + 9),
-                       IM_COL32(220, 220, 220, 255), proc.name.c_str());
+            dl->AddRectFilled(ImVec2(area_min.x, y), ImVec2(area_max.x, y + proc_header_h), IM_COL32(50, 50, 60, 255));
+            dl->AddText(ImVec2(area_min.x + 15, y + 9), IM_COL32(220, 220, 220, 255), proc.name.c_str());
         }
         y += proc_header_h;
 
@@ -186,31 +189,26 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
 
             // Thread label background
             dl->AddRectFilled(ImVec2(area_min.x, y),
-                            ImVec2(area_min.x + view.label_width, y + track_h - view.track_padding),
-                            IM_COL32(35, 35, 40, 255));
+                              ImVec2(area_min.x + view.label_width, y + track_h - view.track_padding),
+                              IM_COL32(35, 35, 40, 255));
             // Thread name (clipped to label area)
-            dl->PushClipRect(ImVec2(area_min.x, y),
-                           ImVec2(area_min.x + view.label_width - 15, y + track_h), true);
-            dl->AddText(ImVec2(area_min.x + 30, y + 6),
-                       IM_COL32(180, 180, 200, 255), thread.name.c_str());
+            dl->PushClipRect(ImVec2(area_min.x, y), ImVec2(area_min.x + view.label_width - 15, y + track_h), true);
+            dl->AddText(ImVec2(area_min.x + 30, y + 6), IM_COL32(180, 180, 200, 255), thread.name.c_str());
             dl->PopClipRect();
 
             // Track separator line
-            dl->AddLine(ImVec2(area_min.x, y + track_h - 1),
-                       ImVec2(area_max.x, y + track_h - 1),
-                       IM_COL32(50, 50, 50, 255));
+            dl->AddLine(ImVec2(area_min.x, y + track_h - 1), ImVec2(area_max.x, y + track_h - 1),
+                        IM_COL32(50, 50, 50, 255));
 
             // Query visible events
             visible_events_.clear();
-            model.query_visible(thread, view.view_start_ts,
-                               view.view_end_ts, visible_events_);
+            model.query_visible(thread, view.view_start_ts, view.view_end_ts, visible_events_);
 
             // Render slices
             float track_left = area_min.x + view.label_width;
             float track_width = width - view.label_width;
 
-            dl->PushClipRect(ImVec2(track_left, y),
-                           ImVec2(area_max.x, y + track_h), true);
+            dl->PushClipRect(ImVec2(track_left, y), ImVec2(area_max.x, y + track_h), true);
 
             // Merge threshold: slices narrower than this many pixels
             // are candidates for merging with adjacent narrow slices
@@ -273,9 +271,8 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
 
                 // Highlight selected
                 if ((int32_t)ev_idx == view.selected_event_idx) {
-                    dl->AddRectFilled(ImVec2(x1 - 2, ey - 2),
-                                    ImVec2(x2 + 2, ey + view.track_height + 1),
-                                    IM_COL32(255, 255, 255, 100));
+                    dl->AddRectFilled(ImVec2(x1 - 2, ey - 2), ImVec2(x2 + 2, ey + view.track_height + 1),
+                                      IM_COL32(255, 255, 255, 100));
                 }
 
                 dl->AddRectFilled(p1, p2, fill);
@@ -298,10 +295,8 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
             diag_stats.merge_runs += (int)merge_runs.size();
             for (const auto& run : merge_runs) {
                 float ey = y + run.depth * view.track_height;
-                dl->AddRectFilled(
-                    ImVec2(run.x_start, ey),
-                    ImVec2(run.x_end, ey + view.track_height - 1),
-                    IM_COL32(120, 120, 140, 180));
+                dl->AddRectFilled(ImVec2(run.x_start, ey), ImVec2(run.x_end, ey + view.track_height - 1),
+                                  IM_COL32(120, 120, 140, 180));
             }
 
             dl->PopClipRect();
@@ -327,15 +322,14 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
     total_content_height_ = (y + scroll_y_) - (area_min.y + ruler_height);
 }
 
-int32_t TimelineView::hit_test(float click_x, float click_y, ImVec2 area_min, ImVec2 area_max,
-                                const TraceModel& model, const ViewState& view) {
+int32_t TimelineView::hit_test(float click_x, float click_y, ImVec2 area_min, ImVec2 area_max, const TraceModel& model,
+                               const ViewState& view) {
     float track_left = area_min.x + view.label_width;
     float track_width = (area_max.x - area_min.x) - view.label_width;
 
     // Find which track was clicked
     for (const auto& layout : track_layouts_) {
-        if (click_y < layout.y_start || click_y >= layout.y_start + layout.height)
-            continue;
+        if (click_y < layout.y_start || click_y >= layout.y_start + layout.height) continue;
         if (click_x < track_left) continue;
 
         const auto& proc = model.processes_[layout.proc_idx];
@@ -344,7 +338,7 @@ int32_t TimelineView::hit_test(float click_x, float click_y, ImVec2 area_min, Im
         // Check if click is within the actual slice rows (not in padding below)
         float rows_height = (thread.max_depth + 1) * view.track_height;
         float rel_y = click_y - layout.y_start;
-        if (rel_y >= rows_height) return -1; // In padding area
+        if (rel_y >= rows_height) return -1;  // In padding area
 
         int clicked_depth = (int)(rel_y / view.track_height);
 
@@ -421,16 +415,15 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         }
         // Draw splitter line
         float line_x = canvas_min.x + view.label_width;
-        ImU32 splitter_col = ImGui::IsItemHovered() || ImGui::IsItemActive()
-            ? IM_COL32(120, 120, 140, 255) : IM_COL32(60, 60, 70, 255);
+        ImU32 splitter_col =
+            ImGui::IsItemHovered() || ImGui::IsItemActive() ? IM_COL32(120, 120, 140, 255) : IM_COL32(60, 60, 70, 255);
         dl->AddLine(ImVec2(line_x, canvas_min.y), ImVec2(line_x, canvas_max.y), splitter_col, 2.0f);
     }
 
     // Make the canvas area interactive
     ImGui::SetCursorScreenPos(canvas_min);
     ImGui::InvisibleButton("timeline_canvas", canvas_size,
-                           ImGuiButtonFlags_MouseButtonLeft |
-                           ImGuiButtonFlags_MouseButtonMiddle);
+                           ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle);
     bool is_hovered = ImGui::IsItemHovered();
     bool is_active = ImGui::IsItemActive();
 
@@ -478,8 +471,7 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
 
     // Click to select
     if (is_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !io.KeyCtrl) {
-        int32_t hit = hit_test(io.MousePos.x, io.MousePos.y,
-                               canvas_min, canvas_max, model, view);
+        int32_t hit = hit_test(io.MousePos.x, io.MousePos.y, canvas_min, canvas_max, model, view);
         view.selected_event_idx = hit;
     }
 
@@ -545,8 +537,8 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
     if (ImGui::BeginPopup("Go to Time")) {
         ImGui::Text("Enter time (e.g. 63.4231s, 500ms, 1234us, 5000ns):");
         ImGui::SetNextItemWidth(400);
-        bool submitted = ImGui::InputText("##goto_time", goto_buf_, sizeof(goto_buf_),
-                                           ImGuiInputTextFlags_EnterReturnsTrue);
+        bool submitted =
+            ImGui::InputText("##goto_time", goto_buf_, sizeof(goto_buf_), ImGuiInputTextFlags_EnterReturnsTrue);
         if (ImGui::IsWindowAppearing()) {
             ImGui::SetKeyboardFocusHere(-1);
         }
@@ -568,7 +560,7 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
                 } else if (*end == 's') {
                     target_us = val * 1000000.0;
                 } else {
-                    target_us = val; // default to us
+                    target_us = val;  // default to us
                 }
                 // Center view on target, keep current zoom level
                 double range = view.view_end_ts - view.view_start_ts;
@@ -593,7 +585,7 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
 
     // --- Vertical scrollbar (right side) ---
     {
-        float visible_h = canvas_size.y - view.ruler_height; // subtract ruler
+        float visible_h = canvas_size.y - view.ruler_height;  // subtract ruler
         float max_scroll = std::max(1.0f, total_content_height_ - visible_h);
         scroll_y_ = std::min(scroll_y_, std::max(0.0f, max_scroll));
 
@@ -645,7 +637,7 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         dl->AddRectFilled(sb_min, sb_max, IM_COL32(25, 25, 28, 255));
 
         float sb_range = sb_max.x - sb_min.x;
-        float min_thumb = scrollbar_size * 3.0f; // minimum grabbable size
+        float min_thumb = scrollbar_size * 3.0f;  // minimum grabbable size
         float thumb_w = std::max(min_thumb, (float)(sb_range * visible_time / total_time));
         thumb_w = std::min(thumb_w, sb_range);
         float thumb_travel = sb_range - thumb_w;
@@ -682,8 +674,7 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
 
     // Hover tooltip
     if (is_hovered && !ImGui::IsMouseDragging(ImGuiMouseButton_Middle)) {
-        int32_t hover = hit_test(io.MousePos.x, io.MousePos.y,
-                                 canvas_min, canvas_max, model, view);
+        int32_t hover = hit_test(io.MousePos.x, io.MousePos.y, canvas_min, canvas_max, model, view);
         if (hover >= 0) {
             const auto& ev = model.events_[hover];
             ImGui::BeginTooltip();

@@ -21,13 +21,13 @@ struct QueryTab {
 // Query builder state
 struct QueryBuilderState {
     // Table
-    int table_idx = 0; // 0=events, 1=processes, 2=threads, 3=counters
+    int table_idx = 0;  // 0=events, 1=processes, 2=threads, 3=counters
 
     // SELECT columns: index into current table's column list
     // -1 = raw column, >=0 = aggregate function index
     struct SelectCol {
         int col_idx = 0;
-        int agg_idx = 0; // 0=none, 1=COUNT, 2=SUM, 3=AVG, 4=MIN, 5=MAX
+        int agg_idx = 0;  // 0=none, 1=COUNT, 2=SUM, 3=AVG, 4=MIN, 5=MAX
         char alias[64] = {};
     };
     std::vector<SelectCol> select_cols;
@@ -35,18 +35,19 @@ struct QueryBuilderState {
     // WHERE conditions
     struct WhereClause {
         int col_idx = 0;
-        int op_idx = 0; // 0: =, 1: !=, 2: <, 3: >, 4: <=, 5: >=, 6: LIKE, 7: NOT LIKE, 8: IN, 9: IS NULL, 10: IS NOT NULL
+        int op_idx =
+            0;  // 0: =, 1: !=, 2: <, 3: >, 4: <=, 5: >=, 6: LIKE, 7: NOT LIKE, 8: IN, 9: IS NULL, 10: IS NOT NULL
         char value[256] = {};
-        int logic_idx = 0; // 0=AND, 1=OR
+        int logic_idx = 0;  // 0=AND, 1=OR
     };
     std::vector<WhereClause> where_clauses;
 
     // GROUP BY
-    std::vector<int> group_cols; // column indices
+    std::vector<int> group_cols;  // column indices
 
     // HAVING (only when GROUP BY is set)
     struct HavingClause {
-        int agg_idx = 1; // 1=COUNT, 2=SUM, 3=AVG, 4=MIN, 5=MAX
+        int agg_idx = 1;  // 1=COUNT, 2=SUM, 3=AVG, 4=MIN, 5=MAX
         int col_idx = 0;
         int op_idx = 0;
         char value[128] = {};

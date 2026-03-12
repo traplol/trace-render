@@ -40,14 +40,16 @@ void QueryDb::load(const TraceModel& model) {
             tid INTEGER,
             depth INTEGER
         )
-    )", nullptr, nullptr, nullptr);
+    )",
+                 nullptr, nullptr, nullptr);
 
     sqlite3_exec(db_, R"(
         CREATE TABLE processes (
             pid INTEGER PRIMARY KEY,
             name TEXT
         )
-    )", nullptr, nullptr, nullptr);
+    )",
+                 nullptr, nullptr, nullptr);
 
     sqlite3_exec(db_, R"(
         CREATE TABLE threads (
@@ -56,7 +58,8 @@ void QueryDb::load(const TraceModel& model) {
             name TEXT,
             PRIMARY KEY (pid, tid)
         )
-    )", nullptr, nullptr, nullptr);
+    )",
+                 nullptr, nullptr, nullptr);
 
     sqlite3_exec(db_, R"(
         CREATE TABLE counters (
@@ -65,16 +68,15 @@ void QueryDb::load(const TraceModel& model) {
             ts REAL,
             value REAL
         )
-    )", nullptr, nullptr, nullptr);
+    )",
+                 nullptr, nullptr, nullptr);
 
     // Insert data using transactions for speed
     sqlite3_exec(db_, "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
 
     // Events
     sqlite3_stmt* stmt = nullptr;
-    sqlite3_prepare_v2(db_,
-        "INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?)",
-        -1, &stmt, nullptr);
+    sqlite3_prepare_v2(db_, "INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?)", -1, &stmt, nullptr);
 
     for (uint32_t i = 0; i < (uint32_t)model.events_.size(); i++) {
         const auto& ev = model.events_[i];
@@ -102,9 +104,7 @@ void QueryDb::load(const TraceModel& model) {
     sqlite3_finalize(stmt);
 
     // Processes
-    sqlite3_prepare_v2(db_,
-        "INSERT INTO processes VALUES (?,?)",
-        -1, &stmt, nullptr);
+    sqlite3_prepare_v2(db_, "INSERT INTO processes VALUES (?,?)", -1, &stmt, nullptr);
 
     for (const auto& proc : model.processes_) {
         sqlite3_bind_int(stmt, 1, proc.pid);
@@ -115,9 +115,7 @@ void QueryDb::load(const TraceModel& model) {
     sqlite3_finalize(stmt);
 
     // Threads
-    sqlite3_prepare_v2(db_,
-        "INSERT INTO threads VALUES (?,?,?)",
-        -1, &stmt, nullptr);
+    sqlite3_prepare_v2(db_, "INSERT INTO threads VALUES (?,?,?)", -1, &stmt, nullptr);
 
     for (const auto& proc : model.processes_) {
         for (const auto& thread : proc.threads) {
@@ -131,9 +129,7 @@ void QueryDb::load(const TraceModel& model) {
     sqlite3_finalize(stmt);
 
     // Counters
-    sqlite3_prepare_v2(db_,
-        "INSERT INTO counters VALUES (?,?,?,?)",
-        -1, &stmt, nullptr);
+    sqlite3_prepare_v2(db_, "INSERT INTO counters VALUES (?,?,?,?)", -1, &stmt, nullptr);
 
     for (const auto& cs : model.counter_series_) {
         for (const auto& pt : cs.points) {

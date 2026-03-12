@@ -28,8 +28,7 @@ void Toolbar::render(const TraceModel& model, ViewState& view) {
                         {"JSON Trace Files", "json"},
                         {"All Files", "*"},
                     };
-                    SDL_ShowOpenFileDialog(file_dialog_callback, this, window_,
-                                         filters, 2, nullptr, false);
+                    SDL_ShowOpenFileDialog(file_dialog_callback, this, window_, filters, 2, nullptr, false);
                 } else {
                     show_fallback_dialog_ = true;
                 }
@@ -59,8 +58,7 @@ void Toolbar::render(const TraceModel& model, ViewState& view) {
                 {"JSON Trace Files", "json"},
                 {"All Files", "*"},
             };
-            SDL_ShowOpenFileDialog(file_dialog_callback, this, window_,
-                                 filters, 2, nullptr, false);
+            SDL_ShowOpenFileDialog(file_dialog_callback, this, window_, filters, 2, nullptr, false);
         } else {
             show_fallback_dialog_ = true;
         }
@@ -75,8 +73,7 @@ void Toolbar::render(const TraceModel& model, ViewState& view) {
     if (ImGui::BeginPopupModal("Open Trace File", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("Enter trace file path:");
         ImGui::SetNextItemWidth(500);
-        bool enter = ImGui::InputText("##path", path_buf_, sizeof(path_buf_),
-                                      ImGuiInputTextFlags_EnterReturnsTrue);
+        bool enter = ImGui::InputText("##path", path_buf_, sizeof(path_buf_), ImGuiInputTextFlags_EnterReturnsTrue);
         if (enter || ImGui::Button("Open")) {
             file_path_ = path_buf_;
             file_open_requested_ = true;

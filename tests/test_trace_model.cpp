@@ -179,7 +179,7 @@ TEST_F(TraceModelTest, BuildIndexDeduplicatesSameNameAndTimestamp) {
     ev2.ph = Phase::Complete;
     ev2.name_idx = name_idx;
     ev2.ts = 100.0;
-    ev2.dur = 80.0; // longer
+    ev2.dur = 80.0;  // longer
     ev2.pid = 1;
     ev2.tid = 1;
     model.events_.push_back(ev2);

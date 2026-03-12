@@ -4,7 +4,7 @@
 #include <cstdio>
 
 float CounterTrackRenderer::render(ImDrawList* dl, ImVec2 area_min, float y_offset, float width,
-                                    const TraceModel& model, uint32_t pid, const ViewState& view) {
+                                   const TraceModel& model, uint32_t pid, const ViewState& view) {
     float total_height = 0.0f;
     uint32_t color_idx = 0;
 
@@ -17,13 +17,10 @@ float CounterTrackRenderer::render(ImDrawList* dl, ImVec2 area_min, float y_offs
         ImVec2 track_max(area_min.x + width, y_offset + total_height + track_h);
 
         // Label
-        dl->AddRectFilled(ImVec2(area_min.x, track_min.y),
-                         ImVec2(area_min.x + view.label_width, track_max.y),
-                         IM_COL32(35, 35, 40, 255));
-        dl->PushClipRect(ImVec2(area_min.x, track_min.y),
-                        ImVec2(area_min.x + view.label_width - 5, track_max.y), true);
-        dl->AddText(ImVec2(area_min.x + 10, track_min.y + 2),
-                   IM_COL32(160, 180, 200, 255), series.name.c_str());
+        dl->AddRectFilled(ImVec2(area_min.x, track_min.y), ImVec2(area_min.x + view.label_width, track_max.y),
+                          IM_COL32(35, 35, 40, 255));
+        dl->PushClipRect(ImVec2(area_min.x, track_min.y), ImVec2(area_min.x + view.label_width - 5, track_max.y), true);
+        dl->AddText(ImVec2(area_min.x + 10, track_min.y + 2), IM_COL32(160, 180, 200, 255), series.name.c_str());
         dl->PopClipRect();
 
         // Background
@@ -41,8 +38,7 @@ float CounterTrackRenderer::render(ImDrawList* dl, ImVec2 area_min, float y_offs
 }
 
 void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec2 track_max,
-                                          const CounterSeries& series, const ViewState& view,
-                                          ImU32 color) {
+                                         const CounterSeries& series, const ViewState& view, ImU32 color) {
     if (series.points.empty()) return;
 
     float track_w = track_max.x - track_min.x;
@@ -53,12 +49,9 @@ void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec
     dl->PushClipRect(track_min, track_max, true);
 
     // Find the first point before or at view_start
-    auto it = std::lower_bound(series.points.begin(), series.points.end(),
-                                std::make_pair(view.view_start_ts, -1e300),
-                                [](const std::pair<double, double>& a,
-                                   const std::pair<double, double>& b) {
-                                    return a.first < b.first;
-                                });
+    auto it = std::lower_bound(
+        series.points.begin(), series.points.end(), std::make_pair(view.view_start_ts, -1e300),
+        [](const std::pair<double, double>& a, const std::pair<double, double>& b) { return a.first < b.first; });
     if (it != series.points.begin()) --it;
 
     auto val_to_y = [&](double val) -> float {
@@ -112,11 +105,9 @@ void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec
     char buf[64];
     float font_h = ImGui::GetFontSize();
     snprintf(buf, sizeof(buf), "%.1f", series.max_val);
-    dl->AddText(ImVec2(track_min.x + 6, track_min.y + 2),
-               IM_COL32(140, 140, 140, 200), buf);
+    dl->AddText(ImVec2(track_min.x + 6, track_min.y + 2), IM_COL32(140, 140, 140, 200), buf);
     snprintf(buf, sizeof(buf), "%.1f", series.min_val);
-    dl->AddText(ImVec2(track_min.x + 6, track_max.y - font_h - 4),
-               IM_COL32(140, 140, 140, 200), buf);
+    dl->AddText(ImVec2(track_min.x + 6, track_max.y - font_h - 4), IM_COL32(140, 140, 140, 200), buf);
 
     dl->PopClipRect();
 }

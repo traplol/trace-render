@@ -12,22 +12,24 @@ void FilterPanel::render(const TraceModel& model, ViewState& view) {
         for (const auto& proc : model.processes_) {
             bool proc_visible = !view.hidden_pids.count(proc.pid);
             if (ImGui::Checkbox(("##proc_" + std::to_string(proc.pid)).c_str(), &proc_visible)) {
-                if (proc_visible) view.hidden_pids.erase(proc.pid);
-                else view.hidden_pids.insert(proc.pid);
+                if (proc_visible)
+                    view.hidden_pids.erase(proc.pid);
+                else
+                    view.hidden_pids.insert(proc.pid);
             }
             ImGui::SameLine();
 
             if (ImGui::TreeNode(proc.name.c_str())) {
                 for (const auto& thread : proc.threads) {
                     bool thread_visible = !view.hidden_tids.count(thread.tid);
-                    if (ImGui::Checkbox(("##thread_" + std::to_string(thread.tid)).c_str(),
-                                       &thread_visible)) {
-                        if (thread_visible) view.hidden_tids.erase(thread.tid);
-                        else view.hidden_tids.insert(thread.tid);
+                    if (ImGui::Checkbox(("##thread_" + std::to_string(thread.tid)).c_str(), &thread_visible)) {
+                        if (thread_visible)
+                            view.hidden_tids.erase(thread.tid);
+                        else
+                            view.hidden_tids.insert(thread.tid);
                     }
                     ImGui::SameLine();
-                    ImGui::Text("%s (%u events)", thread.name.c_str(),
-                               (unsigned)thread.event_indices.size());
+                    ImGui::Text("%s (%u events)", thread.name.c_str(), (unsigned)thread.event_indices.size());
                 }
                 ImGui::TreePop();
             }
@@ -55,8 +57,10 @@ void FilterPanel::render(const TraceModel& model, ViewState& view) {
             const std::string& cat_name = model.get_string(cat_idx);
             bool visible = !view.hidden_cats.count(cat_idx);
             if (ImGui::Checkbox(cat_name.empty() ? "(empty)" : cat_name.c_str(), &visible)) {
-                if (visible) view.hidden_cats.erase(cat_idx);
-                else view.hidden_cats.insert(cat_idx);
+                if (visible)
+                    view.hidden_cats.erase(cat_idx);
+                else
+                    view.hidden_cats.insert(cat_idx);
             }
         }
     }

@@ -9,9 +9,7 @@ void TraceModel::build_index() {
     for (auto& proc : processes_) {
         for (auto& thread : proc.threads) {
             std::sort(thread.event_indices.begin(), thread.event_indices.end(),
-                [this](uint32_t a, uint32_t b) {
-                    return events_[a].ts < events_[b].ts;
-                });
+                      [this](uint32_t a, uint32_t b) { return events_[a].ts < events_[b].ts; });
         }
     }
 
@@ -39,13 +37,12 @@ void TraceModel::build_index() {
     for (auto& proc : processes_) {
         for (auto& thread : proc.threads) {
             // Remove matched end events
-            thread.event_indices.erase(
-                std::remove_if(thread.event_indices.begin(), thread.event_indices.end(),
-                    [this](uint32_t idx) {
-                        const auto& ev = events_[idx];
-                        return ev.is_end_event || ev.ph == Phase::Metadata;
-                    }),
-                thread.event_indices.end());
+            thread.event_indices.erase(std::remove_if(thread.event_indices.begin(), thread.event_indices.end(),
+                                                      [this](uint32_t idx) {
+                                                          const auto& ev = events_[idx];
+                                                          return ev.is_end_event || ev.ph == Phase::Metadata;
+                                                      }),
+                                       thread.event_indices.end());
 
             // Deduplicate events with the same name and timestamp (keep longer duration)
             if (thread.event_indices.size() > 1) {
@@ -93,19 +90,17 @@ void TraceModel::build_index() {
 
     // Sort threads within processes
     for (auto& proc : processes_) {
-        std::sort(proc.threads.begin(), proc.threads.end(),
-            [](const ThreadInfo& a, const ThreadInfo& b) {
-                if (a.sort_index != b.sort_index) return a.sort_index < b.sort_index;
-                return a.tid < b.tid;
-            });
+        std::sort(proc.threads.begin(), proc.threads.end(), [](const ThreadInfo& a, const ThreadInfo& b) {
+            if (a.sort_index != b.sort_index) return a.sort_index < b.sort_index;
+            return a.tid < b.tid;
+        });
     }
 
     // Sort processes
-    std::sort(processes_.begin(), processes_.end(),
-        [](const ProcessInfo& a, const ProcessInfo& b) {
-            if (a.sort_index != b.sort_index) return a.sort_index < b.sort_index;
-            return a.pid < b.pid;
-        });
+    std::sort(processes_.begin(), processes_.end(), [](const ProcessInfo& a, const ProcessInfo& b) {
+        if (a.sort_index != b.sort_index) return a.sort_index < b.sort_index;
+        return a.pid < b.pid;
+    });
 
     // Compute global time range
     for (const auto& ev : events_) {
