@@ -22,6 +22,45 @@ static void format_time_detail(double us, char* buf, size_t buf_size) {
     }
 }
 
+// Returns a color interpolated from blue (cool, 0%) through green/yellow to red (hot, 100%)
+static ImVec4 heat_color(float pct) {
+    float t = std::min(std::max(pct / 100.0f, 0.0f), 1.0f);
+    // Blue -> Cyan -> Green -> Yellow -> Red
+    float r, g, b;
+    if (t < 0.25f) {
+        float s = t / 0.25f;
+        r = 0.0f;
+        g = s;
+        b = 1.0f;
+    } else if (t < 0.5f) {
+        float s = (t - 0.25f) / 0.25f;
+        r = 0.0f;
+        g = 1.0f;
+        b = 1.0f - s;
+    } else if (t < 0.75f) {
+        float s = (t - 0.5f) / 0.25f;
+        r = s;
+        g = 1.0f;
+        b = 0.0f;
+    } else {
+        float s = (t - 0.75f) / 0.25f;
+        r = 1.0f;
+        g = 1.0f - s;
+        b = 0.0f;
+    }
+    return ImVec4(r, g, b, 1.0f);
+}
+
+static void render_heat_bar(float pct) {
+    ImVec4 col = heat_color(pct);
+    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, col);
+    ImGui::ProgressBar(pct / 100.0f, ImVec2(-1, 0), "");
+    ImGui::PopStyleColor();
+    ImGui::SameLine(0, 0);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ImGui::GetItemRectSize().x);
+    ImGui::Text("%.1f%%", pct);
+}
+
 static const char* phase_name(Phase ph) {
     switch (ph) {
         case Phase::DurationBegin:
@@ -225,12 +264,17 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 if (ImGui::InputTextWithHint("##filter", "Filter by name...", filter_buf_, sizeof(filter_buf_))) {
                     rebuild_filter(model);
                 }
+                if (filter_buf_[0] != '\0') {
+                    size_t shown = group_by_name_ ? filtered_aggregated_.size() : filtered_children_.size();
+                    size_t total = group_by_name_ ? aggregated_.size() : children_.size();
+                    ImGui::TextDisabled("Showing %zu / %zu", shown, total);
+                }
 
                 ImGui::Spacing();
 
                 if (group_by_name_) {
                     // --- Aggregated table ---
-                    if (ImGui::BeginTable("AggChildrenTable", 5,
+                    if (ImGui::BeginTable("AggChildrenTable", 7,
                                           ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg |
                                               ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV |
                                               ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
@@ -242,7 +286,9 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                             "Total", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending,
                             0.0f, 2);
                         ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_None, 0.0f, 3);
-                        ImGui::TableSetupColumn("%", ImGuiTableColumnFlags_None, 0.0f, 4);
+                        ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_None, 0.0f, 4);
+                        ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_None, 0.0f, 5);
+                        ImGui::TableSetupColumn("%", ImGuiTableColumnFlags_None, 0.0f, 6);
                         ImGui::TableHeadersRow();
 
                         if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
@@ -281,6 +327,16 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                                                                           : 0;
                                                           break;
                                                       case 4:
+                                                          cmp = (a.min_dur < b.min_dur)   ? -1
+                                                                : (a.min_dur > b.min_dur) ? 1
+                                                                                          : 0;
+                                                          break;
+                                                      case 5:
+                                                          cmp = (a.max_dur < b.max_dur)   ? -1
+                                                                : (a.max_dur > b.max_dur) ? 1
+                                                                                          : 0;
+                                                          break;
+                                                      case 6:
                                                           cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0;
                                                           break;
                                                   }
@@ -327,10 +383,15 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 ImGui::TextUnformatted(buf);
 
                                 ImGui::TableNextColumn();
-                                ImGui::ProgressBar(ag.pct / 100.0f, ImVec2(-1, 0), "");
-                                ImGui::SameLine(0, 0);
-                                ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ImGui::GetItemRectSize().x);
-                                ImGui::Text("%.1f%%", ag.pct);
+                                format_time_detail(ag.min_dur, buf, sizeof(buf));
+                                ImGui::TextUnformatted(buf);
+
+                                ImGui::TableNextColumn();
+                                format_time_detail(ag.max_dur, buf, sizeof(buf));
+                                ImGui::TextUnformatted(buf);
+
+                                ImGui::TableNextColumn();
+                                render_heat_bar(ag.pct);
                             }
                         }
 
@@ -417,10 +478,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 ImGui::TextUnformatted(buf);
 
                                 ImGui::TableNextColumn();
-                                ImGui::ProgressBar(c.pct / 100.0f, ImVec2(-1, 0), "");
-                                ImGui::SameLine(0, 0);
-                                ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ImGui::GetItemRectSize().x);
-                                ImGui::Text("%.1f%%", c.pct);
+                                render_heat_bar(c.pct);
                             }
                         }
 
@@ -482,11 +540,13 @@ void DetailPanel::rebuild_aggregated(const TraceModel& model, double parent_dur)
         auto it = name_to_idx.find(c.name_idx);
         if (it == name_to_idx.end()) {
             name_to_idx[c.name_idx] = aggregated_.size();
-            aggregated_.push_back({c.name_idx, 1, c.dur, 0.0, 0.0f, c.event_idx});
+            aggregated_.push_back({c.name_idx, 1, c.dur, 0.0, c.dur, c.dur, 0.0f, c.event_idx});
         } else {
             auto& ag = aggregated_[it->second];
             ag.count++;
             ag.total_dur += c.dur;
+            if (c.dur < ag.min_dur) ag.min_dur = c.dur;
+            if (c.dur > ag.max_dur) ag.max_dur = c.dur;
             if (c.dur > model.events_[ag.longest_idx].dur) {
                 ag.longest_idx = c.event_idx;
             }

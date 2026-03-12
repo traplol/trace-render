@@ -19,6 +19,8 @@ private:
         uint32_t count;
         double total_dur;
         double avg_dur;
+        double min_dur;
+        double max_dur;
         float pct;             // total_dur as % of parent
         uint32_t longest_idx;  // event_idx of longest instance
     };
