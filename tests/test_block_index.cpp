@@ -91,3 +91,42 @@ TEST_F(BlockIndexTest, MultipleBlocks) {
         EXPECT_LE(events[idx].ts, 2950.0);
     }
 }
+
+TEST_F(BlockIndexTest, LongEventSpanningLaterBlocks) {
+    // Regression: a long-duration event in block 0 has max_end_ts that extends
+    // past block 1's events. Without monotonic max_end_ts propagation, binary
+    // search could skip block 0 when querying the region it spans.
+    //
+    // Block 0: event 0 at ts=0 dur=5000 (end_ts=5000), then short events ts=10..2550
+    // Block 1: short events ts=2560..2990 (all end before 3000)
+    // Query [4000, 4500] should find event 0 (its end_ts=5000 overlaps)
+
+    // Event 0: long event spanning way past block 1
+    add_event(0.0, 5000.0);
+
+    // Fill rest of block 0 with short events (need 255 more to fill BLOCK_SIZE=256)
+    for (int i = 1; i < 256; i++) {
+        add_event(i * 10.0, 5.0);
+    }
+
+    // Block 1: short events well before the long event's end
+    for (int i = 0; i < 50; i++) {
+        add_event(2560.0 + i * 10.0, 5.0);
+    }
+
+    index.build(indices, events);
+    ASSERT_EQ(index.blocks.size(), 2u);
+
+    // Block 0's max_end_ts should be 5000 (from the long event)
+    EXPECT_DOUBLE_EQ(index.blocks[0].max_end_ts, 5000.0);
+
+    // Block 1's max_end_ts should be propagated up to at least 5000
+    // (monotonic guarantee for binary search correctness)
+    EXPECT_GE(index.blocks[1].max_end_ts, index.blocks[0].max_end_ts);
+
+    // Query a range that only the long event covers — must not be missed
+    std::vector<uint32_t> result;
+    index.query(4000.0, 4500.0, indices, events, result);
+    ASSERT_EQ(result.size(), 1u);
+    EXPECT_EQ(result[0], 0u);  // The long event at index 0
+}

@@ -33,6 +33,12 @@ struct BlockIndex {
                 blk.min_ts = std::min(blk.min_ts, ev.ts);
                 blk.max_end_ts = std::max(blk.max_end_ts, ev.end_ts());
             }
+            // Ensure max_end_ts is monotonically non-decreasing so binary search works.
+            // A block with short events could have a smaller max_end_ts than an earlier
+            // block that contained a long-duration event spanning into this range.
+            if (!blocks.empty()) {
+                blk.max_end_ts = std::max(blk.max_end_ts, blocks.back().max_end_ts);
+            }
             blocks.push_back(blk);
         }
     }
