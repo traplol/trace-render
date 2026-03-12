@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <vector>
+#include <cctype>
 #include <cmath>
 #include <unordered_map>
 
@@ -200,6 +201,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
             if (group_by_name_) {
                 rebuild_aggregated(model, current_ev.dur);
             }
+            rebuild_filter(model);
         }
 
         if (!children_.empty()) {
@@ -218,6 +220,11 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 ImGui::Checkbox("Include all descendants", &include_all_descendants_);
                 ImGui::SameLine();
                 ImGui::Checkbox("Group by name", &group_by_name_);
+
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::InputTextWithHint("##filter", "Filter by name...", filter_buf_, sizeof(filter_buf_))) {
+                    rebuild_filter(model);
+                }
 
                 ImGui::Spacing();
 
@@ -248,8 +255,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 if (sort_specs->SpecsCount > 0) {
                                     const auto& spec = sort_specs->Specs[0];
                                     bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
-                                    std::sort(aggregated_.begin(), aggregated_.end(),
-                                              [&](const AggregatedChild& a, const AggregatedChild& b) {
+                                    std::sort(filtered_aggregated_.begin(), filtered_aggregated_.end(),
+                                              [&](size_t ai, size_t bi) {
+                                                  const auto& a = aggregated_[ai];
+                                                  const auto& b = aggregated_[bi];
                                                   int cmp = 0;
                                                   switch (spec.ColumnUserID) {
                                                       case 0: {
@@ -283,10 +292,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
                         char buf[64];
                         ImGuiListClipper clipper;
-                        clipper.Begin((int)aggregated_.size());
+                        clipper.Begin((int)filtered_aggregated_.size());
                         while (clipper.Step()) {
                             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                                const auto& ag = aggregated_[i];
+                                const auto& ag = aggregated_[filtered_aggregated_[i]];
                                 ImGui::TableNextRow();
 
                                 ImGui::TableNextColumn();
@@ -352,8 +361,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 if (sort_specs->SpecsCount > 0) {
                                     const auto& spec = sort_specs->Specs[0];
                                     bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
-                                    std::sort(children_.begin(), children_.end(),
-                                              [&](const ChildInfo& a, const ChildInfo& b) {
+                                    std::sort(filtered_children_.begin(), filtered_children_.end(),
+                                              [&](size_t ai, size_t bi) {
+                                                  const auto& a = children_[ai];
+                                                  const auto& b = children_[bi];
                                                   int cmp = 0;
                                                   switch (spec.ColumnUserID) {
                                                       case 0: {
@@ -377,10 +388,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
                         char buf[64];
                         ImGuiListClipper clipper;
-                        clipper.Begin((int)children_.size());
+                        clipper.Begin((int)filtered_children_.size());
                         while (clipper.Step()) {
                             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                                const auto& c = children_[i];
+                                const auto& c = children_[filtered_children_[i]];
                                 ImGui::TableNextRow();
 
                                 ImGui::TableNextColumn();
@@ -485,5 +496,66 @@ void DetailPanel::rebuild_aggregated(const TraceModel& model, double parent_dur)
     for (auto& ag : aggregated_) {
         ag.avg_dur = ag.total_dur / ag.count;
         ag.pct = (float)(ag.total_dur / parent_dur * 100.0);
+    }
+}
+
+void DetailPanel::rebuild_filter(const TraceModel& model) {
+    active_filter_ = filter_buf_;
+
+    // Convert filter to lowercase for case-insensitive matching
+    std::string lower_filter = active_filter_;
+    for (auto& ch : lower_filter) ch = (char)std::tolower((unsigned char)ch);
+
+    filtered_children_.clear();
+    for (size_t i = 0; i < children_.size(); i++) {
+        if (lower_filter.empty()) {
+            filtered_children_.push_back(i);
+            continue;
+        }
+        const auto& name = model.get_string(children_[i].name_idx);
+        // Case-insensitive substring search
+        bool found = false;
+        if (name.size() >= lower_filter.size()) {
+            for (size_t j = 0; j <= name.size() - lower_filter.size(); j++) {
+                bool match = true;
+                for (size_t k = 0; k < lower_filter.size(); k++) {
+                    if ((char)std::tolower((unsigned char)name[j + k]) != lower_filter[k]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (found) filtered_children_.push_back(i);
+    }
+
+    filtered_aggregated_.clear();
+    for (size_t i = 0; i < aggregated_.size(); i++) {
+        if (lower_filter.empty()) {
+            filtered_aggregated_.push_back(i);
+            continue;
+        }
+        const auto& name = model.get_string(aggregated_[i].name_idx);
+        bool found = false;
+        if (name.size() >= lower_filter.size()) {
+            for (size_t j = 0; j <= name.size() - lower_filter.size(); j++) {
+                bool match = true;
+                for (size_t k = 0; k < lower_filter.size(); k++) {
+                    if ((char)std::tolower((unsigned char)name[j + k]) != lower_filter[k]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (found) filtered_aggregated_.push_back(i);
     }
 }
