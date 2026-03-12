@@ -28,11 +28,7 @@ void InstancePanel::navigate_to_instance(int32_t idx, const TraceModel& model, V
     if (idx < 0 || idx >= (int32_t)instances_.size()) return;
     instance_cursor_ = idx;
     uint32_t ev_idx = instances_[idx];
-    view.selected_event_idx = ev_idx;
-    const auto& ev = model.events_[ev_idx];
-    double pad = std::max(ev.dur * 0.5, 100.0);
-    view.view_start_ts = ev.ts - pad;
-    view.view_end_ts = ev.end_ts() + pad;
+    view.navigate_to_event(ev_idx, model.events_[ev_idx]);
 }
 
 void InstancePanel::render(const TraceModel& model, ViewState& view) {

@@ -158,8 +158,8 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
 
                 size_t first_block = bi.find_first_block(view_start);
 
-                TRACE_SCOPE_ARGS("RenderTracks_blocks", "timeline", "first_block", (int)first_block,
-                                 "total_blocks", (int)bi.blocks.size());
+                TRACE_SCOPE_ARGS("RenderTracks_blocks", "timeline", "first_block", (int)first_block, "total_blocks",
+                                 (int)bi.blocks.size());
 
                 for (size_t bli = first_block; bli < bi.blocks.size(); bli++) {
                     const auto& blk = bi.blocks[bli];
@@ -186,8 +186,7 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
                             } else {
                                 if (run.x_end > -1e29f) {
                                     float ey = y + d * track_height;
-                                    dl->AddRectFilled(ImVec2(run.x_start, ey),
-                                                      ImVec2(run.x_end, ey + track_height - 1),
+                                    dl->AddRectFilled(ImVec2(run.x_start, ey), ImVec2(run.x_end, ey + track_height - 1),
                                                       IM_COL32(120, 120, 140, 180));
                                     diag_stats.merge_runs++;
                                 }
@@ -234,8 +233,7 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
                             } else {
                                 if (run.x_end > -1e29f) {
                                     float ey = y + ev.depth * track_height;
-                                    dl->AddRectFilled(ImVec2(run.x_start, ey),
-                                                      ImVec2(run.x_end, ey + track_height - 1),
+                                    dl->AddRectFilled(ImVec2(run.x_start, ey), ImVec2(run.x_end, ey + track_height - 1),
                                                       IM_COL32(120, 120, 140, 180));
                                     diag_stats.merge_runs++;
                                 }
@@ -502,10 +500,7 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         }
         if (ImGui::IsKeyPressed(ImGuiKey_F)) {
             if (view.selected_event_idx >= 0) {
-                const auto& ev = model.events_[view.selected_event_idx];
-                double pad = std::max(ev.dur * 0.5, 100.0);
-                view.view_start_ts = ev.ts - pad;
-                view.view_end_ts = ev.end_ts() + pad;
+                view.navigate_to_event(view.selected_event_idx, model.events_[view.selected_event_idx]);
             } else if (model.min_ts_ < model.max_ts_) {
                 view.zoom_to_fit(model.min_ts_, model.max_ts_);
             }
@@ -569,6 +564,25 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
     // Render timeline content
     render_time_ruler(dl, canvas_min, canvas_max, view);
     render_tracks(dl, canvas_min, canvas_max, model, view);
+
+    // Scroll vertically to show the pending event's track
+    if (view.pending_scroll_event_idx >= 0 && view.pending_scroll_event_idx < (int32_t)model.events_.size()) {
+        const auto& ev = model.events_[view.pending_scroll_event_idx];
+        for (const auto& layout : track_layouts_) {
+            if (layout.pid == ev.pid && layout.tid == ev.tid) {
+                // layout.y_start is in screen coords: area_min.y + ruler_height - scroll_y_ + offset_within_content
+                // Recover the content-space offset of this track
+                float content_y = layout.y_start - (canvas_min.y + view.ruler_height) + scroll_y_;
+                float visible_h = canvas_size.y - view.ruler_height;
+                // Center the track vertically
+                scroll_y_ = content_y - (visible_h - layout.height) * 0.5f;
+                float max_scroll = std::max(0.0f, total_content_height_ - visible_h);
+                scroll_y_ = std::max(0.0f, std::min(scroll_y_, max_scroll));
+                break;
+            }
+        }
+        view.pending_scroll_event_idx = -1;
+    }
 
     // Render flow arrows on top of tracks
     flow_renderer_.render(dl, model, view, canvas_min, canvas_max, view.label_width);

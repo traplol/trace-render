@@ -1,4 +1,5 @@
 #pragma once
+#include "model/trace_event.h"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -11,6 +12,7 @@ struct ViewState {
 
     // Selection
     int32_t selected_event_idx = -1;
+    int32_t pending_scroll_event_idx = -1;  // set by navigate_to_event, consumed by TimelineView
 
     // Filtering
     std::unordered_set<uint32_t> hidden_pids;
@@ -49,5 +51,16 @@ struct ViewState {
         double padding = (max_ts - min_ts) * 0.02;
         view_start_ts = min_ts - padding;
         view_end_ts = max_ts + padding;
+    }
+
+    // Select an event and zoom the viewport to show it.
+    // pad_factor controls how much surrounding context is shown (0.5 = tight, 2.0 = wide).
+    // min_pad_us is the minimum padding in microseconds (prevents over-zoom on tiny events).
+    void navigate_to_event(int32_t ev_idx, const TraceEvent& ev, double pad_factor = 0.5, double min_pad_us = 100.0) {
+        selected_event_idx = ev_idx;
+        pending_scroll_event_idx = ev_idx;
+        double pad = std::max(ev.dur * pad_factor, min_pad_us);
+        view_start_ts = ev.ts - pad;
+        view_end_ts = ev.end_ts() + pad;
     }
 };

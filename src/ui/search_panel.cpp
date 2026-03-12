@@ -74,11 +74,7 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
 
         if (navigate && view.search_current >= 0 && view.search_current < (int32_t)view.search_results.size()) {
             uint32_t ev_idx = view.search_results[view.search_current];
-            view.selected_event_idx = ev_idx;
-            const auto& ev = model.events_[ev_idx];
-            double pad = std::max((double)ev.dur * 2.0, 1000.0);
-            view.view_start_ts = ev.ts - pad;
-            view.view_end_ts = ev.end_ts() + pad;
+            view.navigate_to_event(ev_idx, model.events_[ev_idx], 2.0, 1000.0);
         }
     }
 
@@ -153,10 +149,7 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
                 bool selected = (view.selected_event_idx == (int32_t)ev_idx);
                 if (ImGui::Selectable(id_buf, selected,
                                       ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
-                    view.selected_event_idx = ev_idx;
-                    double pad = std::max((double)ev.dur * 2.0, 1000.0);
-                    view.view_start_ts = ev.ts - pad;
-                    view.view_end_ts = ev.end_ts() + pad;
+                    view.navigate_to_event(ev_idx, model.events_[ev_idx], 2.0, 1000.0);
                 }
                 ImGui::SameLine();
                 ImGui::TextUnformatted(time_buf);

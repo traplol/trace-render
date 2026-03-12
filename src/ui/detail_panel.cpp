@@ -219,11 +219,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 if (parent_idx >= 0) {
                     ImGui::SameLine();
                     if (ImGui::SmallButton("Parent")) {
-                        view.selected_event_idx = parent_idx;
-                        const auto& parent = model.events_[parent_idx];
-                        double pad = std::max(parent.dur * 0.5, 100.0);
-                        view.view_start_ts = parent.ts - pad;
-                        view.view_end_ts = parent.end_ts() + pad;
+                        view.navigate_to_event(parent_idx, model.events_[parent_idx]);
                     }
                 }
                 goto done_parent;
@@ -380,11 +376,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 if (ImGui::Selectable(
                                         id_buf, false,
                                         ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
-                                    view.selected_event_idx = ag.longest_idx;
-                                    const auto& child_ev = model.events_[ag.longest_idx];
-                                    double pad = std::max(child_ev.dur * 0.5, 100.0);
-                                    view.view_start_ts = child_ev.ts - pad;
-                                    view.view_end_ts = child_ev.end_ts() + pad;
+                                    view.navigate_to_event(ag.longest_idx, model.events_[ag.longest_idx]);
                                 }
                                 ImGui::SameLine();
                                 ImGui::TextUnformatted(model.get_string(ag.name_idx).c_str());
@@ -482,11 +474,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 if (ImGui::Selectable(
                                         id_buf, is_selected,
                                         ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
-                                    view.selected_event_idx = c.event_idx;
-                                    const auto& child_ev = model.events_[c.event_idx];
-                                    double pad = std::max(child_ev.dur * 0.5, 100.0);
-                                    view.view_start_ts = child_ev.ts - pad;
-                                    view.view_end_ts = child_ev.end_ts() + pad;
+                                    view.navigate_to_event(c.event_idx, model.events_[c.event_idx]);
                                 }
                                 ImGui::SameLine();
                                 ImGui::TextUnformatted(model.get_string(c.name_idx).c_str());

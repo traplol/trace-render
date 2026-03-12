@@ -68,3 +68,45 @@ TEST(ViewState, ZoomToFit) {
     EXPECT_DOUBLE_EQ(vs.view_start_ts, 100.0 - padding);
     EXPECT_DOUBLE_EQ(vs.view_end_ts, 500.0 + padding);
 }
+
+TEST(ViewState, NavigateToEvent) {
+    ViewState vs;
+    TraceEvent ev;
+    ev.ts = 1000.0;
+    ev.dur = 200.0;
+
+    vs.navigate_to_event(42, ev);
+
+    EXPECT_EQ(vs.selected_event_idx, 42);
+    EXPECT_EQ(vs.pending_scroll_event_idx, 42);
+    // pad = max(200 * 0.5, 100) = 100
+    EXPECT_DOUBLE_EQ(vs.view_start_ts, 1000.0 - 100.0);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts, 1200.0 + 100.0);
+}
+
+TEST(ViewState, NavigateToEventCustomPadding) {
+    ViewState vs;
+    TraceEvent ev;
+    ev.ts = 5000.0;
+    ev.dur = 100.0;
+
+    vs.navigate_to_event(7, ev, 2.0, 1000.0);
+
+    EXPECT_EQ(vs.selected_event_idx, 7);
+    // pad = max(100 * 2.0, 1000) = 1000
+    EXPECT_DOUBLE_EQ(vs.view_start_ts, 5000.0 - 1000.0);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts, 5100.0 + 1000.0);
+}
+
+TEST(ViewState, NavigateToEventMinPadPreventsOverZoom) {
+    ViewState vs;
+    TraceEvent ev;
+    ev.ts = 500.0;
+    ev.dur = 0.0;  // instant event
+
+    vs.navigate_to_event(3, ev);
+
+    // pad = max(0 * 0.5, 100) = 100 (min_pad prevents zero-width viewport)
+    EXPECT_DOUBLE_EQ(vs.view_start_ts, 400.0);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts, 600.0);
+}
