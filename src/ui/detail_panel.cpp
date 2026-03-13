@@ -1,5 +1,7 @@
 #include "detail_panel.h"
 #include "format_time.h"
+#include "sort_utils.h"
+#include "string_utils.h"
 #include "tracing.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -7,7 +9,6 @@
 #include <cstdio>
 #include <algorithm>
 #include <vector>
-#include <cctype>
 #include <cmath>
 #include <unordered_map>
 
@@ -174,27 +175,15 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
     }
 
     ImGui::Text("Process: %u", ev.pid);
-    // Find process name
-    for (const auto& proc : model.processes_) {
-        if (proc.pid == ev.pid) {
-            ImGui::SameLine();
-            ImGui::TextDisabled("(%s)", proc.name.c_str());
-            break;
-        }
+    if (const auto* proc = model.find_process(ev.pid)) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%s)", proc->name.c_str());
     }
 
     ImGui::Text("Thread: %u", ev.tid);
-    for (const auto& proc : model.processes_) {
-        if (proc.pid == ev.pid) {
-            for (const auto& t : proc.threads) {
-                if (t.tid == ev.tid) {
-                    ImGui::SameLine();
-                    ImGui::TextDisabled("(%s)", t.name.c_str());
-                    break;
-                }
-            }
-            break;
-        }
+    if (const auto* thread = model.find_thread(ev.pid, ev.tid)) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%s)", thread->name.c_str());
     }
 
     if (ev.id != 0) {
@@ -228,24 +217,18 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
             stack_collapsed_.clear();
             stack_has_children_.clear();
             if (ev.dur > 0) {
-                for (const auto& proc : model.processes_) {
-                    if (proc.pid != ev.pid) continue;
-                    for (const auto& thread : proc.threads) {
-                        if (thread.tid != ev.tid) continue;
-                        for (uint32_t idx : thread.event_indices) {
-                            const auto& child = model.events_[idx];
-                            if (child.ts >= ev.end_ts()) break;
-                            if (child.depth > ev.depth && child.ts >= ev.ts && child.end_ts() <= ev.end_ts() &&
-                                child.dur > 0) {
-                                cached_stack_children_.push_back(idx);
-                                if (child.parent_idx >= 0) {
-                                    stack_has_children_.insert((uint32_t)child.parent_idx);
-                                }
+                if (const auto* thread = model.find_thread(ev.pid, ev.tid)) {
+                    for (uint32_t idx : thread->event_indices) {
+                        const auto& child = model.events_[idx];
+                        if (child.ts >= ev.end_ts()) break;
+                        if (child.depth > ev.depth && child.ts >= ev.ts && child.end_ts() <= ev.end_ts() &&
+                            child.dur > 0) {
+                            cached_stack_children_.push_back(idx);
+                            if (child.parent_idx >= 0) {
+                                stack_has_children_.insert((uint32_t)child.parent_idx);
                             }
                         }
-                        break;
                     }
-                    break;
                 }
             }
         }
@@ -556,22 +539,22 @@ void DetailPanel::render_aggregated_table(const TraceModel& model, ViewState& vi
                                 break;
                             }
                             case 1:
-                                cmp = (a.count < b.count) ? -1 : (a.count > b.count) ? 1 : 0;
+                                cmp = sort_utils::three_way_cmp(a.count, b.count);
                                 break;
                             case 2:
-                                cmp = (a.total_dur < b.total_dur) ? -1 : (a.total_dur > b.total_dur) ? 1 : 0;
+                                cmp = sort_utils::three_way_cmp(a.total_dur, b.total_dur);
                                 break;
                             case 3:
-                                cmp = (a.avg_dur < b.avg_dur) ? -1 : (a.avg_dur > b.avg_dur) ? 1 : 0;
+                                cmp = sort_utils::three_way_cmp(a.avg_dur, b.avg_dur);
                                 break;
                             case 4:
-                                cmp = (a.min_dur < b.min_dur) ? -1 : (a.min_dur > b.min_dur) ? 1 : 0;
+                                cmp = sort_utils::three_way_cmp(a.min_dur, b.min_dur);
                                 break;
                             case 5:
-                                cmp = (a.max_dur < b.max_dur) ? -1 : (a.max_dur > b.max_dur) ? 1 : 0;
+                                cmp = sort_utils::three_way_cmp(a.max_dur, b.max_dur);
                                 break;
                             case 6:
-                                cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0;
+                                cmp = sort_utils::three_way_cmp(a.pct, b.pct);
                                 break;
                         }
                         return asc ? (cmp < 0) : (cmp > 0);
@@ -663,10 +646,10 @@ void DetailPanel::render_children_table(const TraceModel& model, ViewState& view
                                 break;
                             }
                             case 1:
-                                cmp = (a.dur < b.dur) ? -1 : (a.dur > b.dur) ? 1 : 0;
+                                cmp = sort_utils::three_way_cmp(a.dur, b.dur);
                                 break;
                             case 2:
-                                cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0;
+                                cmp = sort_utils::three_way_cmp(a.pct, b.pct);
                                 break;
                         }
                         return asc ? (cmp < 0) : (cmp > 0);
@@ -714,33 +697,27 @@ void DetailPanel::rebuild_children(const TraceModel& model, const TraceEvent& ev
     children_.clear();
     double immediate_children_total = 0.0;
 
-    for (const auto& proc : model.processes_) {
-        if (proc.pid != ev.pid) continue;
-        for (const auto& thread : proc.threads) {
-            if (thread.tid != ev.tid) continue;
-            for (uint32_t idx : thread.event_indices) {
-                const auto& child = model.events_[idx];
-                if (child.depth <= ev.depth) {
-                    if (child.ts > ev.end_ts()) break;
-                    continue;
-                }
-                if (child.ts < ev.ts || child.end_ts() > ev.end_ts()) continue;
-                if (child.dur <= 0) continue;
-
-                if (child.depth == ev.depth + 1) {
-                    immediate_children_total += child.dur;
-                }
-
-                if (include_all_descendants_ || child.depth == ev.depth + 1) {
-                    float pct = (float)(child.dur / ev.dur * 100.0);
-                    children_.push_back({idx, child.name_idx, child.dur, pct});
-                }
-
+    if (const auto* thread = model.find_thread(ev.pid, ev.tid)) {
+        for (uint32_t idx : thread->event_indices) {
+            const auto& child = model.events_[idx];
+            if (child.depth <= ev.depth) {
                 if (child.ts > ev.end_ts()) break;
+                continue;
             }
-            break;
+            if (child.ts < ev.ts || child.end_ts() > ev.end_ts()) continue;
+            if (child.dur <= 0) continue;
+
+            if (child.depth == ev.depth + 1) {
+                immediate_children_total += child.dur;
+            }
+
+            if (include_all_descendants_ || child.depth == ev.depth + 1) {
+                float pct = (float)(child.dur / ev.dur * 100.0);
+                children_.push_back({idx, child.name_idx, child.dur, pct});
+            }
+
+            if (child.ts > ev.end_ts()) break;
         }
-        break;
     }
 
     self_time_ = ev.dur - immediate_children_total;
@@ -782,60 +759,17 @@ void DetailPanel::rebuild_filter(const TraceModel& model) {
     TRACE_FUNCTION_CAT("ui");
     active_filter_ = filter_buf_;
 
-    // Convert filter to lowercase for case-insensitive matching
-    std::string lower_filter = active_filter_;
-    for (auto& ch : lower_filter) ch = (char)std::tolower((unsigned char)ch);
-
     filtered_children_.clear();
     for (size_t i = 0; i < children_.size(); i++) {
-        if (lower_filter.empty()) {
+        if (contains_case_insensitive(model.get_string(children_[i].name_idx), active_filter_)) {
             filtered_children_.push_back(i);
-            continue;
         }
-        const auto& name = model.get_string(children_[i].name_idx);
-        // Case-insensitive substring search
-        bool found = false;
-        if (name.size() >= lower_filter.size()) {
-            for (size_t j = 0; j <= name.size() - lower_filter.size(); j++) {
-                bool match = true;
-                for (size_t k = 0; k < lower_filter.size(); k++) {
-                    if ((char)std::tolower((unsigned char)name[j + k]) != lower_filter[k]) {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (found) filtered_children_.push_back(i);
     }
 
     filtered_aggregated_.clear();
     for (size_t i = 0; i < aggregated_.size(); i++) {
-        if (lower_filter.empty()) {
+        if (contains_case_insensitive(model.get_string(aggregated_[i].name_idx), active_filter_)) {
             filtered_aggregated_.push_back(i);
-            continue;
         }
-        const auto& name = model.get_string(aggregated_[i].name_idx);
-        bool found = false;
-        if (name.size() >= lower_filter.size()) {
-            for (size_t j = 0; j <= name.size() - lower_filter.size(); j++) {
-                bool match = true;
-                for (size_t k = 0; k < lower_filter.size(); k++) {
-                    if ((char)std::tolower((unsigned char)name[j + k]) != lower_filter[k]) {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (found) filtered_aggregated_.push_back(i);
     }
 }

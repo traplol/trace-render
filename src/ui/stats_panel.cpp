@@ -1,5 +1,6 @@
 #include "stats_panel.h"
 #include "format_time.h"
+#include "sort_utils.h"
 #include "tracing.h"
 #include "imgui.h"
 #include <nlohmann/json.hpp>
@@ -441,7 +442,7 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
                                   double db = strtod(sb.c_str(), &end_b);
                                   int cmp;
                                   if (end_a != sa.c_str() && *end_a == '\0' && end_b != sb.c_str() && *end_b == '\0') {
-                                      cmp = (da < db) ? -1 : (da > db) ? 1 : 0;
+                                      cmp = sort_utils::three_way_cmp(da, db);
                                   } else {
                                       cmp = sa.compare(sb);
                                   }
