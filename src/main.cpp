@@ -14,6 +14,7 @@ static App* g_app = nullptr;
 static bool g_running = true;
 
 static void main_loop_step() {
+    TRACE_SCOPE("Frame");
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         ImGui_ImplSDL3_ProcessEvent(&event);
