@@ -199,9 +199,9 @@ TEST_F(TracingIntegration, TraceScopeEmitsLocation) {
     EXPECT_TRUE(ev["args"].contains("file"));
     EXPECT_TRUE(ev["args"].contains("line"));
     EXPECT_TRUE(ev["args"].contains("func"));
-    // File should be just the basename
+    // File should be the full path and end with the source filename
     std::string file = ev["args"]["file"].get<std::string>();
-    EXPECT_EQ(file, "test_tracing.cpp");
+    EXPECT_NE(file.find("test_tracing.cpp"), std::string::npos);
     // Line should be a positive integer
     EXPECT_GT(ev["args"]["line"].get<int>(), 0);
     // Func should contain the test function name

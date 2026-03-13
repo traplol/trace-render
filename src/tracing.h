@@ -117,15 +117,6 @@ std::string make_args_json(Args&&... args) {
     return out;
 }
 
-// Strip directory from __FILE__ at compile time
-inline const char* strip_path(const char* path) {
-    const char* last = path;
-    for (const char* p = path; *p; ++p) {
-        if (*p == '/' || *p == '\\') last = p + 1;
-    }
-    return last;
-}
-
 }  // namespace trace_detail
 
 // Portable qualified function name
@@ -304,16 +295,16 @@ private:
 };
 
 #define TRACE_SCOPE(name) \
-    TraceScope _trace_scope_##__LINE__(name, "app", trace_detail::strip_path(__FILE__), __LINE__, TRACE_FUNC_SIG)
+    TraceScope _trace_scope_##__LINE__(name, "app", __FILE__, __LINE__, TRACE_FUNC_SIG)
 #define TRACE_SCOPE_CAT(name, cat) \
-    TraceScope _trace_scope_##__LINE__(name, cat, trace_detail::strip_path(__FILE__), __LINE__, TRACE_FUNC_SIG)
+    TraceScope _trace_scope_##__LINE__(name, cat, __FILE__, __LINE__, TRACE_FUNC_SIG)
 #define TRACE_SCOPE_ARGS(name, cat, ...)                                         \
     TraceScopeArgs _trace_scope_args_##__LINE__(                                 \
-        name, cat, trace_detail::strip_path(__FILE__), __LINE__, TRACE_FUNC_SIG, \
+        name, cat, __FILE__, __LINE__, TRACE_FUNC_SIG, \
         Tracer::instance().enabled() ? trace_detail::make_args_json(__VA_ARGS__) : std::string())
 #define TRACE_FUNCTION()                                                                                    \
-    TraceScope _trace_scope_##__LINE__(TRACE_FUNC_SIG, "app", trace_detail::strip_path(__FILE__), __LINE__, \
+    TraceScope _trace_scope_##__LINE__(TRACE_FUNC_SIG, "app", __FILE__, __LINE__, \
                                        TRACE_FUNC_SIG)
 #define TRACE_FUNCTION_CAT(cat)                                                                           \
-    TraceScope _trace_scope_##__LINE__(TRACE_FUNC_SIG, cat, trace_detail::strip_path(__FILE__), __LINE__, \
+    TraceScope _trace_scope_##__LINE__(TRACE_FUNC_SIG, cat, __FILE__, __LINE__, \
                                        TRACE_FUNC_SIG)
