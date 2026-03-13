@@ -57,7 +57,8 @@ private:
 
     // Background loading
     std::atomic<bool> loading_{false};
-    std::atomic<float> load_progress_{0.0f};
+    std::atomic<float> load_progress_{0.0f};        // global progress 0-1
+    std::atomic<float> load_phase_progress_{0.0f};  // current phase progress 0-1
     std::atomic<bool> load_finished_{false};
     bool load_success_ = false;
     std::string load_error_;
