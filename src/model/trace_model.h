@@ -31,6 +31,13 @@ struct ProcessInfo {
         return nullptr;
     }
 
+    const ThreadInfo* find_thread(uint32_t tid) const {
+        for (const auto& t : threads) {
+            if (t.tid == tid) return &t;
+        }
+        return nullptr;
+    }
+
     ThreadInfo& get_or_create_thread(uint32_t tid) {
         if (auto* t = find_thread(tid)) return *t;
         threads.push_back({});
@@ -95,6 +102,13 @@ public:
         return nullptr;
     }
 
+    const ProcessInfo* find_process(uint32_t pid) const {
+        for (const auto& p : processes_) {
+            if (p.pid == pid) return &p;
+        }
+        return nullptr;
+    }
+
     ProcessInfo& get_or_create_process(uint32_t pid) {
         if (auto* p = find_process(pid)) return *p;
         processes_.push_back({});
@@ -104,6 +118,17 @@ public:
     }
 
     void build_index();
+
+    // Find the parent event (depth-1, same thread, enclosing time range).
+    // Returns -1 if no parent found.
+    int32_t find_parent_event(uint32_t event_idx) const;
+
+    // Build the full call stack from the given event up to the root.
+    // Returns event indices ordered from root (index 0) to the given event (last element).
+    std::vector<uint32_t> build_call_stack(uint32_t event_idx) const;
+
+    // Compute self time for an event (wall time minus immediate children's durations).
+    double compute_self_time(uint32_t event_idx) const;
 
     void query_visible(const ThreadInfo& thread, double start_ts, double end_ts, std::vector<uint32_t>& out) const {
         thread.block_index.query(start_ts, end_ts, thread.event_indices, events_, out);
