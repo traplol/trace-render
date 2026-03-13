@@ -114,11 +114,10 @@ static void render_json_value(const nlohmann::json& j, int depth = 0) {
 
 void DetailPanel::render_range_selection(const TraceModel& model, ViewState& view) {
     // Recompute if range changed
-    if (cached_range_start_ != view.range_start_ts || cached_range_end_ != view.range_end_ts || range_dirty_) {
+    if (cached_range_start_ != view.range_start_ts || cached_range_end_ != view.range_end_ts) {
         cached_range_start_ = view.range_start_ts;
         cached_range_end_ = view.range_end_ts;
         range_stats_ = compute_range_stats(model, view.range_start_ts, view.range_end_ts);
-        range_dirty_ = false;
     }
 
     char time_buf[64];
@@ -200,11 +199,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
     ImGui::Begin("Details");
 
     if (view.has_range_selection) {
-        ImGui::SeparatorText("Range Selection");
-        range_dirty_ = (cached_range_start_ != view.range_start_ts || cached_range_end_ != view.range_end_ts);
-        render_range_selection(model, view);
-        ImGui::End();
-        return;
+        if (ImGui::CollapsingHeader("Range Selection", ImGuiTreeNodeFlags_DefaultOpen)) {
+            render_range_selection(model, view);
+        }
+        ImGui::Spacing();
     }
 
     if (view.selected_event_idx < 0 || view.selected_event_idx >= (int32_t)model.events_.size()) {

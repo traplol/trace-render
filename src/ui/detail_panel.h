@@ -10,7 +10,6 @@ public:
 
 private:
     // Range selection cache
-    bool range_dirty_ = true;
     double cached_range_start_ = 0.0;
     double cached_range_end_ = 0.0;
     RangeStats range_stats_;

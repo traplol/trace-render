@@ -256,3 +256,17 @@ TEST(RangeStats, AggregatesMinMaxAvg) {
     EXPECT_NEAR(func_a.max_dur, 200.0, 0.01);
     EXPECT_NEAR(func_a.avg_dur(), 150.0, 0.01);
 }
+
+TEST(RangeStats, LongestIdxTracksByActualDuration) {
+    TraceModel model = make_range_test_model();
+    // FuncA event 0 is 200us (100-300), event 2 is 100us (500-600)
+    // Even with a partial range, longest_idx should point to the 200us event
+    auto stats = compute_range_stats(model, 250.0, 700.0);
+
+    const auto* func_a = &stats.summaries[0];
+    if (model.get_string(func_a->name_idx) != "FuncA") func_a = &stats.summaries[1];
+    EXPECT_EQ(model.get_string(func_a->name_idx), "FuncA");
+    // Event 0 has dur=200, event 2 has dur=100 — longest_idx should be event 0
+    EXPECT_EQ(func_a->longest_idx, 0u);
+    EXPECT_DOUBLE_EQ(model.events_[func_a->longest_idx].dur, 200.0);
+}

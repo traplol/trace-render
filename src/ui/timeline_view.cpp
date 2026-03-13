@@ -296,7 +296,7 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
         }
     }
 
-    // Draw range selection overlay
+    // Draw range selection overlay (below ruler only)
     if (view.has_range_selection) {
         float track_left = area_min.x + view.label_width;
         float track_width = width - view.label_width;
@@ -304,13 +304,12 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
         float rx2 = view.time_to_x(view.range_end_ts, track_left, track_width);
         rx1 = std::max(rx1, track_left);
         rx2 = std::min(rx2, area_max.x);
+        float overlay_top = area_min.y + view.ruler_height;
 
         if (rx2 > rx1) {
-            // Semi-transparent blue overlay
-            dl->AddRectFilled(ImVec2(rx1, area_min.y), ImVec2(rx2, area_max.y), IM_COL32(80, 130, 220, 50));
-            // Border lines
-            dl->AddLine(ImVec2(rx1, area_min.y), ImVec2(rx1, area_max.y), IM_COL32(80, 130, 220, 200), 1.5f);
-            dl->AddLine(ImVec2(rx2, area_min.y), ImVec2(rx2, area_max.y), IM_COL32(80, 130, 220, 200), 1.5f);
+            dl->AddRectFilled(ImVec2(rx1, overlay_top), ImVec2(rx2, area_max.y), IM_COL32(80, 130, 220, 50));
+            dl->AddLine(ImVec2(rx1, overlay_top), ImVec2(rx1, area_max.y), IM_COL32(80, 130, 220, 200), 1.5f);
+            dl->AddLine(ImVec2(rx2, overlay_top), ImVec2(rx2, area_max.y), IM_COL32(80, 130, 220, 200), 1.5f);
         }
     }
 
@@ -451,12 +450,13 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         }
 
         if (ruler_dragging_) {
-            double current_ts = view.x_to_time(io.MousePos.x, track_left, track_width);
-            if (std::abs(current_ts - ruler_drag_start_ts_) > 0.0) {
-                view.set_range_selection(ruler_drag_start_ts_, current_ts);
-            }
-            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || !ImGui::IsWindowFocused()) {
                 ruler_dragging_ = false;
+            } else {
+                double current_ts = view.x_to_time(io.MousePos.x, track_left, track_width);
+                if (std::abs(current_ts - ruler_drag_start_ts_) > 0.0) {
+                    view.set_range_selection(ruler_drag_start_ts_, current_ts);
+                }
             }
         }
     }
