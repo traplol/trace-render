@@ -734,6 +734,27 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
             }
 
             ImGui::EndTooltip();
+        } else {
+            // Check counter tracks
+            CounterHitResult counter_hit;
+            if (counter_renderer_.hit_test(io.MousePos.x, io.MousePos.y, view, counter_hit)) {
+                char time_buf[64];
+                ImGui::BeginTooltip();
+
+                ImGui::TextUnformatted(counter_hit.series->name.c_str());
+                ImGui::Separator();
+
+                ImGui::TextDisabled("Value:");
+                ImGui::SameLine();
+                ImGui::Text("%.4g", counter_hit.value);
+
+                format_time(counter_hit.timestamp, time_buf, sizeof(time_buf));
+                ImGui::TextDisabled("Timestamp:");
+                ImGui::SameLine();
+                ImGui::Text("%s", time_buf);
+
+                ImGui::EndTooltip();
+            }
         }
     }
 

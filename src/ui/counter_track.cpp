@@ -10,6 +10,8 @@ float CounterTrackRenderer::render(ImDrawList* dl, ImVec2 area_min, float y_offs
     float total_height = 0.0f;
     uint32_t color_idx = 0;
 
+    layouts_.clear();
+
     for (const auto& series : model.counter_series_) {
         if (series.pid != pid) continue;
         if (series.points.empty()) continue;
@@ -31,6 +33,7 @@ float CounterTrackRenderer::render(ImDrawList* dl, ImVec2 area_min, float y_offs
 
         ImU32 color = ColorPalette::COLORS[color_idx % ColorPalette::NUM_COLORS];
         render_series(dl, track_min, track_max, series, view, color);
+        layouts_.push_back({&series, track_min, track_max});
 
         total_height += track_h + view.track_padding;
         color_idx++;
@@ -113,4 +116,40 @@ void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec
     dl->AddText(ImVec2(track_min.x + 6, track_max.y - font_h - 4), IM_COL32(140, 140, 140, 200), buf);
 
     dl->PopClipRect();
+}
+
+bool counter_lookup_value(const CounterSeries& series, double time, double& out_timestamp, double& out_value) {
+    if (series.points.empty()) return false;
+
+    auto it = std::upper_bound(series.points.begin(), series.points.end(), time,
+                               [](double t, const std::pair<double, double>& p) { return t < p.first; });
+
+    // Before first data point — no value to show
+    if (it == series.points.begin()) return false;
+
+    --it;
+    out_timestamp = it->first;
+    out_value = it->second;
+    return true;
+}
+
+bool CounterTrackRenderer::hit_test(float mouse_x, float mouse_y, const ViewState& view,
+                                    CounterHitResult& result) const {
+    for (const auto& layout : layouts_) {
+        if (mouse_y < layout.track_min.y || mouse_y >= layout.track_max.y) continue;
+        if (mouse_x < layout.track_min.x || mouse_x >= layout.track_max.x) continue;
+
+        const auto& series = *layout.series;
+        float track_w = layout.track_max.x - layout.track_min.x;
+        double mouse_time = view.x_to_time(mouse_x, layout.track_min.x, track_w);
+
+        double ts, val;
+        if (!counter_lookup_value(series, mouse_time, ts, val)) continue;
+
+        result.series = &series;
+        result.timestamp = ts;
+        result.value = val;
+        return true;
+    }
+    return false;
 }
