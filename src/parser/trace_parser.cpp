@@ -487,3 +487,32 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
 
     return true;
 }
+
+bool TraceParser::parse_buffer(const char* data, size_t size, TraceModel& model) {
+    TRACE_SCOPE_CAT("ParseBuffer", "io");
+
+    model.clear();
+    model.intern_string("");
+
+    if (on_progress) on_progress("Parsing JSON", 0.0f);
+
+    SaxHandler handler(model, on_progress);
+    handler.time_divisor = time_unit_ns ? 1000.0 : 1.0;
+    handler.file_size = size;
+    handler.estimated_events = size / 100;
+
+    std::string_view sv(data, size);
+    bool result = json::sax_parse(sv, &handler);
+
+    if (!result) {
+        error_message = "JSON parse error";
+        return false;
+    }
+
+    if (on_progress) on_progress("Building index", 0.5f);
+    model.build_index();
+
+    if (on_progress) on_progress("Done", 1.0f);
+
+    return true;
+}

@@ -1,4 +1,5 @@
 #include "app.h"
+#include "platform/platform.h"
 #include "tracing.h"
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
@@ -8,23 +9,79 @@
 #include <cstdio>
 #include <cstring>
 
+static SDL_Window* g_window = nullptr;
+static App* g_app = nullptr;
+static bool g_running = true;
+
+static void main_loop_step() {
+    TRACE_SCOPE("Frame");
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        ImGui_ImplSDL3_ProcessEvent(&event);
+        if (event.type == SDL_EVENT_QUIT) {
+            g_running = false;
+        }
+        if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(g_window)) {
+            g_running = false;
+        }
+        if (event.type == SDL_EVENT_DROP_FILE) {
+            const char* file = event.drop.data;
+            if (file) {
+                platform::handle_file_drop(file);
+            }
+        }
+    }
+
+    if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_MINIMIZED) {
+        SDL_Delay(10);
+        return;
+    }
+
+    {
+        TRACE_SCOPE_CAT("NewFrame", "imgui");
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
+    }
+
+    {
+        TRACE_SCOPE_CAT("AppUpdate", "app");
+        g_app->update();
+    }
+
+    {
+        TRACE_SCOPE_CAT("Render", "imgui");
+        ImGui::Render();
+        int display_w, display_h;
+        SDL_GetWindowSizeInPixels(g_window, &display_w, &display_h);
+        glViewport(0, 0, display_w, display_h);
+        glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    }
+
+    {
+        TRACE_SCOPE_CAT("SwapBuffers", "gl");
+        SDL_GL_SwapWindow(g_window);
+    }
+
+    // Write FPS counter event every frame
+    if (Tracer::instance().enabled()) {
+        ImGuiIO& io = ImGui::GetIO();
+        Tracer::instance().write_counter("FPS", "perf", Tracer::instance().now_us(), "fps", (double)io.Framerate);
+    }
+}
+
 int main(int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;
     }
 
-    // GL 3.3 Core
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    platform::set_gl_attributes();
 
     SDL_Window* window = SDL_CreateWindow("Perfetto Trace Viewer", 1600, 900,
                                           SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
-
     if (!window) {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
         return 1;
@@ -36,17 +93,15 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     SDL_GL_MakeCurrent(window, gl_context);
-    SDL_GL_SetSwapInterval(1);  // vsync
+    SDL_GL_SetSwapInterval(1);
 
-    // Setup ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.IniFilename = "perfetto_imgui.ini";
+    io.IniFilename = platform::ini_filename();
 
-    // Dark theme
     ImGui::StyleColorsDark();
     ImGuiStyle& style = ImGui::GetStyle();
     style.WindowRounding = 4.0f;
@@ -54,15 +109,17 @@ int main(int argc, char* argv[]) {
     style.ScrollbarRounding = 3.0f;
     style.Colors[ImGuiCol_WindowBg] = ImVec4(0.12f, 0.12f, 0.14f, 1.0f);
 
-    // Scale up font 3x
     io.Fonts->AddFontDefault();
-    io.FontGlobalScale = 3.0f;
+    io.FontGlobalScale = platform::default_font_scale();
 
     ImGui_ImplSDL3_InitForOpenGL(window, gl_context);
-    ImGui_ImplOpenGL3_Init("#version 330 core");
+    ImGui_ImplOpenGL3_Init(platform::glsl_version());
 
     App app;
     app.init(window);
+
+    g_window = window;
+    g_app = &app;
 
     // Parse command-line arguments
     const char* file_arg = nullptr;
@@ -88,73 +145,11 @@ int main(int argc, char* argv[]) {
         app.open_file(file_arg);
     }
 
-    bool running = true;
-    uint64_t frame_num = 0;
-    while (running) {
-        TRACE_SCOPE("Frame");
+    // On desktop this loops until g_running is false.
+    // On WASM this registers a callback and never returns.
+    platform::run_main_loop(main_loop_step, &g_running);
 
-        {
-            TRACE_SCOPE_CAT("PollEvents", "input");
-            SDL_Event event;
-            while (SDL_PollEvent(&event)) {
-                ImGui_ImplSDL3_ProcessEvent(&event);
-                if (event.type == SDL_EVENT_QUIT) {
-                    running = false;
-                }
-                if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
-                    event.window.windowID == SDL_GetWindowID(window)) {
-                    running = false;
-                }
-                // Handle file drop
-                if (event.type == SDL_EVENT_DROP_FILE) {
-                    const char* file = event.drop.data;
-                    if (file) {
-                        app.open_file(file);
-                    }
-                }
-            }
-        }
-
-        if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) {
-            SDL_Delay(10);
-            continue;
-        }
-
-        {
-            TRACE_SCOPE_CAT("NewFrame", "imgui");
-            ImGui_ImplOpenGL3_NewFrame();
-            ImGui_ImplSDL3_NewFrame();
-            ImGui::NewFrame();
-        }
-
-        {
-            TRACE_SCOPE_CAT("AppUpdate", "app");
-            app.update();
-        }
-
-        {
-            TRACE_SCOPE_CAT("Render", "imgui");
-            ImGui::Render();
-            int display_w, display_h;
-            SDL_GetWindowSizeInPixels(window, &display_w, &display_h);
-            glViewport(0, 0, display_w, display_h);
-            glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        }
-
-        {
-            TRACE_SCOPE_CAT("SwapBuffers", "gl");
-            SDL_GL_SwapWindow(window);
-        }
-
-        // Write FPS counter event every frame
-        if (Tracer::instance().enabled()) {
-            Tracer::instance().write_counter("FPS", "perf", Tracer::instance().now_us(), "fps", (double)io.Framerate);
-        }
-        frame_num++;
-    }
-
+    // Cleanup (only reached on desktop)
     Tracer::instance().close();
     app.shutdown();
 

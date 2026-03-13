@@ -1,20 +1,8 @@
 #include "toolbar.h"
+#include "platform/platform.h"
 #include "tracing.h"
 #include "imgui.h"
 #include <SDL3/SDL.h>
-
-static void file_dialog_callback(void* userdata, const char* const* filelist, int filter) {
-    (void)filter;
-    auto* toolbar = static_cast<Toolbar*>(userdata);
-    if (filelist && filelist[0]) {
-        toolbar->on_file_selected(filelist[0]);
-    }
-}
-
-void Toolbar::on_file_selected(const char* path) {
-    file_path_ = path;
-    file_open_requested_ = true;
-}
 
 void Toolbar::render(const TraceModel& model, ViewState& view) {
     TRACE_SCOPE_CAT("Toolbar", "ui");
@@ -23,15 +11,7 @@ void Toolbar::render(const TraceModel& model, ViewState& view) {
         ImGui::Separator();
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Open...", "Ctrl+O")) {
-                if (window_) {
-                    static const SDL_DialogFileFilter filters[] = {
-                        {"JSON Trace Files", "json"},
-                        {"All Files", "*"},
-                    };
-                    SDL_ShowOpenFileDialog(file_dialog_callback, this, window_, filters, 2, nullptr, false);
-                } else {
-                    show_fallback_dialog_ = true;
-                }
+                platform::open_file_dialog(window_);
             }
             ImGui::EndMenu();
         }
@@ -53,36 +33,6 @@ void Toolbar::render(const TraceModel& model, ViewState& view) {
 
     // Ctrl+O shortcut
     if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_O)) {
-        if (window_) {
-            static const SDL_DialogFileFilter filters[] = {
-                {"JSON Trace Files", "json"},
-                {"All Files", "*"},
-            };
-            SDL_ShowOpenFileDialog(file_dialog_callback, this, window_, filters, 2, nullptr, false);
-        } else {
-            show_fallback_dialog_ = true;
-        }
-    }
-
-    // Fallback text input dialog (if no window handle available)
-    if (show_fallback_dialog_) {
-        ImGui::OpenPopup("Open Trace File");
-        show_fallback_dialog_ = false;
-    }
-
-    if (ImGui::BeginPopupModal("Open Trace File", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("Enter trace file path:");
-        ImGui::SetNextItemWidth(500);
-        bool enter = ImGui::InputText("##path", path_buf_, sizeof(path_buf_), ImGuiInputTextFlags_EnterReturnsTrue);
-        if (enter || ImGui::Button("Open")) {
-            file_path_ = path_buf_;
-            file_open_requested_ = true;
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) {
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
+        platform::open_file_dialog(window_);
     }
 }

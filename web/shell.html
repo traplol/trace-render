@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Perfetto Trace Viewer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1e1e22; }
+    #canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      outline: none;
+    }
+    #loading {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #1e1e22;
+      color: #ccc;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      z-index: 10;
+    }
+    #loading h1 { font-size: 24px; margin-bottom: 20px; color: #fff; }
+    #loading .spinner {
+      width: 40px; height: 40px;
+      border: 4px solid #333;
+      border-top-color: #7aa2f7;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading .status { font-size: 14px; color: #888; }
+    #loading .progress {
+      width: 300px; height: 6px;
+      background: #333; border-radius: 3px;
+      margin-top: 12px; overflow: hidden;
+    }
+    #loading .progress-bar {
+      height: 100%; width: 0%;
+      background: #7aa2f7; border-radius: 3px;
+      transition: width 0.2s;
+    }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <h1>Perfetto Trace Viewer</h1>
+    <div class="spinner"></div>
+    <div class="status" id="status">Loading...</div>
+    <div class="progress"><div class="progress-bar" id="progress"></div></div>
+  </div>
+  <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+
+  <script>
+    // Shared helper: read a File object and pass its contents to WASM
+    function loadFileToWasm(file) {
+      var reader = new FileReader();
+      reader.onload = function() {
+        var data = new Uint8Array(reader.result);
+        var nameLen = lengthBytesUTF8(file.name) + 1;
+        var namePtr = _malloc(nameLen);
+        stringToUTF8(file.name, namePtr, nameLen);
+        var dataPtr = _malloc(data.length);
+        HEAPU8.set(data, dataPtr);
+        _wasm_file_loaded(namePtr, dataPtr, data.length);
+        _free(namePtr);
+        _free(dataPtr);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    var Module = {
+      canvas: (function() { return document.getElementById('canvas'); })(),
+      setStatus: function(text) {
+        var el = document.getElementById('status');
+        if (el) el.textContent = text;
+      },
+      monitorRunDependencies: function(left) {
+        var bar = document.getElementById('progress');
+        if (bar) {
+          bar.style.width = (left ? Math.max(10, 100 - left * 10) : 100) + '%';
+        }
+      },
+      onRuntimeInitialized: function() {
+        var loading = document.getElementById('loading');
+        if (loading) loading.style.display = 'none';
+        document.getElementById('canvas').focus();
+      },
+      preRun: [function() {
+        var canvas = document.getElementById('canvas');
+        canvas.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        });
+        canvas.addEventListener('drop', function(e) {
+          e.preventDefault();
+          var file = e.dataTransfer.files[0];
+          if (file) loadFileToWasm(file);
+        });
+      }]
+    };
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

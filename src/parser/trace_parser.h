@@ -6,6 +6,7 @@
 class TraceParser {
 public:
     bool parse(const std::string& filepath, TraceModel& model);
+    bool parse_buffer(const char* data, size_t size, TraceModel& model);
 
     // Progress callback: receives (phase, progress 0-1)
     // phase: "Reading file", "Parsing JSON", "Building index"
