@@ -271,6 +271,28 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
         snprintf(tab.query_buf, sizeof(tab.query_buf), "%s", tab.query.c_str());
     }
 
+    float avail_h = ImGui::GetContentRegionAvail().y;
+    float line_h = ImGui::GetTextLineHeight();
+    float default_sql_h = line_h * 6;
+    float min_sql_h = line_h * 3;
+    float splitter_h = 6.0f;
+
+    // Initialize sql_height_ on first use
+    if (sql_height_ <= 0.0f) sql_height_ = default_sql_h;
+    if (sql_height_ < min_sql_h) sql_height_ = min_sql_h;
+
+    // --- Top section: SQL editor and controls in a scrollable child ---
+    // Calculate top section height: toolbar + sql editor + buttons + some padding
+    float toolbar_h = ImGui::GetFrameHeightWithSpacing();
+    float buttons_h = ImGui::GetFrameHeightWithSpacing();
+    float top_h = toolbar_h + sql_height_ + buttons_h + ImGui::GetStyle().ItemSpacing.y * 2;
+
+    // Clamp so results get at least some space
+    float max_top = avail_h - splitter_h - line_h * 3;
+    if (max_top > 0 && top_h > max_top) top_h = max_top;
+
+    ImGui::BeginChild("##sqlarea", ImVec2(0, top_h), ImGuiChildFlags_None, ImGuiWindowFlags_None);
+
     // Schema & Builder buttons
     if (ImGui::SmallButton("Schema")) {
         show_schema_ = true;
@@ -303,8 +325,7 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
     if (is_running) {
         ImGui::BeginDisabled();
     }
-    ImGui::InputTextMultiline("##sql", tab.query_buf, sizeof(tab.query_buf),
-                              ImVec2(-1, ImGui::GetTextLineHeight() * 6));
+    ImGui::InputTextMultiline("##sql", tab.query_buf, sizeof(tab.query_buf), ImVec2(-1, sql_height_));
     if (is_running) {
         ImGui::EndDisabled();
     }
@@ -344,6 +365,22 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
         }
     }
 
+    ImGui::EndChild();
+
+    // --- Draggable splitter ---
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.5f, 0.3f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.6f, 0.6f, 0.6f, 0.6f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.7f, 0.7f, 0.8f));
+    ImGui::Button("##splitter", ImVec2(-1, splitter_h));
+    ImGui::PopStyleColor(3);
+    if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+    if (ImGui::IsItemActive()) {
+        float delta = ImGui::GetIO().MouseDelta.y;
+        sql_height_ += delta;
+        if (sql_height_ < min_sql_h) sql_height_ = min_sql_h;
+    }
+
+    // --- Bottom section: results ---
     if (!tab.has_result) return;
 
     if (!tab.result.error.empty()) {
@@ -370,12 +407,13 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
     ImGui::Separator();
 
     int col_count = (int)tab.result.columns.size();
+    float results_h = ImGui::GetContentRegionAvail().y;
 
     if (ImGui::BeginTable("QueryResults", col_count,
                           ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
                               ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY |
                               ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable,
-                          ImVec2(0, 0))) {
+                          ImVec2(0, results_h))) {
         ImGui::TableSetupScrollFreeze(0, 1);
         std::vector<bool> time_cols(col_count, false);
         for (int c = 0; c < col_count; c++) {

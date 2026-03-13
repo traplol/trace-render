@@ -87,6 +87,7 @@ private:
 
     std::vector<QueryTab> tabs_;
     int active_tab_ = 0;
+    float sql_height_ = 0.0f;  // draggable SQL editor height (0 = use default)
 
     bool show_schema_ = false;
     bool show_builder_ = false;
