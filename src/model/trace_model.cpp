@@ -122,3 +122,40 @@ void TraceModel::build_index() {
         }
     }
 }
+
+int32_t TraceModel::find_parent_event(uint32_t event_idx) const {
+    if (event_idx >= events_.size()) return -1;
+    const auto& ev = events_[event_idx];
+    if (ev.depth == 0) return -1;
+
+    const auto* proc = find_process(ev.pid);
+    if (!proc) return -1;
+    const auto* thread = proc->find_thread(ev.tid);
+    if (!thread) return -1;
+
+    uint8_t parent_depth = ev.depth - 1;
+    for (uint32_t idx : thread->event_indices) {
+        const auto& candidate = events_[idx];
+        if (candidate.depth == parent_depth && candidate.ts <= ev.ts && candidate.end_ts() >= ev.end_ts()) {
+            return (int32_t)idx;
+        }
+    }
+    return -1;
+}
+
+std::vector<uint32_t> TraceModel::build_call_stack(uint32_t event_idx) const {
+    std::vector<uint32_t> stack;
+    if (event_idx >= events_.size()) return stack;
+
+    stack.push_back(event_idx);
+    uint32_t current = event_idx;
+    while (true) {
+        int32_t parent = find_parent_event(current);
+        if (parent < 0) break;
+        stack.push_back((uint32_t)parent);
+        current = (uint32_t)parent;
+    }
+    // Reverse so root is first, selected event is last
+    std::reverse(stack.begin(), stack.end());
+    return stack;
+}

@@ -202,30 +202,53 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
     ImGui::Text("Depth: %d", ev.depth);
 
-    // Parent button — find the enclosing event at depth-1 on the same thread
+    // Parent button
     if (ev.depth > 0) {
-        for (const auto& proc : model.processes_) {
-            if (proc.pid != ev.pid) continue;
-            for (const auto& thread : proc.threads) {
-                if (thread.tid != ev.tid) continue;
-                int32_t parent_idx = -1;
-                for (uint32_t idx : thread.event_indices) {
-                    const auto& candidate = model.events_[idx];
-                    if (candidate.depth == ev.depth - 1 && candidate.ts <= ev.ts && candidate.end_ts() >= ev.end_ts()) {
-                        parent_idx = (int32_t)idx;
-                        break;
-                    }
-                }
-                if (parent_idx >= 0) {
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Parent")) {
-                        view.navigate_to_event(parent_idx, model.events_[parent_idx]);
-                    }
-                }
-                goto done_parent;
+        int32_t parent_idx = model.find_parent_event(view.selected_event_idx);
+        if (parent_idx >= 0) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Parent")) {
+                view.navigate_to_event(parent_idx, model.events_[parent_idx]);
             }
         }
-    done_parent:;
+    }
+
+    // Call Stack
+    if (ev.depth > 0) {
+        ImGui::Separator();
+        auto stack = model.build_call_stack(view.selected_event_idx);
+        char stack_header[64];
+        snprintf(stack_header, sizeof(stack_header), "Call Stack (%d frames)", (int)stack.size());
+        if (ImGui::CollapsingHeader(stack_header, ImGuiTreeNodeFlags_DefaultOpen)) {
+            for (int i = 0; i < (int)stack.size(); i++) {
+                uint32_t idx = stack[i];
+                const auto& frame = model.events_[idx];
+                bool is_selected = (idx == (uint32_t)view.selected_event_idx);
+
+                // Indent to show depth visually
+                char id_buf[32];
+                snprintf(id_buf, sizeof(id_buf), "##frame%d", i);
+                if (ImGui::Selectable(id_buf, is_selected, ImGuiSelectableFlags_AllowOverlap)) {
+                    if (!is_selected) {
+                        view.navigate_to_event(idx, frame);
+                    }
+                }
+                ImGui::SameLine();
+
+                // Show depth prefix and name
+                if (is_selected) {
+                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.4f, 1.0f), "%*s%s", i * 2, "",
+                                       model.get_string(frame.name_idx).c_str());
+                } else {
+                    ImGui::Text("%*s%s", i * 2, "", model.get_string(frame.name_idx).c_str());
+                }
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+                    char tip_buf[128];
+                    format_time(frame.dur, tip_buf, sizeof(tip_buf));
+                    ImGui::SetTooltip("%s (%s)", model.get_string(frame.name_idx).c_str(), tip_buf);
+                }
+            }
+        }
     }
 
     // Args

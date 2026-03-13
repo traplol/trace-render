@@ -229,3 +229,92 @@ TEST_F(TraceModelTest, BuildIndexCounterSeriesMinMax) {
     EXPECT_DOUBLE_EQ(model.counter_series_[0].min_val, 30.0);
     EXPECT_DOUBLE_EQ(model.counter_series_[0].max_val, 80.0);
 }
+
+// --- Helper to build a nested call stack model ---
+// Creates events: root (depth 0) -> mid (depth 1) -> leaf (depth 2)
+static TraceModel make_nested_model() {
+    TraceModel m;
+    m.intern_string("");  // idx 0
+
+    auto& proc = m.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    // Event 0: root, ts=100, dur=500
+    TraceEvent root;
+    root.ph = Phase::Complete;
+    root.name_idx = m.intern_string("root");
+    root.ts = 100.0;
+    root.dur = 500.0;
+    root.pid = 1;
+    root.tid = 1;
+    m.events_.push_back(root);
+    thread.event_indices.push_back(0);
+
+    // Event 1: mid, ts=150, dur=300
+    TraceEvent mid;
+    mid.ph = Phase::Complete;
+    mid.name_idx = m.intern_string("mid");
+    mid.ts = 150.0;
+    mid.dur = 300.0;
+    mid.pid = 1;
+    mid.tid = 1;
+    m.events_.push_back(mid);
+    thread.event_indices.push_back(1);
+
+    // Event 2: leaf, ts=200, dur=100
+    TraceEvent leaf;
+    leaf.ph = Phase::Complete;
+    leaf.name_idx = m.intern_string("leaf");
+    leaf.ts = 200.0;
+    leaf.dur = 100.0;
+    leaf.pid = 1;
+    leaf.tid = 1;
+    m.events_.push_back(leaf);
+    thread.event_indices.push_back(2);
+
+    m.build_index();
+    return m;
+}
+
+TEST(CallStack, FindParentEventReturnsParent) {
+    auto model = make_nested_model();
+    // leaf (idx 2) parent should be mid (idx 1)
+    EXPECT_EQ(model.find_parent_event(2), 1);
+    // mid (idx 1) parent should be root (idx 0)
+    EXPECT_EQ(model.find_parent_event(1), 0);
+}
+
+TEST(CallStack, FindParentEventReturnsMinusOneForRoot) {
+    auto model = make_nested_model();
+    EXPECT_EQ(model.find_parent_event(0), -1);
+}
+
+TEST(CallStack, FindParentEventOutOfBounds) {
+    auto model = make_nested_model();
+    EXPECT_EQ(model.find_parent_event(999), -1);
+}
+
+TEST(CallStack, BuildCallStackFromLeaf) {
+    auto model = make_nested_model();
+    auto stack = model.build_call_stack(2);
+    ASSERT_EQ(stack.size(), 3u);
+    // Root first, leaf last
+    EXPECT_EQ(model.get_string(model.events_[stack[0]].name_idx), "root");
+    EXPECT_EQ(model.get_string(model.events_[stack[1]].name_idx), "mid");
+    EXPECT_EQ(model.get_string(model.events_[stack[2]].name_idx), "leaf");
+}
+
+TEST(CallStack, BuildCallStackFromMid) {
+    auto model = make_nested_model();
+    auto stack = model.build_call_stack(1);
+    ASSERT_EQ(stack.size(), 2u);
+    EXPECT_EQ(model.get_string(model.events_[stack[0]].name_idx), "root");
+    EXPECT_EQ(model.get_string(model.events_[stack[1]].name_idx), "mid");
+}
+
+TEST(CallStack, BuildCallStackFromRoot) {
+    auto model = make_nested_model();
+    auto stack = model.build_call_stack(0);
+    ASSERT_EQ(stack.size(), 1u);
+    EXPECT_EQ(model.get_string(model.events_[stack[0]].name_idx), "root");
+}
