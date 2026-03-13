@@ -3,6 +3,7 @@
 #include "ui/view_state.h"
 #include <string>
 #include <vector>
+#include <nlohmann/json_fwd.hpp>
 
 // Extract file and line from an event's args JSON.
 // Looks for common field names: file/src_file/fileName + line/src_line/lineNumber.
@@ -19,6 +20,9 @@ std::string remap_source_path(const std::string& trace_path, const std::string& 
 class SourcePanel {
 public:
     void render(const TraceModel& model, ViewState& view);
+
+    nlohmann::json save_settings() const;
+    void load_settings(const nlohmann::json& j);
 
 private:
     // Path remapping: strip this prefix from trace paths, replace with local base

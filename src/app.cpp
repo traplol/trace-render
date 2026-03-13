@@ -436,6 +436,7 @@ void App::save_settings() {
     j["dark_theme"] = dark_theme_;
     j["vsync"] = vsync_;
     j["query_tabs"] = stats_.save_tabs();
+    j["source_panel"] = source_.save_settings();
 
     std::ofstream f(path);
     if (f.is_open()) {
@@ -471,6 +472,9 @@ void App::load_settings() {
         if (j.contains("vsync")) vsync_ = j["vsync"].get<bool>();
         if (j.contains("query_tabs")) {
             stats_.load_tabs(j["query_tabs"]);
+        }
+        if (j.contains("source_panel")) {
+            source_.load_settings(j["source_panel"]);
         }
     } catch (...) {
         // Ignore malformed settings file

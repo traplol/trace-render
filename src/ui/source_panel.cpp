@@ -92,6 +92,22 @@ std::string remap_source_path(const std::string& trace_path, const std::string& 
     return path;
 }
 
+json SourcePanel::save_settings() const {
+    json j;
+    j["strip_prefix"] = strip_prefix_;
+    j["local_base"] = local_base_;
+    return j;
+}
+
+void SourcePanel::load_settings(const json& j) {
+    if (j.contains("strip_prefix")) {
+        snprintf(strip_prefix_, sizeof(strip_prefix_), "%s", j["strip_prefix"].get<std::string>().c_str());
+    }
+    if (j.contains("local_base")) {
+        snprintf(local_base_, sizeof(local_base_), "%s", j["local_base"].get<std::string>().c_str());
+    }
+}
+
 void SourcePanel::load_file(const std::string& path) {
     cached_lines_.clear();
     cached_error_.clear();
