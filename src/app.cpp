@@ -1,4 +1,5 @@
 #include "app.h"
+#include "platform/platform.h"
 #include "tracing.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -15,192 +16,35 @@ void App::init(SDL_Window* window) {
     TRACE_FUNCTION_CAT("app");
     window_ = window;
     toolbar_.set_window(window);
-#ifndef __EMSCRIPTEN__
     load_settings();
-    SDL_GL_SetSwapInterval(vsync_ ? 1 : 0);
-#endif
+    if (platform::supports_vsync()) {
+        SDL_GL_SetSwapInterval(vsync_ ? 1 : 0);
+    }
 }
 
 void App::shutdown() {
     TRACE_FUNCTION_CAT("app");
-#ifndef __EMSCRIPTEN__
-    if (load_thread_.joinable()) load_thread_.join();
-#endif
+    loader_.join();
     save_settings();
 }
 
-#ifdef __EMSCRIPTEN__
-
 void App::open_file(const std::string& path) {
-    // In WASM, open_file loads synchronously (no threads)
-    if (loading_) return;
-
-    loading_filename_ = path;
-    auto pos = path.find_last_of("/\\");
-    if (pos != std::string::npos) loading_filename_ = path.substr(pos + 1);
-
-    status_message_ = "Loading: " + loading_filename_;
-
-    TraceParser parser;
-    parser.time_unit_ns = view_.time_unit_ns;
-
-    TraceModel new_model;
-    bool ok = parser.parse(path, new_model);
-
-    if (ok) {
-        model_ = std::move(new_model);
-        query_db_.load(model_);
-        has_trace_ = true;
-        view_.view_start_ts = 0.0;
-        view_.view_end_ts = 1000.0;
-        view_.selected_event_idx = -1;
-        view_.hidden_pids.clear();
-        view_.hidden_tids.clear();
-        view_.hidden_cats.clear();
-        view_.search_query.clear();
-        view_.search_results.clear();
-        view_.search_current = -1;
-        if (model_.min_ts_ < model_.max_ts_) {
-            view_.zoom_to_fit(model_.min_ts_, model_.max_ts_);
-        }
-        status_message_ = "Loaded: " + loading_filename_ + " (" + std::to_string(model_.events_.size()) + " events, " +
-                          std::to_string(model_.processes_.size()) + " processes)";
-    } else {
-        status_message_ = "Error: " + parser.error_message;
-        has_trace_ = false;
-    }
+    if (loader_.is_loading()) return;
+    loader_.load_file(path, view_.time_unit_ns);
+    status_message_ = "Loading: " + loader_.filename();
 }
 
 void App::open_buffer(const char* data, size_t size, const std::string& filename) {
-    if (loading_) return;
-
-    loading_filename_ = filename;
-    status_message_ = "Loading: " + loading_filename_;
-
-    TraceParser parser;
-    parser.time_unit_ns = view_.time_unit_ns;
-
-    TraceModel new_model;
-    bool ok = parser.parse_buffer(data, size, new_model);
-
-    if (ok) {
-        model_ = std::move(new_model);
-        query_db_.load(model_);
-        has_trace_ = true;
-        view_.view_start_ts = 0.0;
-        view_.view_end_ts = 1000.0;
-        view_.selected_event_idx = -1;
-        view_.hidden_pids.clear();
-        view_.hidden_tids.clear();
-        view_.hidden_cats.clear();
-        view_.search_query.clear();
-        view_.search_results.clear();
-        view_.search_current = -1;
-        if (model_.min_ts_ < model_.max_ts_) {
-            view_.zoom_to_fit(model_.min_ts_, model_.max_ts_);
-        }
-        status_message_ = "Loaded: " + loading_filename_ + " (" + std::to_string(model_.events_.size()) + " events, " +
-                          std::to_string(model_.processes_.size()) + " processes)";
-    } else {
-        status_message_ = "Error: " + parser.error_message;
-        has_trace_ = false;
-    }
+    if (loader_.is_loading()) return;
+    loader_.load_buffer(data, size, filename, view_.time_unit_ns);
+    status_message_ = "Loading: " + loader_.filename();
 }
-
-#else  // !__EMSCRIPTEN__
-
-void App::open_buffer(const char* data, size_t size, const std::string& filename) {
-    (void)data;
-    (void)size;
-    (void)filename;
-    // Desktop uses open_file with filesystem paths
-}
-
-void App::open_file(const std::string& path) {
-    // Don't start a new load while one is in progress
-    if (loading_) return;
-
-    // Join any previous load thread
-    if (load_thread_.joinable()) load_thread_.join();
-
-    // Extract filename for display
-    loading_filename_ = path;
-    auto pos = path.find_last_of("/\\");
-    if (pos != std::string::npos) loading_filename_ = path.substr(pos + 1);
-
-    status_message_ = "Loading: " + loading_filename_;
-    loading_ = true;
-    load_progress_ = 0.0f;
-    load_phase_progress_ = 0.0f;
-    load_finished_ = false;
-    load_success_ = false;
-    load_error_.clear();
-
-    bool time_ns = view_.time_unit_ns;
-
-    load_thread_ = std::thread([this, path, time_ns]() {
-        TRACE_SCOPE_CAT("OpenFile", "io");
-
-        TraceParser parser;
-        // Phase weights for global progress: Reading 0-25%, Parsing 25-60%, Building index 60-80%
-        parser.on_progress = [this](const char* phase, float p) {
-            {
-                std::lock_guard<std::mutex> lock(phase_mutex_);
-                loading_phase_ = phase;
-            }
-            load_phase_progress_.store(p, std::memory_order_relaxed);
-
-            float global = 0.0f;
-            if (std::string_view(phase) == "Reading file") {
-                global = p * 0.25f;
-            } else if (std::string_view(phase) == "Parsing JSON") {
-                global = 0.25f + p * 0.35f;
-            } else if (std::string_view(phase) == "Building index") {
-                global = 0.60f + p * 0.20f;
-            } else {
-                global = 0.80f + p * 0.10f;
-            }
-            load_progress_.store(global, std::memory_order_relaxed);
-        };
-        parser.time_unit_ns = time_ns;
-
-        TraceModel new_model;
-        bool ok = parser.parse(path, new_model);
-
-        if (ok) {
-            // Build query DB on background thread too
-            {
-                std::lock_guard<std::mutex> lock(phase_mutex_);
-                loading_phase_ = "Building query DB";
-            }
-            load_phase_progress_.store(0.0f, std::memory_order_relaxed);
-            load_progress_.store(0.90f, std::memory_order_relaxed);
-        }
-
-        std::lock_guard<std::mutex> lock(load_mutex_);
-        if (ok) {
-            model_ = std::move(new_model);
-            query_db_.load(model_);
-            load_success_ = true;
-        } else {
-            load_success_ = false;
-            load_error_ = parser.error_message;
-        }
-        load_finished_ = true;
-    });
-}
-
-#endif  // __EMSCRIPTEN__
-
-#ifndef __EMSCRIPTEN__
 
 void App::finish_load() {
     TRACE_FUNCTION_CAT("app");
-    if (load_thread_.joinable()) load_thread_.join();
-
-    std::lock_guard<std::mutex> lock(load_mutex_);
-
-    if (load_success_) {
+    if (loader_.success()) {
+        model_ = loader_.take_model();
+        query_db_.load(model_);
         has_trace_ = true;
         view_.view_start_ts = 0.0;
         view_.view_end_ts = 1000.0;
@@ -214,23 +58,17 @@ void App::finish_load() {
         if (model_.min_ts_ < model_.max_ts_) {
             view_.zoom_to_fit(model_.min_ts_, model_.max_ts_);
         }
-        status_message_ = "Loaded: " + loading_filename_ + " (" + std::to_string(model_.events_.size()) + " events, " +
+        status_message_ = "Loaded: " + loader_.filename() + " (" + std::to_string(model_.events_.size()) + " events, " +
                           std::to_string(model_.processes_.size()) + " processes)";
     } else {
-        status_message_ = "Error: " + load_error_;
+        status_message_ = "Error: " + loader_.error();
         has_trace_ = false;
     }
-
-    loading_ = false;
-    load_finished_ = false;
 }
-
-#endif  // !__EMSCRIPTEN__
 
 void App::render_loading_overlay() {
     TRACE_FUNCTION_CAT("ui");
     ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImVec2 center = vp->GetCenter();
 
     // Semi-transparent fullscreen overlay
     ImGui::SetNextWindowPos(vp->WorkPos);
@@ -242,17 +80,8 @@ void App::render_loading_overlay() {
                      ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
     ImGui::PopStyleColor();
 
-#ifdef __EMSCRIPTEN__
-    float progress = load_progress_;
-    std::string phase = loading_phase_;
-#else
-    float progress = load_progress_.load(std::memory_order_relaxed);
-    std::string phase;
-    {
-        std::lock_guard<std::mutex> lock(phase_mutex_);
-        phase = loading_phase_;
-    }
-#endif
+    float progress = loader_.progress();
+    std::string phase = loader_.phase();
 
     // Center the loading content
     float content_w = 600.0f;
@@ -267,7 +96,7 @@ void App::render_loading_overlay() {
     int frame = (int)(time * 4.0f) % 4;
 
     char loading_text[256];
-    snprintf(loading_text, sizeof(loading_text), "%s  Loading %s", spinner_frames[frame], loading_filename_.c_str());
+    snprintf(loading_text, sizeof(loading_text), "%s  Loading %s", spinner_frames[frame], loader_.filename().c_str());
     ImVec2 text_size = ImGui::CalcTextSize(loading_text);
     ImGui::SetCursorPosX((vp->WorkSize.x - text_size.x) / 2);
     ImGui::Text("%s", loading_text);
@@ -295,12 +124,20 @@ void App::render_loading_overlay() {
 void App::update() {
     TRACE_SCOPE("App::update");
 
-#ifndef __EMSCRIPTEN__
     // Check if background load is complete
-    if (load_finished_.load(std::memory_order_acquire)) {
+    if (loader_.poll_finished()) {
         finish_load();
     }
-#endif
+
+    // Check for pending files from platform (dialog, drag-and-drop)
+    if (platform::has_pending_file()) {
+        auto f = platform::take_pending_file();
+        if (!f.data.empty()) {
+            open_buffer(f.data.data(), f.data.size(), f.name);
+        } else {
+            open_file(f.path);
+        }
+    }
 
     // Set up dockspace over the entire viewport
     ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -360,16 +197,6 @@ void App::update() {
 
     // Menu bar / toolbar
     toolbar_.render(model_, view_);
-    if (toolbar_.file_open_requested()) {
-        open_file(toolbar_.file_path());
-        toolbar_.clear_request();
-    }
-#ifdef __EMSCRIPTEN__
-    if (toolbar_.file_data_ready()) {
-        open_buffer(toolbar_.file_data().data(), toolbar_.file_data().size(), toolbar_.file_name());
-        toolbar_.clear_file_data();
-    }
-#endif
     if (toolbar_.settings_requested()) {
         show_settings_ = true;
         toolbar_.clear_settings_request();
@@ -382,7 +209,7 @@ void App::update() {
         render_settings_modal();
     }
 
-    if (has_trace_ && !loading_) {
+    if (has_trace_ && !loader_.is_loading()) {
         timeline_.render(model_, view_);
         detail_.render(model_, view_);
         search_.render(model_, view_);
@@ -395,7 +222,7 @@ void App::update() {
     } else {
         // Welcome screen
         ImGui::Begin("Timeline");
-        if (!loading_) {
+        if (!loader_.is_loading()) {
             ImVec2 avail = ImGui::GetContentRegionAvail();
             ImVec2 text_size = ImGui::CalcTextSize("Open a Chrome trace file (Ctrl+O) or drag & drop");
             ImGui::SetCursorPos(ImVec2((avail.x - text_size.x) / 2, (avail.y - text_size.y) / 2));
@@ -431,7 +258,7 @@ void App::update() {
     }
 
     // Loading overlay (drawn on top of everything)
-    if (loading_) {
+    if (loader_.is_loading()) {
         render_loading_overlay();
     }
 
@@ -446,28 +273,18 @@ void App::update() {
                      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings);
         ImGui::Text("%s", status_message_.c_str());
-        if (loading_) {
-#ifdef __EMSCRIPTEN__
-            std::string phase = loading_phase_;
-            float phase_progress = load_phase_progress_;
-#else
-            std::string phase;
-            {
-                std::lock_guard<std::mutex> lock(phase_mutex_);
-                phase = loading_phase_;
-            }
-            float phase_progress = load_phase_progress_.load(std::memory_order_relaxed);
-#endif
-            if (!phase.empty()) {
+        if (loader_.is_loading()) {
+            std::string ph = loader_.phase();
+            if (!ph.empty()) {
                 ImGui::SameLine();
                 ImGui::TextDisabled("|");
                 ImGui::SameLine();
-                ImGui::Text("%s", phase.c_str());
+                ImGui::Text("%s", ph.c_str());
             }
             ImGui::SameLine();
-            ImGui::ProgressBar(phase_progress, ImVec2(150, 0));
+            ImGui::ProgressBar(loader_.phase_progress(), ImVec2(150, 0));
         }
-        if (has_trace_ && !loading_ && view_.selected_event_idx >= 0) {
+        if (has_trace_ && !loader_.is_loading() && view_.selected_event_idx >= 0) {
             ImGui::SameLine(ImGui::GetWindowWidth() - 900);
             const auto& ev = model_.events_[view_.selected_event_idx];
             ImGui::Text("Selected: %s", model_.get_string(ev.name_idx).c_str());
@@ -509,11 +326,11 @@ void App::render_settings_modal() {
         ImGui::ColorEdit4("Selection Border Color", view_.sel_border_color,
                           ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 
-#ifndef __EMSCRIPTEN__
-        if (ImGui::Checkbox("VSync", &vsync_)) {
-            SDL_GL_SetSwapInterval(vsync_ ? 1 : 0);
+        if (platform::supports_vsync()) {
+            if (ImGui::Checkbox("VSync", &vsync_)) {
+                SDL_GL_SetSwapInterval(vsync_ ? 1 : 0);
+            }
         }
-#endif
 
         ImGui::SeparatorText("Parser");
 
@@ -547,22 +364,11 @@ void App::render_settings_modal() {
     }
 }
 
-#ifndef __EMSCRIPTEN__
-std::string App::settings_path() const {
-    std::string dir;
-    if (const char* xdg = std::getenv("XDG_CONFIG_HOME")) {
-        dir = std::string(xdg) + "/perfetto-imgui";
-    } else if (const char* home = std::getenv("HOME")) {
-        dir = std::string(home) + "/.config/perfetto-imgui";
-    } else {
-        dir = ".";
-    }
-    return dir + "/settings.json";
-}
-
 void App::save_settings() {
     TRACE_FUNCTION_CAT("io");
-    std::string path = settings_path();
+    std::string path = platform::settings_path();
+    if (path.empty()) return;
+
     std::filesystem::create_directories(std::filesystem::path(path).parent_path());
 
     nlohmann::json j;
@@ -591,7 +397,9 @@ void App::save_settings() {
 
 void App::load_settings() {
     TRACE_FUNCTION_CAT("io");
-    std::string path = settings_path();
+    std::string path = platform::settings_path();
+    if (path.empty()) return;
+
     std::ifstream f(path);
     if (!f.is_open()) return;
 
@@ -630,13 +438,3 @@ void App::load_settings() {
         // Ignore malformed settings file
     }
 }
-
-#else  // __EMSCRIPTEN__
-
-std::string App::settings_path() const {
-    return "";
-}
-void App::save_settings() {}
-void App::load_settings() {}
-
-#endif  // __EMSCRIPTEN__

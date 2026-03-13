@@ -75,6 +75,12 @@ endif()
 
 # --- Application ---
 file(GLOB_RECURSE APP_SOURCES src/*.cpp)
+# Exclude the wrong platform's source files
+if(EMSCRIPTEN)
+  list(FILTER APP_SOURCES EXCLUDE REGEX "platform_desktop\\.cpp$|file_loader_desktop\\.cpp$")
+else()
+  list(FILTER APP_SOURCES EXCLUDE REGEX "platform_wasm\\.cpp$|file_loader_wasm\\.cpp$")
+endif()
 add_executable(perfetto_imgui ${APP_SOURCES})
 target_include_directories(perfetto_imgui PRIVATE src)
 
@@ -127,6 +133,7 @@ if(NOT EMSCRIPTEN)
     # Collect non-main source files for linking with tests
     file(GLOB_RECURSE LIB_SOURCES src/*.cpp)
     list(FILTER LIB_SOURCES EXCLUDE REGEX "src/main\\.cpp$")
+    list(FILTER LIB_SOURCES EXCLUDE REGEX "platform_wasm\\.cpp$|file_loader_wasm\\.cpp$")
 
     file(GLOB TEST_SOURCES tests/*.cpp)
     add_executable(perfetto_tests ${TEST_SOURCES} ${LIB_SOURCES})

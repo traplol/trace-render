@@ -1,6 +1,7 @@
 #pragma once
 #include "model/trace_model.h"
 #include "parser/trace_parser.h"
+#include "platform/file_loader.h"
 #include "ui/view_state.h"
 #include "ui/toolbar.h"
 #include "ui/timeline_view.h"
@@ -15,11 +16,6 @@
 #include "ui/source_panel.h"
 #include "model/query_db.h"
 #include <string>
-#ifndef __EMSCRIPTEN__
-#include <thread>
-#include <atomic>
-#include <mutex>
-#endif
 
 struct SDL_Window;
 
@@ -37,7 +33,7 @@ public:
 private:
     TraceModel model_;
     ViewState view_;
-    TraceParser parser_;
+    FileLoader loader_;
 
     Toolbar toolbar_;
     TimelineView timeline_;
@@ -58,30 +54,9 @@ private:
     bool vsync_ = true;
     SDL_Window* window_ = nullptr;
 
-    // Background loading
-#ifdef __EMSCRIPTEN__
-    bool loading_ = false;
-    float load_progress_ = 0.0f;
-    float load_phase_progress_ = 0.0f;
-    bool load_finished_ = false;
-#else
-    std::atomic<bool> loading_{false};
-    std::atomic<float> load_progress_{0.0f};        // global progress 0-1
-    std::atomic<float> load_phase_progress_{0.0f};  // current phase progress 0-1
-    std::atomic<bool> load_finished_{false};
-    std::thread load_thread_;
-    std::mutex load_mutex_;
-    std::mutex phase_mutex_;
-#endif
-    bool load_success_ = false;
-    std::string load_error_;
-    std::string loading_filename_;
-    std::string loading_phase_;
-
     void finish_load();
     void render_loading_overlay();
     void render_settings_modal();
     void load_settings();
     void save_settings();
-    std::string settings_path() const;
 };
