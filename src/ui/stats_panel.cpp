@@ -93,8 +93,7 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
 
             if (ImGui::BeginTabItem(tab_label, p_open)) {
                 active_tab_ = t;
-                ImGui::BeginChild("##tabcontent", ImVec2(0, 0), ImGuiChildFlags_None,
-                                  ImGuiWindowFlags_HorizontalScrollbar);
+                ImGui::BeginChild("##tabcontent", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_None);
                 render_tab(tabs_[t], model, db, view);
                 ImGui::EndChild();
                 ImGui::EndTabItem();
