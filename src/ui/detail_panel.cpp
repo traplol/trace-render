@@ -213,19 +213,21 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
         }
     }
 
-    // Call Stack
-    if (ev.depth > 0) {
-        ImGui::Separator();
-        auto stack = model.build_call_stack(view.selected_event_idx);
-        char stack_header[64];
-        snprintf(stack_header, sizeof(stack_header), "Call Stack (%d frames)", (int)stack.size());
-        if (ImGui::CollapsingHeader(stack_header, ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Separator();
+
+    // --- Tab bar for Call Stack / Children / Arguments ---
+    if (ImGui::BeginTabBar("##DetailTabs")) {
+        // Call Stack tab
+        bool has_stack = (ev.depth > 0);
+        char stack_label[32];
+        snprintf(stack_label, sizeof(stack_label), "Call Stack (%d)###Stack", ev.depth + 1);
+        if (has_stack && ImGui::BeginTabItem(stack_label)) {
+            auto stack = model.build_call_stack(view.selected_event_idx);
             for (int i = 0; i < (int)stack.size(); i++) {
                 uint32_t idx = stack[i];
                 const auto& frame = model.events_[idx];
                 bool is_selected = (idx == (uint32_t)view.selected_event_idx);
 
-                // Indent to show depth visually
                 char id_buf[32];
                 snprintf(id_buf, sizeof(id_buf), "##frame%d", i);
                 if (ImGui::Selectable(id_buf, is_selected, ImGuiSelectableFlags_AllowOverlap)) {
@@ -235,7 +237,6 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 }
                 ImGui::SameLine();
 
-                // Show depth prefix and name
                 if (is_selected) {
                     ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.4f, 1.0f), "%*s%s", i * 2, "",
                                        model.get_string(frame.name_idx).c_str());
@@ -248,279 +249,278 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                     ImGui::SetTooltip("%s (%s)", model.get_string(frame.name_idx).c_str(), tip_buf);
                 }
             }
-        }
-    }
-
-    // Args
-    if (ev.args_idx != UINT32_MAX && ev.args_idx < model.args_.size()) {
-        ImGui::Separator();
-        if (ImGui::CollapsingHeader("Arguments", ImGuiTreeNodeFlags_DefaultOpen)) {
-            try {
-                auto args = nlohmann::json::parse(model.args_[ev.args_idx]);
-                render_json_value(args);
-            } catch (...) {
-                ImGui::TextDisabled("(could not parse args)");
-                ImGui::TextWrapped("%s", model.args_[ev.args_idx].c_str());
-            }
-        }
-    }
-
-    // Children table (re-fetch ev in case Parent button changed selection)
-    const auto& current_ev = model.events_[view.selected_event_idx];
-    if (current_ev.dur > 0) {
-        // Re-check children cache in case Parent button changed selection
-        if (cached_event_idx_ != view.selected_event_idx || cached_descendants_flag_ != include_all_descendants_) {
-            cached_event_idx_ = view.selected_event_idx;
-            cached_descendants_flag_ = include_all_descendants_;
-            rebuild_children(model, current_ev);
-            children_dirty_ = true;
+            ImGui::EndTabItem();
         }
 
-        // Rebuild aggregated view when grouping flag changes or children changed
-        if (cached_group_flag_ != group_by_name_ || children_dirty_) {
-            cached_group_flag_ = group_by_name_;
-            if (group_by_name_) {
-                rebuild_aggregated(model, current_ev.dur);
-            }
-            rebuild_filter(model);
-        }
+        // Children tab
+        {
+            // Re-check children cache in case Parent button changed selection
+            const auto& current_ev = model.events_[view.selected_event_idx];
+            if (current_ev.dur > 0) {
+                if (cached_event_idx_ != view.selected_event_idx ||
+                    cached_descendants_flag_ != include_all_descendants_) {
+                    cached_event_idx_ = view.selected_event_idx;
+                    cached_descendants_flag_ = include_all_descendants_;
+                    rebuild_children(model, current_ev);
+                    children_dirty_ = true;
+                }
 
-        if (!children_.empty()) {
-            ImGui::Separator();
-            char header_buf[128];
-            if (group_by_name_) {
-                snprintf(header_buf, sizeof(header_buf), "Children (%zu events, %zu unique)", children_.size(),
-                         aggregated_.size());
-            } else {
-                snprintf(header_buf, sizeof(header_buf), "Children (%zu)", children_.size());
-            }
-            if (ImGui::CollapsingHeader(header_buf, ImGuiTreeNodeFlags_DefaultOpen)) {
-                ImGui::Checkbox("Include all descendants", &include_all_descendants_);
-                ImGui::SameLine();
-                ImGui::Checkbox("Group by name", &group_by_name_);
-
-                ImGui::SetNextItemWidth(-1);
-                if (ImGui::InputTextWithHint("##filter", "Filter by name...", filter_buf_, sizeof(filter_buf_))) {
+                if (cached_group_flag_ != group_by_name_ || children_dirty_) {
+                    cached_group_flag_ = group_by_name_;
+                    if (group_by_name_) {
+                        rebuild_aggregated(model, current_ev.dur);
+                    }
                     rebuild_filter(model);
                 }
-                if (filter_buf_[0] != '\0') {
-                    size_t shown = group_by_name_ ? filtered_aggregated_.size() : filtered_children_.size();
-                    size_t total = group_by_name_ ? aggregated_.size() : children_.size();
-                    ImGui::TextDisabled("Showing %zu / %zu", shown, total);
-                }
+            }
 
-                ImGui::Spacing();
-
-                if (group_by_name_) {
-                    // --- Aggregated table ---
-                    if (ImGui::BeginTable("AggChildrenTable", 7,
-                                          ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg |
-                                              ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV |
-                                              ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
-                                          ImVec2(0, ImGui::GetContentRegionAvail().y))) {
-                        ImGui::TableSetupScrollFreeze(0, 1);
-                        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_None, 0.0f, 0);
-                        ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_None, 0.0f, 1);
-                        ImGui::TableSetupColumn(
-                            "Total", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending,
-                            0.0f, 2);
-                        ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_None, 0.0f, 3);
-                        ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_None, 0.0f, 4);
-                        ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_None, 0.0f, 5);
-                        ImGui::TableSetupColumn("%", ImGuiTableColumnFlags_None, 0.0f, 6);
-                        ImGui::TableHeadersRow();
-
-                        if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
-                            if (children_dirty_) {
-                                sort_specs->SpecsDirty = true;
-                                children_dirty_ = false;
-                            }
-                            if (sort_specs->SpecsDirty) {
-                                sort_specs->SpecsDirty = false;
-                                if (sort_specs->SpecsCount > 0) {
-                                    const auto& spec = sort_specs->Specs[0];
-                                    bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
-                                    std::sort(filtered_aggregated_.begin(), filtered_aggregated_.end(),
-                                              [&](size_t ai, size_t bi) {
-                                                  const auto& a = aggregated_[ai];
-                                                  const auto& b = aggregated_[bi];
-                                                  int cmp = 0;
-                                                  switch (spec.ColumnUserID) {
-                                                      case 0: {
-                                                          const auto& na = model.get_string(a.name_idx);
-                                                          const auto& nb = model.get_string(b.name_idx);
-                                                          cmp = na.compare(nb);
-                                                          break;
-                                                      }
-                                                      case 1:
-                                                          cmp = (a.count < b.count) ? -1 : (a.count > b.count) ? 1 : 0;
-                                                          break;
-                                                      case 2:
-                                                          cmp = (a.total_dur < b.total_dur)   ? -1
-                                                                : (a.total_dur > b.total_dur) ? 1
-                                                                                              : 0;
-                                                          break;
-                                                      case 3:
-                                                          cmp = (a.avg_dur < b.avg_dur)   ? -1
-                                                                : (a.avg_dur > b.avg_dur) ? 1
-                                                                                          : 0;
-                                                          break;
-                                                      case 4:
-                                                          cmp = (a.min_dur < b.min_dur)   ? -1
-                                                                : (a.min_dur > b.min_dur) ? 1
-                                                                                          : 0;
-                                                          break;
-                                                      case 5:
-                                                          cmp = (a.max_dur < b.max_dur)   ? -1
-                                                                : (a.max_dur > b.max_dur) ? 1
-                                                                                          : 0;
-                                                          break;
-                                                      case 6:
-                                                          cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0;
-                                                          break;
-                                                  }
-                                                  return asc ? (cmp < 0) : (cmp > 0);
-                                              });
-                                }
-                            }
-                        }
-
-                        char buf[64];
-                        ImGuiListClipper clipper;
-                        clipper.Begin((int)filtered_aggregated_.size());
-                        while (clipper.Step()) {
-                            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                                const auto& ag = aggregated_[filtered_aggregated_[i]];
-                                ImGui::TableNextRow();
-
-                                ImGui::TableNextColumn();
-                                char id_buf[32];
-                                snprintf(id_buf, sizeof(id_buf), "##ag%d", i);
-                                if (ImGui::Selectable(
-                                        id_buf, false,
-                                        ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
-                                    view.navigate_to_event(ag.longest_idx, model.events_[ag.longest_idx]);
-                                }
-                                ImGui::SameLine();
-                                ImGui::TextUnformatted(model.get_string(ag.name_idx).c_str());
-                                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
-                                    ImGui::SetTooltip("%s", model.get_string(ag.name_idx).c_str());
-
-                                ImGui::TableNextColumn();
-                                ImGui::Text("%u", ag.count);
-
-                                ImGui::TableNextColumn();
-                                format_time(ag.total_dur, buf, sizeof(buf));
-                                ImGui::TextUnformatted(buf);
-
-                                ImGui::TableNextColumn();
-                                format_time(ag.avg_dur, buf, sizeof(buf));
-                                ImGui::TextUnformatted(buf);
-
-                                ImGui::TableNextColumn();
-                                format_time(ag.min_dur, buf, sizeof(buf));
-                                ImGui::TextUnformatted(buf);
-
-                                ImGui::TableNextColumn();
-                                format_time(ag.max_dur, buf, sizeof(buf));
-                                ImGui::TextUnformatted(buf);
-
-                                ImGui::TableNextColumn();
-                                render_heat_bar(ag.pct);
-                            }
-                        }
-
-                        ImGui::EndTable();
-                    }
+            char children_label[32];
+            snprintf(children_label, sizeof(children_label), "Children (%zu)###Children", children_.size());
+            if (ImGui::BeginTabItem(children_label)) {
+                if (children_.empty()) {
+                    ImGui::TextDisabled("No children.");
                 } else {
-                    // --- Individual children table (with clipper) ---
-                    if (ImGui::BeginTable("ChildrenTable", 3,
-                                          ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg |
-                                              ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV |
-                                              ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
-                                          ImVec2(0, ImGui::GetContentRegionAvail().y))) {
-                        ImGui::TableSetupScrollFreeze(0, 1);
-                        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_None, 0.0f, 0);
-                        ImGui::TableSetupColumn(
-                            "Duration", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending,
-                            0.0f, 1);
-                        ImGui::TableSetupColumn("%", ImGuiTableColumnFlags_None, 0.0f, 2);
-                        ImGui::TableHeadersRow();
+                    ImGui::Checkbox("Include all descendants", &include_all_descendants_);
+                    ImGui::SameLine();
+                    ImGui::Checkbox("Group by name", &group_by_name_);
 
-                        if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
-                            if (children_dirty_) {
-                                sort_specs->SpecsDirty = true;
-                                children_dirty_ = false;
-                            }
-                            if (sort_specs->SpecsDirty) {
-                                sort_specs->SpecsDirty = false;
-                                if (sort_specs->SpecsCount > 0) {
-                                    const auto& spec = sort_specs->Specs[0];
-                                    bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
-                                    std::sort(filtered_children_.begin(), filtered_children_.end(),
-                                              [&](size_t ai, size_t bi) {
-                                                  const auto& a = children_[ai];
-                                                  const auto& b = children_[bi];
-                                                  int cmp = 0;
-                                                  switch (spec.ColumnUserID) {
-                                                      case 0: {
-                                                          const auto& na = model.get_string(a.name_idx);
-                                                          const auto& nb = model.get_string(b.name_idx);
-                                                          cmp = na.compare(nb);
-                                                          break;
-                                                      }
-                                                      case 1:
-                                                          cmp = (a.dur < b.dur) ? -1 : (a.dur > b.dur) ? 1 : 0;
-                                                          break;
-                                                      case 2:
-                                                          cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0;
-                                                          break;
-                                                  }
-                                                  return asc ? (cmp < 0) : (cmp > 0);
-                                              });
-                                }
-                            }
-                        }
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputTextWithHint("##filter", "Filter by name...", filter_buf_, sizeof(filter_buf_))) {
+                        rebuild_filter(model);
+                    }
+                    if (filter_buf_[0] != '\0') {
+                        size_t shown = group_by_name_ ? filtered_aggregated_.size() : filtered_children_.size();
+                        size_t total = group_by_name_ ? aggregated_.size() : children_.size();
+                        ImGui::TextDisabled("Showing %zu / %zu", shown, total);
+                    }
 
-                        char buf[64];
-                        ImGuiListClipper clipper;
-                        clipper.Begin((int)filtered_children_.size());
-                        while (clipper.Step()) {
-                            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                                const auto& c = children_[filtered_children_[i]];
-                                ImGui::TableNextRow();
+                    ImGui::Spacing();
 
-                                ImGui::TableNextColumn();
-                                char id_buf[32];
-                                snprintf(id_buf, sizeof(id_buf), "##c%d", i);
-                                bool is_selected = (view.selected_event_idx == (int32_t)c.event_idx);
-                                if (ImGui::Selectable(
-                                        id_buf, is_selected,
-                                        ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
-                                    view.navigate_to_event(c.event_idx, model.events_[c.event_idx]);
-                                }
-                                ImGui::SameLine();
-                                ImGui::TextUnformatted(model.get_string(c.name_idx).c_str());
-                                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
-                                    ImGui::SetTooltip("%s", model.get_string(c.name_idx).c_str());
-
-                                ImGui::TableNextColumn();
-                                format_time(c.dur, buf, sizeof(buf));
-                                ImGui::TextUnformatted(buf);
-
-                                ImGui::TableNextColumn();
-                                render_heat_bar(c.pct);
-                            }
-                        }
-
-                        ImGui::EndTable();
+                    if (group_by_name_) {
+                        render_aggregated_table(model, view);
+                    } else {
+                        render_children_table(model, view);
                     }
                 }
+                ImGui::EndTabItem();
             }
         }
+
+        // Arguments tab
+        {
+            bool has_args = (ev.args_idx != UINT32_MAX && ev.args_idx < model.args_.size());
+            char args_label[32];
+            snprintf(args_label, sizeof(args_label), "Arguments###Args");
+            if (ImGui::BeginTabItem(args_label)) {
+                if (has_args) {
+                    try {
+                        auto args = nlohmann::json::parse(model.args_[ev.args_idx]);
+                        render_json_value(args);
+                    } catch (...) {
+                        ImGui::TextDisabled("(could not parse args)");
+                        ImGui::TextWrapped("%s", model.args_[ev.args_idx].c_str());
+                    }
+                } else {
+                    ImGui::TextDisabled("No arguments.");
+                }
+                ImGui::EndTabItem();
+            }
+        }
+
+        ImGui::EndTabBar();
     }
 
     ImGui::End();
+}
+
+void DetailPanel::render_aggregated_table(const TraceModel& model, ViewState& view) {
+    if (ImGui::BeginTable("AggChildrenTable", 7,
+                          ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
+                              ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
+                          ImVec2(0, ImGui::GetContentRegionAvail().y))) {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_None, 0.0f, 0);
+        ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_None, 0.0f, 1);
+        ImGui::TableSetupColumn("Total", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending,
+                                0.0f, 2);
+        ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_None, 0.0f, 3);
+        ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_None, 0.0f, 4);
+        ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_None, 0.0f, 5);
+        ImGui::TableSetupColumn("%", ImGuiTableColumnFlags_None, 0.0f, 6);
+        ImGui::TableHeadersRow();
+
+        if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
+            if (children_dirty_) {
+                sort_specs->SpecsDirty = true;
+                children_dirty_ = false;
+            }
+            if (sort_specs->SpecsDirty) {
+                sort_specs->SpecsDirty = false;
+                if (sort_specs->SpecsCount > 0) {
+                    const auto& spec = sort_specs->Specs[0];
+                    bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
+                    std::sort(filtered_aggregated_.begin(), filtered_aggregated_.end(), [&](size_t ai, size_t bi) {
+                        const auto& a = aggregated_[ai];
+                        const auto& b = aggregated_[bi];
+                        int cmp = 0;
+                        switch (spec.ColumnUserID) {
+                            case 0: {
+                                const auto& na = model.get_string(a.name_idx);
+                                const auto& nb = model.get_string(b.name_idx);
+                                cmp = na.compare(nb);
+                                break;
+                            }
+                            case 1:
+                                cmp = (a.count < b.count) ? -1 : (a.count > b.count) ? 1 : 0;
+                                break;
+                            case 2:
+                                cmp = (a.total_dur < b.total_dur) ? -1 : (a.total_dur > b.total_dur) ? 1 : 0;
+                                break;
+                            case 3:
+                                cmp = (a.avg_dur < b.avg_dur) ? -1 : (a.avg_dur > b.avg_dur) ? 1 : 0;
+                                break;
+                            case 4:
+                                cmp = (a.min_dur < b.min_dur) ? -1 : (a.min_dur > b.min_dur) ? 1 : 0;
+                                break;
+                            case 5:
+                                cmp = (a.max_dur < b.max_dur) ? -1 : (a.max_dur > b.max_dur) ? 1 : 0;
+                                break;
+                            case 6:
+                                cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0;
+                                break;
+                        }
+                        return asc ? (cmp < 0) : (cmp > 0);
+                    });
+                }
+            }
+        }
+
+        char buf[64];
+        ImGuiListClipper clipper;
+        clipper.Begin((int)filtered_aggregated_.size());
+        while (clipper.Step()) {
+            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
+                const auto& ag = aggregated_[filtered_aggregated_[i]];
+                ImGui::TableNextRow();
+
+                ImGui::TableNextColumn();
+                char id_buf[32];
+                snprintf(id_buf, sizeof(id_buf), "##ag%d", i);
+                if (ImGui::Selectable(id_buf, false,
+                                      ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
+                    view.navigate_to_event(ag.longest_idx, model.events_[ag.longest_idx]);
+                }
+                ImGui::SameLine();
+                ImGui::TextUnformatted(model.get_string(ag.name_idx).c_str());
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                    ImGui::SetTooltip("%s", model.get_string(ag.name_idx).c_str());
+
+                ImGui::TableNextColumn();
+                ImGui::Text("%u", ag.count);
+
+                ImGui::TableNextColumn();
+                format_time(ag.total_dur, buf, sizeof(buf));
+                ImGui::TextUnformatted(buf);
+
+                ImGui::TableNextColumn();
+                format_time(ag.avg_dur, buf, sizeof(buf));
+                ImGui::TextUnformatted(buf);
+
+                ImGui::TableNextColumn();
+                format_time(ag.min_dur, buf, sizeof(buf));
+                ImGui::TextUnformatted(buf);
+
+                ImGui::TableNextColumn();
+                format_time(ag.max_dur, buf, sizeof(buf));
+                ImGui::TextUnformatted(buf);
+
+                ImGui::TableNextColumn();
+                render_heat_bar(ag.pct);
+            }
+        }
+
+        ImGui::EndTable();
+    }
+}
+
+void DetailPanel::render_children_table(const TraceModel& model, ViewState& view) {
+    if (ImGui::BeginTable("ChildrenTable", 3,
+                          ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
+                              ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
+                          ImVec2(0, ImGui::GetContentRegionAvail().y))) {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_None, 0.0f, 0);
+        ImGui::TableSetupColumn(
+            "Duration", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending, 0.0f, 1);
+        ImGui::TableSetupColumn("%", ImGuiTableColumnFlags_None, 0.0f, 2);
+        ImGui::TableHeadersRow();
+
+        if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
+            if (children_dirty_) {
+                sort_specs->SpecsDirty = true;
+                children_dirty_ = false;
+            }
+            if (sort_specs->SpecsDirty) {
+                sort_specs->SpecsDirty = false;
+                if (sort_specs->SpecsCount > 0) {
+                    const auto& spec = sort_specs->Specs[0];
+                    bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
+                    std::sort(filtered_children_.begin(), filtered_children_.end(), [&](size_t ai, size_t bi) {
+                        const auto& a = children_[ai];
+                        const auto& b = children_[bi];
+                        int cmp = 0;
+                        switch (spec.ColumnUserID) {
+                            case 0: {
+                                const auto& na = model.get_string(a.name_idx);
+                                const auto& nb = model.get_string(b.name_idx);
+                                cmp = na.compare(nb);
+                                break;
+                            }
+                            case 1:
+                                cmp = (a.dur < b.dur) ? -1 : (a.dur > b.dur) ? 1 : 0;
+                                break;
+                            case 2:
+                                cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0;
+                                break;
+                        }
+                        return asc ? (cmp < 0) : (cmp > 0);
+                    });
+                }
+            }
+        }
+
+        char buf[64];
+        ImGuiListClipper clipper;
+        clipper.Begin((int)filtered_children_.size());
+        while (clipper.Step()) {
+            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
+                const auto& c = children_[filtered_children_[i]];
+                ImGui::TableNextRow();
+
+                ImGui::TableNextColumn();
+                char id_buf[32];
+                snprintf(id_buf, sizeof(id_buf), "##c%d", i);
+                bool is_selected = (view.selected_event_idx == (int32_t)c.event_idx);
+                if (ImGui::Selectable(id_buf, is_selected,
+                                      ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
+                    view.navigate_to_event(c.event_idx, model.events_[c.event_idx]);
+                }
+                ImGui::SameLine();
+                ImGui::TextUnformatted(model.get_string(c.name_idx).c_str());
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                    ImGui::SetTooltip("%s", model.get_string(c.name_idx).c_str());
+
+                ImGui::TableNextColumn();
+                format_time(c.dur, buf, sizeof(buf));
+                ImGui::TextUnformatted(buf);
+
+                ImGui::TableNextColumn();
+                render_heat_bar(c.pct);
+            }
+        }
+
+        ImGui::EndTable();
+    }
 }
 
 void DetailPanel::rebuild_children(const TraceModel& model, const TraceEvent& ev) {

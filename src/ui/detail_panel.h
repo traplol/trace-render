@@ -43,4 +43,6 @@ private:
     void rebuild_children(const TraceModel& model, const TraceEvent& ev);
     void rebuild_aggregated(const TraceModel& model, double parent_dur);
     void rebuild_filter(const TraceModel& model);
+    void render_children_table(const TraceModel& model, ViewState& view);
+    void render_aggregated_table(const TraceModel& model, ViewState& view);
 };
