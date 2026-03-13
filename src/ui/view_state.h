@@ -1,5 +1,6 @@
 #pragma once
 #include "model/trace_event.h"
+#include "imgui.h"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -32,6 +33,13 @@ struct ViewState {
     float ruler_height = 30.0f;
     float proc_header_height = 22.0f;
     float scrollbar_scale = 1.0f;
+
+    // Selection border color (RGBA)
+    float sel_border_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    ImU32 sel_border_color_u32() const {
+        return IM_COL32((int)(sel_border_color[0] * 255), (int)(sel_border_color[1] * 255),
+                        (int)(sel_border_color[2] * 255), (int)(sel_border_color[3] * 255));
+    }
 
     // Show flow arrows
     bool show_flows = true;

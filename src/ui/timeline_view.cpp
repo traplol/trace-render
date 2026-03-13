@@ -72,6 +72,7 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
     float clip_bottom = area_max.y;
 
     track_layouts_.clear();
+    sel_rect_valid_ = false;
 
     dl->PushClipRect(ImVec2(area_min.x, clip_top), area_max, true);
 
@@ -251,13 +252,12 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
                         ImVec2 p1(x1, ey);
                         ImVec2 p2(x2, ey + track_height - 1);
 
-                        if ((int32_t)ev_idx == sel_idx) {
-                            dl->AddRectFilled(ImVec2(x1 - 2, ey - 2), ImVec2(x2 + 2, ey + track_height + 1),
-                                              IM_COL32(255, 255, 255, 100));
-                        }
-
                         dl->AddRectFilled(p1, p2, fill);
-                        if (slice_w > 3.0f) {
+                        if ((int32_t)ev_idx == sel_idx) {
+                            sel_rect_min_ = ImVec2(x1 - 2, ey - 2);
+                            sel_rect_max_ = ImVec2(x2 + 2, ey + track_height + 1);
+                            sel_rect_valid_ = true;
+                        } else if (slice_w > 3.0f) {
                             dl->AddRect(p1, p2, ColorPalette::border_color(fill));
                         }
 
@@ -294,6 +294,11 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
             float counter_h = counter_renderer_.render(dl, area_min, y, width, model, proc.pid, view);
             y += counter_h;
         }
+    }
+
+    // Draw selected event border on top of everything
+    if (sel_rect_valid_) {
+        dl->AddRect(sel_rect_min_, sel_rect_max_, view.sel_border_color_u32(), 0.0f, 0, 3.0f);
     }
 
     dl->PopClipRect();
@@ -685,14 +690,49 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         int32_t hover = hit_test(io.MousePos.x, io.MousePos.y, canvas_min, canvas_max, model, view);
         if (hover >= 0) {
             const auto& ev = model.events_[hover];
+            char time_buf[64];
             ImGui::BeginTooltip();
-            ImGui::Text("%s", model.get_string(ev.name_idx).c_str());
+
+            // Name (bold-ish via separator)
+            ImGui::TextUnformatted(model.get_string(ev.name_idx).c_str());
+            ImGui::Separator();
+
+            // Category
+            ImGui::TextDisabled("Category:");
+            ImGui::SameLine();
+            ImGui::TextUnformatted(model.get_string(ev.cat_idx).c_str());
+
+            // Duration and self time
             if (ev.dur > 0) {
-                char dur_buf[64];
-                format_time((double)ev.dur, dur_buf, sizeof(dur_buf));
-                ImGui::Text("Duration: %s", dur_buf);
+                format_time((double)ev.dur, time_buf, sizeof(time_buf));
+                ImGui::TextDisabled("Duration:");
+                ImGui::SameLine();
+                ImGui::Text("%s", time_buf);
+
+                if (ev.self_time >= 0 && ev.self_time < ev.dur) {
+                    format_time(ev.self_time, time_buf, sizeof(time_buf));
+                    float self_pct = (float)(ev.self_time / ev.dur * 100.0);
+                    ImGui::TextDisabled("Self Time:");
+                    ImGui::SameLine();
+                    ImGui::Text("%s (%.1f%%)", time_buf, self_pct);
+                }
             }
-            ImGui::Text("Category: %s", model.get_string(ev.cat_idx).c_str());
+
+            // Thread name
+            for (const auto& proc : model.processes_) {
+                if (proc.pid == ev.pid) {
+                    for (const auto& t : proc.threads) {
+                        if (t.tid == ev.tid) {
+                            ImGui::TextDisabled("Thread:");
+                            ImGui::SameLine();
+                            ImGui::Text("%s", t.name.c_str());
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+
             ImGui::EndTooltip();
         }
     }

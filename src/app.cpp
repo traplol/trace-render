@@ -393,6 +393,8 @@ void App::render_settings_modal() {
         ImGui::SeparatorText("Rendering");
 
         ImGui::Checkbox("Show Flow Arrows", &view_.show_flows);
+        ImGui::ColorEdit4("Selection Border Color", view_.sel_border_color,
+                          ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 
         if (ImGui::Checkbox("VSync", &vsync_)) {
             SDL_GL_SetSwapInterval(vsync_ ? 1 : 0);
@@ -458,6 +460,8 @@ void App::save_settings() {
     j["ruler_height"] = view_.ruler_height;
     j["proc_header_height"] = view_.proc_header_height;
     j["scrollbar_scale"] = view_.scrollbar_scale;
+    j["sel_border_color"] = {view_.sel_border_color[0], view_.sel_border_color[1], view_.sel_border_color[2],
+                             view_.sel_border_color[3]};
     j["dark_theme"] = dark_theme_;
     j["vsync"] = vsync_;
     j["query_tabs"] = stats_.save_tabs();
@@ -488,6 +492,10 @@ void App::load_settings() {
         if (j.contains("ruler_height")) view_.ruler_height = j["ruler_height"].get<float>();
         if (j.contains("proc_header_height")) view_.proc_header_height = j["proc_header_height"].get<float>();
         if (j.contains("scrollbar_scale")) view_.scrollbar_scale = j["scrollbar_scale"].get<float>();
+        if (j.contains("sel_border_color")) {
+            auto& arr = j["sel_border_color"];
+            for (int i = 0; i < 4; i++) view_.sel_border_color[i] = arr[i].get<float>();
+        }
         if (j.contains("dark_theme")) {
             dark_theme_ = j["dark_theme"].get<bool>();
             if (dark_theme_)

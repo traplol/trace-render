@@ -38,4 +38,9 @@ private:
         int thread_idx;
     };
     std::vector<TrackLayout> track_layouts_;
+
+    // Deferred selection border (drawn on top of all tracks)
+    bool sel_rect_valid_ = false;
+    ImVec2 sel_rect_min_;
+    ImVec2 sel_rect_max_;
 };
