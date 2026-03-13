@@ -341,3 +341,120 @@ TEST(CallStack, ComputeSelfTimeOutOfBounds) {
     auto model = make_nested_model();
     EXPECT_DOUBLE_EQ(model.compute_self_time(999), 0.0);
 }
+
+// --- Same-timestamp parent/child ---
+
+static TraceModel make_same_ts_model() {
+    TraceModel m;
+    m.intern_string("");  // idx 0
+
+    auto& proc = m.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    // Parent: ts=100, dur=50
+    TraceEvent parent;
+    parent.ph = Phase::Complete;
+    parent.name_idx = m.intern_string("parent");
+    parent.ts = 100.0;
+    parent.dur = 50.0;
+    parent.pid = 1;
+    parent.tid = 1;
+    m.events_.push_back(parent);
+    thread.event_indices.push_back(0);
+
+    // Child starts at exact same timestamp, shorter duration
+    TraceEvent child;
+    child.ph = Phase::Complete;
+    child.name_idx = m.intern_string("child");
+    child.ts = 100.0;
+    child.dur = 20.0;
+    child.pid = 1;
+    child.tid = 1;
+    m.events_.push_back(child);
+    thread.event_indices.push_back(1);
+
+    m.build_index();
+    return m;
+}
+
+TEST(SameTimestamp, DepthAssignment) {
+    auto model = make_same_ts_model();
+    // Parent (longer dur) should be depth 0, child (shorter dur) depth 1
+    EXPECT_EQ(model.events_[0].depth, 0);
+    EXPECT_EQ(model.events_[1].depth, 1);
+}
+
+TEST(SameTimestamp, FindParent) {
+    auto model = make_same_ts_model();
+    EXPECT_EQ(model.find_parent_event(1), 0);
+    EXPECT_EQ(model.find_parent_event(0), -1);
+}
+
+TEST(SameTimestamp, CallStack) {
+    auto model = make_same_ts_model();
+    auto stack = model.build_call_stack(1);
+    ASSERT_EQ(stack.size(), 2u);
+    EXPECT_EQ(model.get_string(model.events_[stack[0]].name_idx), "parent");
+    EXPECT_EQ(model.get_string(model.events_[stack[1]].name_idx), "child");
+}
+
+TEST(SameTimestamp, SelfTime) {
+    auto model = make_same_ts_model();
+    // Parent dur=50, child dur=20, so parent self=30
+    EXPECT_DOUBLE_EQ(model.compute_self_time(0), 30.0);
+    // Child has no children, self=20
+    EXPECT_DOUBLE_EQ(model.compute_self_time(1), 20.0);
+}
+
+TEST(SameTimestamp, ThreeLevelsSameTimestamp) {
+    TraceModel m;
+    m.intern_string("");
+
+    auto& proc = m.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    // Grandparent: ts=100, dur=100
+    TraceEvent gp;
+    gp.ph = Phase::Complete;
+    gp.name_idx = m.intern_string("grandparent");
+    gp.ts = 100.0;
+    gp.dur = 100.0;
+    gp.pid = 1;
+    gp.tid = 1;
+    m.events_.push_back(gp);
+    thread.event_indices.push_back(0);
+
+    // Parent: ts=100, dur=60
+    TraceEvent parent;
+    parent.ph = Phase::Complete;
+    parent.name_idx = m.intern_string("parent");
+    parent.ts = 100.0;
+    parent.dur = 60.0;
+    parent.pid = 1;
+    parent.tid = 1;
+    m.events_.push_back(parent);
+    thread.event_indices.push_back(1);
+
+    // Child: ts=100, dur=10
+    TraceEvent child;
+    child.ph = Phase::Complete;
+    child.name_idx = m.intern_string("child");
+    child.ts = 100.0;
+    child.dur = 10.0;
+    child.pid = 1;
+    child.tid = 1;
+    m.events_.push_back(child);
+    thread.event_indices.push_back(2);
+
+    m.build_index();
+
+    EXPECT_EQ(m.events_[0].depth, 0);
+    EXPECT_EQ(m.events_[1].depth, 1);
+    EXPECT_EQ(m.events_[2].depth, 2);
+
+    auto stack = m.build_call_stack(2);
+    ASSERT_EQ(stack.size(), 3u);
+    EXPECT_EQ(m.get_string(m.events_[stack[0]].name_idx), "grandparent");
+    EXPECT_EQ(m.get_string(m.events_[stack[1]].name_idx), "parent");
+    EXPECT_EQ(m.get_string(m.events_[stack[2]].name_idx), "child");
+}

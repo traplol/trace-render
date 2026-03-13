@@ -5,11 +5,16 @@
 
 void TraceModel::build_index() {
     TRACE_SCOPE_CAT("BuildIndex", "model");
-    // Sort events within each thread by timestamp
+    // Sort events within each thread by timestamp, then by duration descending
+    // so that parent events (longer duration) come before children at the same ts
     for (auto& proc : processes_) {
         for (auto& thread : proc.threads) {
-            std::sort(thread.event_indices.begin(), thread.event_indices.end(),
-                      [this](uint32_t a, uint32_t b) { return events_[a].ts < events_[b].ts; });
+            std::sort(thread.event_indices.begin(), thread.event_indices.end(), [this](uint32_t a, uint32_t b) {
+                const auto& ea = events_[a];
+                const auto& eb = events_[b];
+                if (ea.ts != eb.ts) return ea.ts < eb.ts;
+                return ea.dur > eb.dur;
+            });
         }
     }
 
