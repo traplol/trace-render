@@ -38,6 +38,7 @@ void App::open_file(const std::string& path) {
     status_message_ = "Loading: " + loading_filename_;
     loading_ = true;
     load_progress_ = 0.0f;
+    load_phase_progress_ = 0.0f;
     load_finished_ = false;
     load_success_ = false;
     load_error_.clear();
@@ -48,12 +49,25 @@ void App::open_file(const std::string& path) {
         TRACE_SCOPE_CAT("OpenFile", "io");
 
         TraceParser parser;
+        // Phase weights for global progress: Reading 0-25%, Parsing 25-60%, Building index 60-80%
         parser.on_progress = [this](const char* phase, float p) {
             {
                 std::lock_guard<std::mutex> lock(phase_mutex_);
                 loading_phase_ = phase;
             }
-            load_progress_.store(p, std::memory_order_relaxed);
+            load_phase_progress_.store(p, std::memory_order_relaxed);
+
+            float global = 0.0f;
+            if (std::string_view(phase) == "Reading file") {
+                global = p * 0.25f;
+            } else if (std::string_view(phase) == "Parsing JSON") {
+                global = 0.25f + p * 0.35f;
+            } else if (std::string_view(phase) == "Building index") {
+                global = 0.60f + p * 0.20f;
+            } else {
+                global = 0.80f + p * 0.10f;
+            }
+            load_progress_.store(global, std::memory_order_relaxed);
         };
         parser.time_unit_ns = time_ns;
 
@@ -66,7 +80,8 @@ void App::open_file(const std::string& path) {
                 std::lock_guard<std::mutex> lock(phase_mutex_);
                 loading_phase_ = "Building query DB";
             }
-            load_progress_.store(0.5f, std::memory_order_relaxed);
+            load_phase_progress_.store(0.0f, std::memory_order_relaxed);
+            load_progress_.store(0.90f, std::memory_order_relaxed);
         }
 
         std::lock_guard<std::mutex> lock(load_mutex_);
@@ -164,16 +179,9 @@ void App::render_loading_overlay() {
 
     ImGui::Spacing();
 
-    // Progress bar
+    // Global progress bar
     ImGui::SetCursorPosX((vp->WorkSize.x - content_w) / 2);
     ImGui::ProgressBar(progress, ImVec2(content_w, 0));
-
-    // Percentage text
-    char pct_text[32];
-    snprintf(pct_text, sizeof(pct_text), "%.0f%%", progress * 100.0f);
-    ImVec2 pct_size = ImGui::CalcTextSize(pct_text);
-    ImGui::SetCursorPosX((vp->WorkSize.x - pct_size.x) / 2);
-    ImGui::TextDisabled("%s", pct_text);
 
     ImGui::EndGroup();
 
@@ -327,9 +335,20 @@ void App::update() {
                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings);
         ImGui::Text("%s", status_message_.c_str());
         if (loading_) {
+            std::string phase;
+            {
+                std::lock_guard<std::mutex> lock(phase_mutex_);
+                phase = loading_phase_;
+            }
+            if (!phase.empty()) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("|");
+                ImGui::SameLine();
+                ImGui::Text("%s", phase.c_str());
+            }
             ImGui::SameLine();
-            float progress = load_progress_.load(std::memory_order_relaxed);
-            ImGui::ProgressBar(progress, ImVec2(200, 0));
+            float phase_progress = load_phase_progress_.load(std::memory_order_relaxed);
+            ImGui::ProgressBar(phase_progress, ImVec2(150, 0));
         }
         if (has_trace_ && !loading_ && view_.selected_event_idx >= 0) {
             ImGui::SameLine(ImGui::GetWindowWidth() - 900);
