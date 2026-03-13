@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <climits>
+#include <utility>
 
 struct ThreadInfo {
     uint32_t tid = 0;
@@ -24,19 +25,14 @@ struct ProcessInfo {
     std::vector<ThreadInfo> threads;
     int32_t sort_index = 0;
 
-    ThreadInfo* find_thread(uint32_t tid) {
-        for (auto& t : threads) {
-            if (t.tid == tid) return &t;
-        }
-        return nullptr;
-    }
-
     const ThreadInfo* find_thread(uint32_t tid) const {
         for (const auto& t : threads) {
             if (t.tid == tid) return &t;
         }
         return nullptr;
     }
+
+    ThreadInfo* find_thread(uint32_t tid) { return const_cast<ThreadInfo*>(std::as_const(*this).find_thread(tid)); }
 
     ThreadInfo& get_or_create_thread(uint32_t tid) {
         if (auto* t = find_thread(tid)) return *t;
@@ -95,13 +91,6 @@ public:
         return strings_[idx];
     }
 
-    ProcessInfo* find_process(uint32_t pid) {
-        for (auto& p : processes_) {
-            if (p.pid == pid) return &p;
-        }
-        return nullptr;
-    }
-
     const ProcessInfo* find_process(uint32_t pid) const {
         for (const auto& p : processes_) {
             if (p.pid == pid) return &p;
@@ -109,14 +98,15 @@ public:
         return nullptr;
     }
 
+    ProcessInfo* find_process(uint32_t pid) { return const_cast<ProcessInfo*>(std::as_const(*this).find_process(pid)); }
+
     const ThreadInfo* find_thread(uint32_t pid, uint32_t tid) const {
         if (const auto* proc = find_process(pid)) return proc->find_thread(tid);
         return nullptr;
     }
 
     ThreadInfo* find_thread(uint32_t pid, uint32_t tid) {
-        if (auto* proc = find_process(pid)) return proc->find_thread(tid);
-        return nullptr;
+        return const_cast<ThreadInfo*>(std::as_const(*this).find_thread(pid, tid));
     }
 
     ProcessInfo& get_or_create_process(uint32_t pid) {
