@@ -109,6 +109,16 @@ public:
         return nullptr;
     }
 
+    const ThreadInfo* find_thread(uint32_t pid, uint32_t tid) const {
+        if (const auto* proc = find_process(pid)) return proc->find_thread(tid);
+        return nullptr;
+    }
+
+    ThreadInfo* find_thread(uint32_t pid, uint32_t tid) {
+        if (auto* proc = find_process(pid)) return proc->find_thread(tid);
+        return nullptr;
+    }
+
     ProcessInfo& get_or_create_process(uint32_t pid) {
         if (auto* p = find_process(pid)) return *p;
         processes_.push_back({});

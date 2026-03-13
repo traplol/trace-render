@@ -164,19 +164,9 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                 ImGui::TextUnformatted(buf);
 
                 ImGui::TableNextColumn();
-                bool found_name = false;
-                for (const auto& proc : model.processes_) {
-                    if (proc.pid != ev.pid) continue;
-                    for (const auto& t : proc.threads) {
-                        if (t.tid == ev.tid) {
-                            ImGui::TextUnformatted(t.name.c_str());
-                            found_name = true;
-                            break;
-                        }
-                    }
-                    break;
-                }
-                if (!found_name) {
+                if (const auto* thread = model.find_thread(ev.pid, ev.tid)) {
+                    ImGui::TextUnformatted(thread->name.c_str());
+                } else {
                     ImGui::Text("%u:%u", ev.pid, ev.tid);
                 }
             }

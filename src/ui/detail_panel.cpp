@@ -174,27 +174,15 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
     }
 
     ImGui::Text("Process: %u", ev.pid);
-    // Find process name
-    for (const auto& proc : model.processes_) {
-        if (proc.pid == ev.pid) {
-            ImGui::SameLine();
-            ImGui::TextDisabled("(%s)", proc.name.c_str());
-            break;
-        }
+    if (const auto* proc = model.find_process(ev.pid)) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%s)", proc->name.c_str());
     }
 
     ImGui::Text("Thread: %u", ev.tid);
-    for (const auto& proc : model.processes_) {
-        if (proc.pid == ev.pid) {
-            for (const auto& t : proc.threads) {
-                if (t.tid == ev.tid) {
-                    ImGui::SameLine();
-                    ImGui::TextDisabled("(%s)", t.name.c_str());
-                    break;
-                }
-            }
-            break;
-        }
+    if (const auto* thread = model.find_thread(ev.pid, ev.tid)) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%s)", thread->name.c_str());
     }
 
     if (ev.id != 0) {
@@ -228,24 +216,18 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
             stack_collapsed_.clear();
             stack_has_children_.clear();
             if (ev.dur > 0) {
-                for (const auto& proc : model.processes_) {
-                    if (proc.pid != ev.pid) continue;
-                    for (const auto& thread : proc.threads) {
-                        if (thread.tid != ev.tid) continue;
-                        for (uint32_t idx : thread.event_indices) {
-                            const auto& child = model.events_[idx];
-                            if (child.ts >= ev.end_ts()) break;
-                            if (child.depth > ev.depth && child.ts >= ev.ts && child.end_ts() <= ev.end_ts() &&
-                                child.dur > 0) {
-                                cached_stack_children_.push_back(idx);
-                                if (child.parent_idx >= 0) {
-                                    stack_has_children_.insert((uint32_t)child.parent_idx);
-                                }
+                if (const auto* thread = model.find_thread(ev.pid, ev.tid)) {
+                    for (uint32_t idx : thread->event_indices) {
+                        const auto& child = model.events_[idx];
+                        if (child.ts >= ev.end_ts()) break;
+                        if (child.depth > ev.depth && child.ts >= ev.ts && child.end_ts() <= ev.end_ts() &&
+                            child.dur > 0) {
+                            cached_stack_children_.push_back(idx);
+                            if (child.parent_idx >= 0) {
+                                stack_has_children_.insert((uint32_t)child.parent_idx);
                             }
                         }
-                        break;
                     }
-                    break;
                 }
             }
         }
@@ -714,33 +696,27 @@ void DetailPanel::rebuild_children(const TraceModel& model, const TraceEvent& ev
     children_.clear();
     double immediate_children_total = 0.0;
 
-    for (const auto& proc : model.processes_) {
-        if (proc.pid != ev.pid) continue;
-        for (const auto& thread : proc.threads) {
-            if (thread.tid != ev.tid) continue;
-            for (uint32_t idx : thread.event_indices) {
-                const auto& child = model.events_[idx];
-                if (child.depth <= ev.depth) {
-                    if (child.ts > ev.end_ts()) break;
-                    continue;
-                }
-                if (child.ts < ev.ts || child.end_ts() > ev.end_ts()) continue;
-                if (child.dur <= 0) continue;
-
-                if (child.depth == ev.depth + 1) {
-                    immediate_children_total += child.dur;
-                }
-
-                if (include_all_descendants_ || child.depth == ev.depth + 1) {
-                    float pct = (float)(child.dur / ev.dur * 100.0);
-                    children_.push_back({idx, child.name_idx, child.dur, pct});
-                }
-
+    if (const auto* thread = model.find_thread(ev.pid, ev.tid)) {
+        for (uint32_t idx : thread->event_indices) {
+            const auto& child = model.events_[idx];
+            if (child.depth <= ev.depth) {
                 if (child.ts > ev.end_ts()) break;
+                continue;
             }
-            break;
+            if (child.ts < ev.ts || child.end_ts() > ev.end_ts()) continue;
+            if (child.dur <= 0) continue;
+
+            if (child.depth == ev.depth + 1) {
+                immediate_children_total += child.dur;
+            }
+
+            if (include_all_descendants_ || child.depth == ev.depth + 1) {
+                float pct = (float)(child.dur / ev.dur * 100.0);
+                children_.push_back({idx, child.name_idx, child.dur, pct});
+            }
+
+            if (child.ts > ev.end_ts()) break;
         }
-        break;
     }
 
     self_time_ = ev.dur - immediate_children_total;
