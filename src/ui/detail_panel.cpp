@@ -539,22 +539,22 @@ void DetailPanel::render_aggregated_table(const TraceModel& model, ViewState& vi
                                 break;
                             }
                             case 1:
-                                cmp = compare(a.count, b.count);
+                                cmp = sort_utils::three_way_cmp(a.count, b.count);
                                 break;
                             case 2:
-                                cmp = compare(a.total_dur, b.total_dur);
+                                cmp = sort_utils::three_way_cmp(a.total_dur, b.total_dur);
                                 break;
                             case 3:
-                                cmp = compare(a.avg_dur, b.avg_dur);
+                                cmp = sort_utils::three_way_cmp(a.avg_dur, b.avg_dur);
                                 break;
                             case 4:
-                                cmp = compare(a.min_dur, b.min_dur);
+                                cmp = sort_utils::three_way_cmp(a.min_dur, b.min_dur);
                                 break;
                             case 5:
-                                cmp = compare(a.max_dur, b.max_dur);
+                                cmp = sort_utils::three_way_cmp(a.max_dur, b.max_dur);
                                 break;
                             case 6:
-                                cmp = compare(a.pct, b.pct);
+                                cmp = sort_utils::three_way_cmp(a.pct, b.pct);
                                 break;
                         }
                         return asc ? (cmp < 0) : (cmp > 0);
@@ -646,10 +646,10 @@ void DetailPanel::render_children_table(const TraceModel& model, ViewState& view
                                 break;
                             }
                             case 1:
-                                cmp = compare(a.dur, b.dur);
+                                cmp = sort_utils::three_way_cmp(a.dur, b.dur);
                                 break;
                             case 2:
-                                cmp = compare(a.pct, b.pct);
+                                cmp = sort_utils::three_way_cmp(a.pct, b.pct);
                                 break;
                         }
                         return asc ? (cmp < 0) : (cmp > 0);

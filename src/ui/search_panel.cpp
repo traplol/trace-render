@@ -102,10 +102,10 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
                         int cmp = 0;
                         switch (spec.ColumnUserID) {
                             case 0:  // Time
-                                cmp = compare(a.ts, b.ts);
+                                cmp = sort_utils::three_way_cmp(a.ts, b.ts);
                                 break;
                             case 1:  // Duration
-                                cmp = compare(a.dur, b.dur);
+                                cmp = sort_utils::three_way_cmp(a.dur, b.dur);
                                 break;
                             case 2: {  // Name
                                 const auto& na = model.get_string(a.name_idx);

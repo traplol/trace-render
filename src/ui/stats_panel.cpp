@@ -442,7 +442,7 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
                                   double db = strtod(sb.c_str(), &end_b);
                                   int cmp;
                                   if (end_a != sa.c_str() && *end_a == '\0' && end_b != sb.c_str() && *end_b == '\0') {
-                                      cmp = compare(da, db);
+                                      cmp = sort_utils::three_way_cmp(da, db);
                                   } else {
                                       cmp = sa.compare(sb);
                                   }

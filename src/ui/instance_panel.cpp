@@ -105,13 +105,13 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                         int cmp = 0;
                         switch (spec.ColumnUserID) {
                             case 1:
-                                cmp = compare(a.ts, b.ts);
+                                cmp = sort_utils::three_way_cmp(a.ts, b.ts);
                                 break;
                             case 2:
-                                cmp = compare(a.dur, b.dur);
+                                cmp = sort_utils::three_way_cmp(a.dur, b.dur);
                                 break;
                             case 3:
-                                cmp = compare(a.tid, b.tid);
+                                cmp = sort_utils::three_way_cmp(a.tid, b.tid);
                                 break;
                         }
                         return asc ? (cmp < 0) : (cmp > 0);
