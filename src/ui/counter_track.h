@@ -10,6 +10,10 @@ struct CounterHitResult {
     double value = 0.0;
 };
 
+// Find the last counter point at or before the given time (step-function lookup).
+// Returns false if time is before the first point or series is empty.
+bool counter_lookup_value(const CounterSeries& series, double time, double& out_timestamp, double& out_value);
+
 class CounterTrackRenderer {
 public:
     // Renders all counter tracks for a given process below the thread tracks.
@@ -21,12 +25,8 @@ public:
     void render_series(ImDrawList* dl, ImVec2 track_min, ImVec2 track_max, const CounterSeries& series,
                        const ViewState& view, ImU32 color);
 
-    // Clear stored layouts (call before render_tracks loop)
-    void clear_layouts() { layouts_.clear(); }
-
     // Hit test: returns true if mouse is over a counter track, fills result
-    bool hit_test(float mouse_x, float mouse_y, float track_left, float track_width, const ViewState& view,
-                  CounterHitResult& result) const;
+    bool hit_test(float mouse_x, float mouse_y, const ViewState& view, CounterHitResult& result) const;
 
 private:
     struct Layout {

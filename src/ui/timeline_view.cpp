@@ -72,7 +72,6 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
     float clip_bottom = area_max.y;
 
     track_layouts_.clear();
-    counter_renderer_.clear_layouts();
     sel_rect_valid_ = false;
 
     dl->PushClipRect(ImVec2(area_min.x, clip_top), area_max, true);
@@ -737,10 +736,8 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
             ImGui::EndTooltip();
         } else {
             // Check counter tracks
-            float track_left = canvas_min.x + view.label_width;
-            float track_width = canvas_size.x - view.label_width;
             CounterHitResult counter_hit;
-            if (counter_renderer_.hit_test(io.MousePos.x, io.MousePos.y, track_left, track_width, view, counter_hit)) {
+            if (counter_renderer_.hit_test(io.MousePos.x, io.MousePos.y, view, counter_hit)) {
                 char time_buf[64];
                 ImGui::BeginTooltip();
 
