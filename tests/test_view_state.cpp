@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "ui/view_state.h"
+#include "ui/range_stats.h"
 #include <cmath>
 
 TEST(ViewState, DefaultValues) {
@@ -109,4 +110,163 @@ TEST(ViewState, NavigateToEventMinPadPreventsOverZoom) {
     // pad = max(0 * 0.5, 100) = 100 (min_pad prevents zero-width viewport)
     EXPECT_DOUBLE_EQ(vs.view_start_ts, 400.0);
     EXPECT_DOUBLE_EQ(vs.view_end_ts, 600.0);
+}
+
+// --- Range Selection ---
+
+TEST(ViewState, RangeSelectionDefaults) {
+    ViewState vs;
+    EXPECT_FALSE(vs.has_range_selection);
+    EXPECT_DOUBLE_EQ(vs.range_start_ts, 0.0);
+    EXPECT_DOUBLE_EQ(vs.range_end_ts, 0.0);
+}
+
+TEST(ViewState, SetRangeSelection) {
+    ViewState vs;
+    vs.set_range_selection(100.0, 500.0);
+
+    EXPECT_TRUE(vs.has_range_selection);
+    EXPECT_DOUBLE_EQ(vs.range_start_ts, 100.0);
+    EXPECT_DOUBLE_EQ(vs.range_end_ts, 500.0);
+}
+
+TEST(ViewState, SetRangeSelectionNormalizesOrder) {
+    ViewState vs;
+    // Drag right-to-left: end < start
+    vs.set_range_selection(500.0, 100.0);
+
+    EXPECT_TRUE(vs.has_range_selection);
+    EXPECT_DOUBLE_EQ(vs.range_start_ts, 100.0);
+    EXPECT_DOUBLE_EQ(vs.range_end_ts, 500.0);
+}
+
+TEST(ViewState, ClearRangeSelection) {
+    ViewState vs;
+    vs.set_range_selection(100.0, 500.0);
+    vs.clear_range_selection();
+
+    EXPECT_FALSE(vs.has_range_selection);
+    EXPECT_DOUBLE_EQ(vs.range_start_ts, 0.0);
+    EXPECT_DOUBLE_EQ(vs.range_end_ts, 0.0);
+}
+
+// --- Range Stats ---
+
+static TraceModel make_range_test_model() {
+    TraceModel model;
+    uint32_t name_a = model.intern_string("FuncA");
+    uint32_t name_b = model.intern_string("FuncB");
+    uint32_t cat = model.intern_string("test");
+
+    auto& proc = model.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    // FuncA: 100-300 (dur=200)
+    TraceEvent e0;
+    e0.ts = 100.0;
+    e0.dur = 200.0;
+    e0.pid = 1;
+    e0.tid = 1;
+    e0.name_idx = name_a;
+    e0.cat_idx = cat;
+    e0.ph = Phase::Complete;
+    model.events_.push_back(e0);
+    thread.event_indices.push_back(0);
+
+    // FuncB: 200-400 (dur=200)
+    TraceEvent e1;
+    e1.ts = 200.0;
+    e1.dur = 200.0;
+    e1.pid = 1;
+    e1.tid = 1;
+    e1.name_idx = name_b;
+    e1.cat_idx = cat;
+    e1.ph = Phase::Complete;
+    model.events_.push_back(e1);
+    thread.event_indices.push_back(1);
+
+    // FuncA: 500-600 (dur=100)
+    TraceEvent e2;
+    e2.ts = 500.0;
+    e2.dur = 100.0;
+    e2.pid = 1;
+    e2.tid = 1;
+    e2.name_idx = name_a;
+    e2.cat_idx = cat;
+    e2.ph = Phase::Complete;
+    model.events_.push_back(e2);
+    thread.event_indices.push_back(2);
+
+    model.min_ts_ = 100.0;
+    model.max_ts_ = 600.0;
+    model.build_index();
+    return model;
+}
+
+TEST(RangeStats, EmptyRange) {
+    TraceModel model = make_range_test_model();
+    auto stats = compute_range_stats(model, 700.0, 800.0);
+
+    EXPECT_EQ(stats.total_events, 0u);
+    EXPECT_TRUE(stats.summaries.empty());
+    EXPECT_DOUBLE_EQ(stats.range_duration, 100.0);
+}
+
+TEST(RangeStats, FullRange) {
+    TraceModel model = make_range_test_model();
+    auto stats = compute_range_stats(model, 0.0, 700.0);
+
+    EXPECT_EQ(stats.total_events, 3u);
+    EXPECT_EQ(stats.summaries.size(), 2u);
+    // FuncA: 200 + 100 = 300 total, FuncB: 200 total
+    // Sorted by total_dur descending, FuncA should be first
+    EXPECT_EQ(model.get_string(stats.summaries[0].name_idx), "FuncA");
+    EXPECT_NEAR(stats.summaries[0].total_dur, 300.0, 0.01);
+    EXPECT_EQ(stats.summaries[0].count, 2u);
+
+    EXPECT_EQ(model.get_string(stats.summaries[1].name_idx), "FuncB");
+    EXPECT_NEAR(stats.summaries[1].total_dur, 200.0, 0.01);
+    EXPECT_EQ(stats.summaries[1].count, 1u);
+}
+
+TEST(RangeStats, PartialOverlapClampsContribution) {
+    TraceModel model = make_range_test_model();
+    // Range 250-350: FuncA(100-300) contributes 50, FuncB(200-400) contributes 100
+    auto stats = compute_range_stats(model, 250.0, 350.0);
+
+    EXPECT_EQ(stats.total_events, 2u);
+    EXPECT_DOUBLE_EQ(stats.range_duration, 100.0);
+
+    // FuncB contributes more (100 vs 50), should be first
+    EXPECT_EQ(model.get_string(stats.summaries[0].name_idx), "FuncB");
+    EXPECT_NEAR(stats.summaries[0].total_dur, 100.0, 0.01);
+
+    EXPECT_EQ(model.get_string(stats.summaries[1].name_idx), "FuncA");
+    EXPECT_NEAR(stats.summaries[1].total_dur, 50.0, 0.01);
+}
+
+TEST(RangeStats, AggregatesMinMaxAvg) {
+    TraceModel model = make_range_test_model();
+    auto stats = compute_range_stats(model, 0.0, 700.0);
+
+    // FuncA has two instances: 200 and 100
+    const auto& func_a = stats.summaries[0];
+    EXPECT_EQ(model.get_string(func_a.name_idx), "FuncA");
+    EXPECT_NEAR(func_a.min_dur, 100.0, 0.01);
+    EXPECT_NEAR(func_a.max_dur, 200.0, 0.01);
+    EXPECT_NEAR(func_a.avg_dur(), 150.0, 0.01);
+}
+
+TEST(RangeStats, LongestIdxTracksByActualDuration) {
+    TraceModel model = make_range_test_model();
+    // FuncA event 0 is 200us (100-300), event 2 is 100us (500-600)
+    // Even with a partial range, longest_idx should point to the 200us event
+    auto stats = compute_range_stats(model, 250.0, 700.0);
+
+    const auto* func_a = &stats.summaries[0];
+    if (model.get_string(func_a->name_idx) != "FuncA") func_a = &stats.summaries[1];
+    EXPECT_EQ(model.get_string(func_a->name_idx), "FuncA");
+    // Event 0 has dur=200, event 2 has dur=100 — longest_idx should be event 0
+    EXPECT_EQ(func_a->longest_idx, 0u);
+    EXPECT_DOUBLE_EQ(model.events_[func_a->longest_idx].dur, 200.0);
 }

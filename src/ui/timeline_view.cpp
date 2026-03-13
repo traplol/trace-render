@@ -296,6 +296,23 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
         }
     }
 
+    // Draw range selection overlay (below ruler only)
+    if (view.has_range_selection) {
+        float track_left = area_min.x + view.label_width;
+        float track_width = width - view.label_width;
+        float rx1 = view.time_to_x(view.range_start_ts, track_left, track_width);
+        float rx2 = view.time_to_x(view.range_end_ts, track_left, track_width);
+        rx1 = std::max(rx1, track_left);
+        rx2 = std::min(rx2, area_max.x);
+        float overlay_top = area_min.y + view.ruler_height;
+
+        if (rx2 > rx1) {
+            dl->AddRectFilled(ImVec2(rx1, overlay_top), ImVec2(rx2, area_max.y), IM_COL32(80, 130, 220, 50));
+            dl->AddLine(ImVec2(rx1, overlay_top), ImVec2(rx1, area_max.y), IM_COL32(80, 130, 220, 200), 1.5f);
+            dl->AddLine(ImVec2(rx2, overlay_top), ImVec2(rx2, area_max.y), IM_COL32(80, 130, 220, 200), 1.5f);
+        }
+    }
+
     // Draw selected event border on top of everything
     if (sel_rect_valid_) {
         dl->AddRect(sel_rect_min_, sel_rect_max_, view.sel_border_color_u32(), 0.0f, 0, 3.0f);
@@ -414,17 +431,51 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         dl->AddLine(ImVec2(line_x, canvas_min.y), ImVec2(line_x, canvas_max.y), splitter_col, 2.0f);
     }
 
-    // Make the canvas area interactive
-    ImGui::SetCursorScreenPos(canvas_min);
-    ImGui::InvisibleButton("timeline_canvas", canvas_size,
+    ImGuiIO& io = ImGui::GetIO();
+
+    // Ruler interaction area (for range selection drag)
+    {
+        float ruler_h = view.ruler_height;
+        ImGui::SetCursorScreenPos(canvas_min);
+        ImGui::InvisibleButton("timeline_ruler", ImVec2(canvas_size.x, ruler_h), ImGuiButtonFlags_MouseButtonLeft);
+        bool ruler_hovered = ImGui::IsItemHovered();
+
+        float track_left = canvas_min.x + view.label_width;
+        float track_width = canvas_size.x - view.label_width;
+
+        if (ruler_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && io.MousePos.x >= track_left) {
+            ruler_dragging_ = true;
+            ruler_drag_start_ts_ = view.x_to_time(io.MousePos.x, track_left, track_width);
+            view.clear_range_selection();
+        }
+
+        if (ruler_dragging_) {
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || !ImGui::IsWindowFocused()) {
+                ruler_dragging_ = false;
+            } else {
+                double current_ts = view.x_to_time(io.MousePos.x, track_left, track_width);
+                if (std::abs(current_ts - ruler_drag_start_ts_) > 0.0) {
+                    view.set_range_selection(ruler_drag_start_ts_, current_ts);
+                }
+            }
+        }
+    }
+
+    // Make the canvas area interactive (below the ruler)
+    ImGui::SetCursorScreenPos(ImVec2(canvas_min.x, canvas_min.y + view.ruler_height));
+    ImVec2 track_canvas_size(canvas_size.x, canvas_size.y - view.ruler_height);
+    ImGui::InvisibleButton("timeline_canvas", track_canvas_size,
                            ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle);
     bool is_hovered = ImGui::IsItemHovered();
     bool is_active = ImGui::IsItemActive();
 
-    ImGuiIO& io = ImGui::GetIO();
+    // Also consider ruler area for hover/zoom
+    bool any_hovered =
+        is_hovered || (io.MousePos.y >= canvas_min.y && io.MousePos.y < canvas_min.y + view.ruler_height &&
+                       io.MousePos.x >= canvas_min.x && io.MousePos.x < canvas_max.x);
 
     // Zoom with mouse wheel (Ctrl+wheel = horizontal zoom, Shift+wheel = vertical scroll)
-    if (is_hovered && io.MouseWheel != 0.0f) {
+    if (any_hovered && io.MouseWheel != 0.0f) {
         if (io.KeyShift) {
             // Shift+wheel: vertical scroll
             scroll_y_ -= io.MouseWheel * view.track_height * 3.0f;
@@ -463,10 +514,23 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         scroll_y_ = std::min(scroll_y_, max_scroll);
     }
 
-    // Click to select
-    if (is_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !io.KeyCtrl) {
+    // Shift+drag in track area for range selection
+    {
+        float track_left = canvas_min.x + view.label_width;
+        float track_width = canvas_size.x - view.label_width;
+
+        if (is_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && io.KeyShift && io.MousePos.x >= track_left) {
+            ruler_dragging_ = true;
+            ruler_drag_start_ts_ = view.x_to_time(io.MousePos.x, track_left, track_width);
+            view.clear_range_selection();
+        }
+    }
+
+    // Click to select (only if not starting a range drag)
+    if (is_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !io.KeyCtrl && !io.KeyShift) {
         int32_t hit = hit_test(io.MousePos.x, io.MousePos.y, canvas_min, canvas_max, model, view);
         view.selected_event_idx = hit;
+        view.clear_range_selection();
     }
 
     // Keyboard shortcuts (only when no text input is active)
@@ -505,14 +569,20 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
             view.view_end_ts = center + half;
         }
         if (ImGui::IsKeyPressed(ImGuiKey_F)) {
-            if (view.selected_event_idx >= 0) {
+            if (view.has_range_selection) {
+                view.zoom_to_fit(view.range_start_ts, view.range_end_ts);
+            } else if (view.selected_event_idx >= 0) {
                 view.navigate_to_event(view.selected_event_idx, model.events_[view.selected_event_idx]);
             } else if (model.min_ts_ < model.max_ts_) {
                 view.zoom_to_fit(model.min_ts_, model.max_ts_);
             }
         }
         if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-            view.selected_event_idx = -1;
+            if (view.has_range_selection) {
+                view.clear_range_selection();
+            } else {
+                view.selected_event_idx = -1;
+            }
         }
         if (ImGui::IsKeyPressed(ImGuiKey_G)) {
             show_goto_ = true;
