@@ -4,7 +4,7 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <sstream>
-#include <filesystem>
+#include <cctype>
 
 using json = nlohmann::json;
 
@@ -47,6 +47,51 @@ bool extract_source_location(const TraceModel& model, const TraceEvent& ev, std:
     }
 }
 
+static std::string normalize_slashes(const std::string& path) {
+    std::string out = path;
+    for (auto& c : out) {
+        if (c == '\\') c = '/';
+    }
+    return out;
+}
+
+std::string remap_source_path(const std::string& trace_path, const std::string& strip_prefix,
+                              const std::string& local_base) {
+    std::string path = normalize_slashes(trace_path);
+    std::string strip = normalize_slashes(strip_prefix);
+    std::string base = normalize_slashes(local_base);
+
+    // Strip trailing slashes from strip prefix
+    while (!strip.empty() && strip.back() == '/') strip.pop_back();
+
+    // Case-insensitive prefix match and strip
+    if (!strip.empty() && path.size() >= strip.size()) {
+        bool match = true;
+        for (size_t i = 0; i < strip.size(); i++) {
+            if (std::tolower((unsigned char)path[i]) != std::tolower((unsigned char)strip[i])) {
+                match = false;
+                break;
+            }
+        }
+        if (match) {
+            path = path.substr(strip.size());
+        }
+    }
+
+    // Prepend local base
+    if (!base.empty()) {
+        // Strip trailing slash from base, ensure single separator between base and path
+        while (!base.empty() && base.back() == '/') base.pop_back();
+        if (!path.empty() && path.front() != '/') {
+            path = base + "/" + path;
+        } else {
+            path = base + path;
+        }
+    }
+
+    return path;
+}
+
 void SourcePanel::load_file(const std::string& path) {
     cached_lines_.clear();
     cached_error_.clear();
@@ -63,14 +108,37 @@ void SourcePanel::load_file(const std::string& path) {
     }
 }
 
+void SourcePanel::resolve_and_load(const std::string& raw_file) {
+    std::string full_path = remap_source_path(raw_file, strip_prefix_, local_base_);
+
+    if (full_path != cached_file_) {
+        cached_file_ = full_path;
+        load_file(cached_file_);
+    }
+}
+
 void SourcePanel::render(const TraceModel& model, ViewState& view) {
     TRACE_SCOPE_CAT("Source", "ui");
     ImGui::Begin("Source");
 
-    // Source root input
+    // Path remapping inputs
+    float label_w = ImGui::CalcTextSize("Local base ").x;
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Strip prefix");
+    ImGui::SameLine(label_w);
     ImGui::SetNextItemWidth(-1);
-    ImGui::InputTextWithHint("##srcroot", "Source root path (prepended to relative file paths)...", source_root_,
-                             sizeof(source_root_));
+    if (ImGui::InputTextWithHint("##strip", "e.g. c:\\jenkins\\prod\\rel-123", strip_prefix_, sizeof(strip_prefix_))) {
+        path_settings_changed_ = true;
+    }
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Local base");
+    ImGui::SameLine(label_w);
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::InputTextWithHint("##base", "e.g. /mnt/c/dev/repo", local_base_, sizeof(local_base_))) {
+        path_settings_changed_ = true;
+    }
 
     ImGui::Separator();
 
@@ -80,8 +148,10 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
         return;
     }
 
-    // Check if selection changed
-    if (cached_event_idx_ != view.selected_event_idx) {
+    bool selection_changed = (cached_event_idx_ != view.selected_event_idx);
+
+    // Check if selection or path settings changed
+    if (selection_changed) {
         cached_event_idx_ = view.selected_event_idx;
         const auto& ev = model.events_[view.selected_event_idx];
 
@@ -89,39 +159,35 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
         int line = -1;
 
         if (extract_source_location(model, ev, file, line)) {
-            // Build full path
-            std::string full_path;
-            if (!std::filesystem::path(file).is_absolute() && source_root_[0] != '\0') {
-                std::string root = source_root_;
-                if (!root.empty() && root.back() != '/' && root.back() != '\\') root += '/';
-                full_path = root + file;
-            } else {
-                full_path = file;
-            }
-
-            // Only reload if the file changed
-            if (full_path != cached_file_) {
-                cached_file_ = full_path;
-                load_file(cached_file_);
-            }
+            cached_raw_file_ = file;
+            resolve_and_load(cached_raw_file_);
             cached_line_ = line;
             need_scroll_ = true;
         } else {
+            cached_raw_file_.clear();
             cached_file_.clear();
             cached_lines_.clear();
             cached_line_ = -1;
             cached_error_.clear();
         }
+        path_settings_changed_ = false;
+    } else if (path_settings_changed_ && !cached_raw_file_.empty()) {
+        // Path settings changed — re-resolve without changing selection
+        path_settings_changed_ = false;
+        cached_file_.clear();  // force reload
+        resolve_and_load(cached_raw_file_);
+        need_scroll_ = true;
     }
 
-    if (cached_file_.empty() && cached_error_.empty()) {
+    if (cached_raw_file_.empty()) {
         ImGui::TextDisabled("No source location in this event's args.");
         ImGui::TextDisabled("Expected args fields: file/src_file + line/src_line");
         ImGui::End();
         return;
     }
 
-    // Show file path and line
+    // Show raw and resolved paths
+    ImGui::TextDisabled("Trace: %s", cached_raw_file_.c_str());
     ImGui::Text("%s", cached_file_.c_str());
     if (cached_line_ > 0) {
         ImGui::SameLine();
