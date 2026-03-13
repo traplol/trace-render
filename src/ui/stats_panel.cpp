@@ -407,7 +407,7 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
     ImGui::Separator();
 
     int col_count = (int)tab.result.columns.size();
-    float results_h = ImGui::GetContentRegionAvail().y;
+    float results_h = ImGui::GetContentRegionAvail().y - ImGui::GetStyle().ItemSpacing.y;
 
     if (ImGui::BeginTable("QueryResults", col_count,
                           ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
