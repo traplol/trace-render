@@ -2,12 +2,17 @@
 
 A fast, native Chrome trace viewer built with C++ and [Dear ImGui](https://github.com/ocornut/imgui).
 
-![Screenshot](screenshot.png)
+![Timeline with diagnostics, source viewer, and SQL query](screenshots/1.png)
+![Source code viewer with syntax highlighting](screenshots/2.png)
+![Search results and children breakdown](screenshots/3.png)
 
 ## Features
 
 - **Timeline** - Zoomable/pannable timeline with colored slices per process/thread
-- **Detail panel** - Event metadata, duration, category, and JSON arguments
+- **Detail panel** - Event metadata, call stack, children breakdown, and JSON arguments
+- **Source viewer** - Jump to source code for traced functions with syntax highlighting
+- **SQL queries** - Query trace events with SQL and view results in sortable tables
+- **Statistics** - Per-function aggregated timing with count, total, avg, min, max
 - **Search** - Case-insensitive search by event name or category with result navigation
 - **Filtering** - Toggle visibility of processes, threads, and categories
 - **Counter tracks** - Step-function line charts for counter (ph:C) events
