@@ -514,8 +514,20 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         scroll_y_ = std::min(scroll_y_, max_scroll);
     }
 
-    // Click to select
-    if (is_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !io.KeyCtrl) {
+    // Shift+drag in track area for range selection
+    {
+        float track_left = canvas_min.x + view.label_width;
+        float track_width = canvas_size.x - view.label_width;
+
+        if (is_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && io.KeyShift && io.MousePos.x >= track_left) {
+            ruler_dragging_ = true;
+            ruler_drag_start_ts_ = view.x_to_time(io.MousePos.x, track_left, track_width);
+            view.clear_range_selection();
+        }
+    }
+
+    // Click to select (only if not starting a range drag)
+    if (is_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !io.KeyCtrl && !io.KeyShift) {
         int32_t hit = hit_test(io.MousePos.x, io.MousePos.y, canvas_min, canvas_max, model, view);
         view.selected_event_idx = hit;
         view.clear_range_selection();
