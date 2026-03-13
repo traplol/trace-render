@@ -222,7 +222,11 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
         char stack_label[32];
         snprintf(stack_label, sizeof(stack_label), "Call Stack (%d)###Stack", ev.depth + 1);
         if (has_stack && ImGui::BeginTabItem(stack_label)) {
-            auto stack = model.build_call_stack(view.selected_event_idx);
+            if (cached_stack_event_idx_ != view.selected_event_idx) {
+                cached_stack_event_idx_ = view.selected_event_idx;
+                cached_call_stack_ = model.build_call_stack(view.selected_event_idx);
+            }
+            const auto& stack = cached_call_stack_;
             for (int i = 0; i < (int)stack.size(); i++) {
                 uint32_t idx = stack[i];
                 const auto& frame = model.events_[idx];

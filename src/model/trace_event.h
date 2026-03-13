@@ -76,6 +76,8 @@ struct TraceEvent {
     uint32_t args_idx = UINT32_MAX;  // index into args storage, UINT32_MAX = no args
     uint8_t depth = 0;               // nesting depth within thread
     bool is_end_event = false;       // true for matched 'E' events (don't render)
+    int32_t parent_idx = -1;        // index of parent event (-1 if root or no parent)
+    double self_time = 0.0;         // wall time minus immediate children's durations
 
     double end_ts() const { return ts + dur; }
 };

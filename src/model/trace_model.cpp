@@ -71,22 +71,47 @@ void TraceModel::build_index() {
                 thread.event_indices = std::move(deduped);
             }
 
-            // Compute nesting depth using a stack of end timestamps
-            std::vector<double> depth_stack;
+            // Compute nesting depth and parent indices using a stack
+            // Stack stores (end_ts, event_index) pairs for open events
+            std::vector<std::pair<double, uint32_t>> depth_stack;
             uint8_t max_depth = 0;
             for (uint32_t idx : thread.event_indices) {
                 auto& ev = events_[idx];
                 // Pop entries that have ended before this event starts
-                while (!depth_stack.empty() && depth_stack.back() <= ev.ts) {
+                while (!depth_stack.empty() && depth_stack.back().first <= ev.ts) {
                     depth_stack.pop_back();
                 }
                 ev.depth = (uint8_t)depth_stack.size();
                 if (ev.depth > max_depth) max_depth = ev.depth;
+                ev.parent_idx = depth_stack.empty() ? -1 : (int32_t)depth_stack.back().second;
                 if (ev.dur > 0) {
-                    depth_stack.push_back(ev.end_ts());
+                    depth_stack.push_back({ev.end_ts(), idx});
                 }
             }
             thread.max_depth = max_depth;
+
+            // Compute self times: wall time minus immediate children's durations
+            for (uint32_t idx : thread.event_indices) {
+                auto& ev = events_[idx];
+                if (ev.dur <= 0) continue;
+                double children_total = 0.0;
+                // Scan forward for immediate children (depth == ev.depth + 1)
+                // Thread events are sorted by ts, so we can break early
+                for (auto it = std::lower_bound(thread.event_indices.begin(),
+                                                thread.event_indices.end(), idx,
+                                                [this](uint32_t a, uint32_t b) {
+                                                    return events_[a].ts < events_[b].ts;
+                                                });
+                     it != thread.event_indices.end(); ++it) {
+                    const auto& child = events_[*it];
+                    if (child.ts >= ev.end_ts()) break;
+                    if (child.depth != ev.depth + 1) continue;
+                    if (child.ts < ev.ts) continue;
+                    if (child.end_ts() > ev.end_ts()) continue;
+                    if (child.dur > 0) children_total += child.dur;
+                }
+                ev.self_time = ev.dur - children_total;
+            }
 
             // Build spatial index
             thread.block_index.build(thread.event_indices, events_);
@@ -131,22 +156,7 @@ void TraceModel::build_index() {
 int32_t TraceModel::find_parent_event(uint32_t event_idx) const {
     TRACE_FUNCTION_CAT("model");
     if (event_idx >= events_.size()) return -1;
-    const auto& ev = events_[event_idx];
-    if (ev.depth == 0) return -1;
-
-    const auto* proc = find_process(ev.pid);
-    if (!proc) return -1;
-    const auto* thread = proc->find_thread(ev.tid);
-    if (!thread) return -1;
-
-    uint8_t parent_depth = ev.depth - 1;
-    for (uint32_t idx : thread->event_indices) {
-        const auto& candidate = events_[idx];
-        if (candidate.depth == parent_depth && candidate.ts <= ev.ts && candidate.end_ts() >= ev.end_ts()) {
-            return (int32_t)idx;
-        }
-    }
-    return -1;
+    return events_[event_idx].parent_idx;
 }
 
 std::vector<uint32_t> TraceModel::build_call_stack(uint32_t event_idx) const {
@@ -154,12 +164,12 @@ std::vector<uint32_t> TraceModel::build_call_stack(uint32_t event_idx) const {
     std::vector<uint32_t> stack;
     if (event_idx >= events_.size()) return stack;
 
-    stack.push_back(event_idx);
+    // Walk up pre-computed parent chain
     uint32_t current = event_idx;
-    while (true) {
-        int32_t parent = find_parent_event(current);
+    while (current < events_.size()) {
+        stack.push_back(current);
+        int32_t parent = events_[current].parent_idx;
         if (parent < 0) break;
-        stack.push_back((uint32_t)parent);
         current = (uint32_t)parent;
     }
     // Reverse so root is first, selected event is last
@@ -170,22 +180,5 @@ std::vector<uint32_t> TraceModel::build_call_stack(uint32_t event_idx) const {
 double TraceModel::compute_self_time(uint32_t event_idx) const {
     TRACE_FUNCTION_CAT("model");
     if (event_idx >= events_.size()) return 0.0;
-    const auto& ev = events_[event_idx];
-    if (ev.dur <= 0) return 0.0;
-
-    const auto* proc = find_process(ev.pid);
-    if (!proc) return ev.dur;
-    const auto* thread = proc->find_thread(ev.tid);
-    if (!thread) return ev.dur;
-
-    double children_total = 0.0;
-    for (uint32_t idx : thread->event_indices) {
-        const auto& child = events_[idx];
-        if (child.depth != ev.depth + 1) continue;
-        if (child.ts < ev.ts) continue;
-        if (child.ts > ev.end_ts()) break;
-        if (child.end_ts() > ev.end_ts()) continue;
-        if (child.dur > 0) children_total += child.dur;
-    }
-    return ev.dur - children_total;
+    return events_[event_idx].self_time;
 }

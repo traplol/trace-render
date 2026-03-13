@@ -342,6 +342,70 @@ TEST(CallStack, ComputeSelfTimeOutOfBounds) {
     EXPECT_DOUBLE_EQ(model.compute_self_time(999), 0.0);
 }
 
+TEST(CallStack, ParentIdxPrecomputedCorrectly) {
+    auto model = make_nested_model();
+    EXPECT_EQ(model.events_[0].parent_idx, -1);  // root has no parent
+    EXPECT_EQ(model.events_[1].parent_idx, 0);    // mid -> root
+    EXPECT_EQ(model.events_[2].parent_idx, 1);    // leaf -> mid
+}
+
+TEST(CallStack, SelfTimePrecomputedCorrectly) {
+    auto model = make_nested_model();
+    // root: dur=500, child mid=300, self=200
+    EXPECT_DOUBLE_EQ(model.events_[0].self_time, 200.0);
+    // mid: dur=300, child leaf=100, self=200
+    EXPECT_DOUBLE_EQ(model.events_[1].self_time, 200.0);
+    // leaf: dur=100, no children, self=100
+    EXPECT_DOUBLE_EQ(model.events_[2].self_time, 100.0);
+}
+
+TEST(CallStack, SelfTimeMultipleChildren) {
+    TraceModel m;
+    m.intern_string("");
+    auto& proc = m.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    // Parent: ts=0, dur=1000
+    TraceEvent parent;
+    parent.ph = Phase::Complete;
+    parent.name_idx = m.intern_string("parent");
+    parent.ts = 0.0;
+    parent.dur = 1000.0;
+    parent.pid = 1;
+    parent.tid = 1;
+    m.events_.push_back(parent);
+    thread.event_indices.push_back(0);
+
+    // Child A: ts=100, dur=200
+    TraceEvent childA;
+    childA.ph = Phase::Complete;
+    childA.name_idx = m.intern_string("childA");
+    childA.ts = 100.0;
+    childA.dur = 200.0;
+    childA.pid = 1;
+    childA.tid = 1;
+    m.events_.push_back(childA);
+    thread.event_indices.push_back(1);
+
+    // Child B: ts=500, dur=300
+    TraceEvent childB;
+    childB.ph = Phase::Complete;
+    childB.name_idx = m.intern_string("childB");
+    childB.ts = 500.0;
+    childB.dur = 300.0;
+    childB.pid = 1;
+    childB.tid = 1;
+    m.events_.push_back(childB);
+    thread.event_indices.push_back(2);
+
+    m.build_index();
+
+    // parent self = 1000 - 200 - 300 = 500
+    EXPECT_DOUBLE_EQ(m.events_[0].self_time, 500.0);
+    EXPECT_EQ(m.events_[1].parent_idx, 0);
+    EXPECT_EQ(m.events_[2].parent_idx, 0);
+}
+
 // --- Same-timestamp parent/child ---
 
 static TraceModel make_same_ts_model() {

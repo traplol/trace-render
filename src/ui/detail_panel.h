@@ -31,6 +31,8 @@ private:
     bool children_dirty_ = false;
     bool group_by_name_ = false;
     bool cached_group_flag_ = false;
+    int32_t cached_stack_event_idx_ = -1;
+    std::vector<uint32_t> cached_call_stack_;
     char filter_buf_[256] = {};
     std::string active_filter_;
     std::vector<ChildInfo> children_;
