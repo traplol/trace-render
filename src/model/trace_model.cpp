@@ -97,11 +97,9 @@ void TraceModel::build_index() {
                 double children_total = 0.0;
                 // Scan forward for immediate children (depth == ev.depth + 1)
                 // Thread events are sorted by ts, so we can break early
-                for (auto it = std::lower_bound(thread.event_indices.begin(),
-                                                thread.event_indices.end(), idx,
-                                                [this](uint32_t a, uint32_t b) {
-                                                    return events_[a].ts < events_[b].ts;
-                                                });
+                for (auto it =
+                         std::lower_bound(thread.event_indices.begin(), thread.event_indices.end(), idx,
+                                          [this](uint32_t a, uint32_t b) { return events_[a].ts < events_[b].ts; });
                      it != thread.event_indices.end(); ++it) {
                     const auto& child = events_[*it];
                     if (child.ts >= ev.end_ts()) break;

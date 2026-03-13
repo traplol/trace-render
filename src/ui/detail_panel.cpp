@@ -2,6 +2,7 @@
 #include "format_time.h"
 #include "tracing.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include <nlohmann/json.hpp>
 #include <cstdio>
 #include <algorithm>
@@ -218,15 +219,44 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
     // --- Tab bar for Call Stack / Children / Arguments ---
     if (ImGui::BeginTabBar("##DetailTabs")) {
         // Call Stack tab
-        bool has_stack = (ev.depth > 0);
-        char stack_label[32];
-        snprintf(stack_label, sizeof(stack_label), "Call Stack (%d)###Stack", ev.depth + 1);
-        if (has_stack && ImGui::BeginTabItem(stack_label)) {
-            if (cached_stack_event_idx_ != view.selected_event_idx) {
-                cached_stack_event_idx_ = view.selected_event_idx;
-                cached_call_stack_ = model.build_call_stack(view.selected_event_idx);
+        if (cached_stack_event_idx_ != view.selected_event_idx) {
+            cached_stack_event_idx_ = view.selected_event_idx;
+            cached_call_stack_ = model.build_call_stack(view.selected_event_idx);
+
+            // Collect all descendants of the selected event
+            cached_stack_children_.clear();
+            stack_collapsed_.clear();
+            stack_has_children_.clear();
+            if (ev.dur > 0) {
+                for (const auto& proc : model.processes_) {
+                    if (proc.pid != ev.pid) continue;
+                    for (const auto& thread : proc.threads) {
+                        if (thread.tid != ev.tid) continue;
+                        for (uint32_t idx : thread.event_indices) {
+                            const auto& child = model.events_[idx];
+                            if (child.ts >= ev.end_ts()) break;
+                            if (child.depth > ev.depth && child.ts >= ev.ts && child.end_ts() <= ev.end_ts() &&
+                                child.dur > 0) {
+                                cached_stack_children_.push_back(idx);
+                                if (child.parent_idx >= 0) {
+                                    stack_has_children_.insert((uint32_t)child.parent_idx);
+                                }
+                            }
+                        }
+                        break;
+                    }
+                    break;
+                }
             }
+        }
+        int stack_count = (int)cached_call_stack_.size() + (int)cached_stack_children_.size();
+        bool has_stack = (ev.depth > 0 || !cached_stack_children_.empty());
+        char stack_label[32];
+        snprintf(stack_label, sizeof(stack_label), "Call Stack (%d)###Stack", stack_count);
+        if (has_stack && ImGui::BeginTabItem(stack_label)) {
+            const float indent_per_level = ImGui::GetFontSize() * 0.75f;
             const auto& stack = cached_call_stack_;
+            // Render ancestors and selected event
             for (int i = 0; i < (int)stack.size(); i++) {
                 uint32_t idx = stack[i];
                 const auto& frame = model.events_[idx];
@@ -236,12 +266,13 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 double self = model.compute_self_time(idx);
                 format_time(self, self_buf, sizeof(self_buf));
 
+                float indent = i * indent_per_level;
+                if (indent > 0) ImGui::Indent(indent);
+
                 char id_buf[32];
                 snprintf(id_buf, sizeof(id_buf), "##frame%d", i);
                 if (ImGui::Selectable(id_buf, is_selected, ImGuiSelectableFlags_AllowOverlap)) {
-                    if (!is_selected) {
-                        view.navigate_to_event(idx, frame);
-                    }
+                    view.navigate_to_event(idx, frame);
                 }
                 bool row_hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
                 ImGui::SameLine();
@@ -254,12 +285,152 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 ImGui::SameLine();
                 ImGui::TextDisabled("  self: %s", self_buf);
 
+                if (indent > 0) ImGui::Unindent(indent);
+
                 if (row_hovered) {
                     char wall_buf[64];
                     format_time(frame.dur, wall_buf, sizeof(wall_buf));
                     float self_pct = frame.dur > 0 ? (float)(self / frame.dur * 100.0) : 0.0f;
                     ImGui::SetTooltip("%s\nWall: %s | Self: %s (%.1f%%)", model.get_string(frame.name_idx).c_str(),
                                       wall_buf, self_buf, self_pct);
+                }
+            }
+
+            // Render all descendants below the selected event
+            if (!cached_stack_children_.empty()) {
+                int depth_offset = (int)stack.size() - 1 - (int)ev.depth;
+                ImGui::Separator();
+
+                // Two-pass: render rows and record positions, then draw tree lines + arrows
+                struct RowInfo {
+                    float y_center;
+                    int depth;       // visual depth (frame.depth + depth_offset)
+                    int parent_idx;  // parent's visual depth for connector
+                };
+                struct ArrowInfo {
+                    ImVec2 pos;
+                    ImGuiDir dir;
+                };
+                std::vector<RowInfo> rows;
+                std::vector<ArrowInfo> arrows;
+                rows.reserve(cached_stack_children_.size());
+
+                float arrow_sz = ImGui::GetFontSize();
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                float base_x = ImGui::GetCursorScreenPos().x;
+
+                int collapsed_depth = INT_MAX;
+                for (int i = 0; i < (int)cached_stack_children_.size(); i++) {
+                    uint32_t idx = cached_stack_children_[i];
+                    const auto& frame = model.events_[idx];
+
+                    if ((int)frame.depth <= collapsed_depth) {
+                        collapsed_depth = INT_MAX;
+                    }
+                    if ((int)frame.depth > collapsed_depth) continue;
+
+                    bool has_children = stack_has_children_.count(idx) > 0;
+                    bool is_collapsed = stack_collapsed_.count(idx) > 0;
+
+                    char self_buf[64];
+                    double self = model.compute_self_time(idx);
+                    format_time(self, self_buf, sizeof(self_buf));
+
+                    int vis_depth = (int)frame.depth + depth_offset;
+                    float indent = vis_depth * indent_per_level;
+                    if (indent > 0) ImGui::Indent(indent);
+
+                    // Toggle arrow for nodes with children
+                    if (has_children) {
+                        ImVec2 cursor = ImGui::GetCursorScreenPos();
+                        char arrow_id[32];
+                        snprintf(arrow_id, sizeof(arrow_id), "##t%d", i);
+                        if (ImGui::InvisibleButton(arrow_id, ImVec2(arrow_sz, arrow_sz))) {
+                            if (is_collapsed)
+                                stack_collapsed_.erase(idx);
+                            else
+                                stack_collapsed_.insert(idx);
+                            is_collapsed = !is_collapsed;
+                        }
+                        ImGuiDir dir = is_collapsed ? ImGuiDir_Right : ImGuiDir_Down;
+                        arrows.push_back({cursor, dir});
+                        ImGui::SameLine();
+                    } else {
+                        ImGui::Dummy(ImVec2(arrow_sz, arrow_sz));
+                        ImGui::SameLine();
+                    }
+
+                    char id_buf[32];
+                    snprintf(id_buf, sizeof(id_buf), "##child%d", i);
+                    if (ImGui::Selectable(id_buf, false, ImGuiSelectableFlags_AllowOverlap)) {
+                        view.navigate_to_event(idx, frame);
+                    }
+                    bool row_hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
+                    ImGui::SameLine();
+                    ImGui::TextUnformatted(model.get_string(frame.name_idx).c_str());
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("  self: %s", self_buf);
+
+                    // Record row position for tree lines
+                    float row_y = ImGui::GetCursorScreenPos().y - ImGui::GetTextLineHeightWithSpacing() * 0.6f;
+                    rows.push_back({row_y, vis_depth, vis_depth - 1});
+
+                    if (indent > 0) ImGui::Unindent(indent);
+
+                    if (row_hovered) {
+                        char wall_buf[64];
+                        format_time(frame.dur, wall_buf, sizeof(wall_buf));
+                        float self_pct = frame.dur > 0 ? (float)(self / frame.dur * 100.0) : 0.0f;
+                        ImGui::SetTooltip("%s\nWall: %s | Self: %s (%.1f%%)", model.get_string(frame.name_idx).c_str(),
+                                          wall_buf, self_buf, self_pct);
+                    }
+
+                    if (is_collapsed) {
+                        collapsed_depth = (int)frame.depth;
+                    }
+                }
+
+                // Draw tree connector lines
+                // For each depth level, find the last row at that depth to know where
+                // vertical lines should end. Then draw vertical + horizontal connectors.
+                ImU32 line_col = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+                float line_thickness = 1.0f;
+
+                // For each row, draw a horizontal connector from the parent's vertical
+                // line to the arrow/icon area, and track vertical line extents per depth.
+                // last_y_at_depth[d] = y of the last row whose parent depth is d
+                std::unordered_map<int, float> first_y_at_depth;
+                std::unordered_map<int, float> last_y_at_depth;
+                for (auto& row : rows) {
+                    int pd = row.parent_idx;  // parent's visual depth
+                    if (first_y_at_depth.find(pd) == first_y_at_depth.end()) first_y_at_depth[pd] = row.y_center;
+                    last_y_at_depth[pd] = row.y_center;
+                }
+
+                for (auto& row : rows) {
+                    int pd = row.parent_idx;
+                    // X of the vertical line: center of the arrow area at parent depth
+                    float line_x = base_x + pd * indent_per_level + arrow_sz * 0.5f;
+                    // Extend to the center of the arrow area at this row's depth
+                    float h_end_x = base_x + row.depth * indent_per_level + arrow_sz * 0.5f;
+
+                    // Horizontal connector
+                    dl->AddLine(ImVec2(line_x, row.y_center), ImVec2(h_end_x, row.y_center), line_col, line_thickness);
+                }
+
+                // Vertical lines per depth level
+                for (auto& [depth, first_y] : first_y_at_depth) {
+                    float last_y = last_y_at_depth[depth];
+                    float line_x = base_x + depth * indent_per_level + arrow_sz * 0.5f;
+                    if (first_y < last_y) {
+                        dl->AddLine(ImVec2(line_x, first_y), ImVec2(line_x, last_y), line_col, line_thickness);
+                    }
+                }
+
+                // Draw arrows on top of tree lines
+                ImU32 arrow_col = ImGui::GetColorU32(ImGuiCol_Text);
+                for (auto& arrow : arrows) {
+                    ImGui::RenderArrow(dl, arrow.pos, arrow_col, arrow.dir, 1.0f);
                 }
             }
             ImGui::EndTabItem();

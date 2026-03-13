@@ -345,8 +345,8 @@ TEST(CallStack, ComputeSelfTimeOutOfBounds) {
 TEST(CallStack, ParentIdxPrecomputedCorrectly) {
     auto model = make_nested_model();
     EXPECT_EQ(model.events_[0].parent_idx, -1);  // root has no parent
-    EXPECT_EQ(model.events_[1].parent_idx, 0);    // mid -> root
-    EXPECT_EQ(model.events_[2].parent_idx, 1);    // leaf -> mid
+    EXPECT_EQ(model.events_[1].parent_idx, 0);   // mid -> root
+    EXPECT_EQ(model.events_[2].parent_idx, 1);   // leaf -> mid
 }
 
 TEST(CallStack, SelfTimePrecomputedCorrectly) {

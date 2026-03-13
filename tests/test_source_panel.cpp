@@ -106,9 +106,9 @@ TEST(RemapSourcePath, JenkinsProdToLocalWSL) {
 
 TEST(RemapSourcePath, JenkinsProdToLocalWindows) {
     // Strip jenkins prod path, replace with local Windows path
-    EXPECT_EQ(remap_source_path("c:\\jenkins\\prod\\rel-123\\repo\\lib\\file.cpp", "c:\\jenkins\\prod\\rel-123",
-                                "c:\\dev"),
-              "c:/dev/repo/lib/file.cpp");
+    EXPECT_EQ(
+        remap_source_path("c:\\jenkins\\prod\\rel-123\\repo\\lib\\file.cpp", "c:\\jenkins\\prod\\rel-123", "c:\\dev"),
+        "c:/dev/repo/lib/file.cpp");
 }
 
 TEST(RemapSourcePath, CaseInsensitiveStrip) {

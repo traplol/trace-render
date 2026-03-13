@@ -1,6 +1,7 @@
 #pragma once
 #include "model/trace_model.h"
 #include "ui/view_state.h"
+#include <unordered_set>
 
 class DetailPanel {
 public:
@@ -33,6 +34,9 @@ private:
     bool cached_group_flag_ = false;
     int32_t cached_stack_event_idx_ = -1;
     std::vector<uint32_t> cached_call_stack_;
+    std::vector<uint32_t> cached_stack_children_;
+    std::unordered_set<uint32_t> stack_collapsed_;     // collapsed event indices
+    std::unordered_set<uint32_t> stack_has_children_;  // events that have children in the tree
     char filter_buf_[256] = {};
     std::string active_filter_;
     std::vector<ChildInfo> children_;

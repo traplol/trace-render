@@ -294,17 +294,12 @@ private:
     bool active_ = false;
 };
 
-#define TRACE_SCOPE(name) \
-    TraceScope _trace_scope_##__LINE__(name, "app", __FILE__, __LINE__, TRACE_FUNC_SIG)
-#define TRACE_SCOPE_CAT(name, cat) \
-    TraceScope _trace_scope_##__LINE__(name, cat, __FILE__, __LINE__, TRACE_FUNC_SIG)
-#define TRACE_SCOPE_ARGS(name, cat, ...)                                         \
-    TraceScopeArgs _trace_scope_args_##__LINE__(                                 \
+#define TRACE_SCOPE(name) TraceScope _trace_scope_##__LINE__(name, "app", __FILE__, __LINE__, TRACE_FUNC_SIG)
+#define TRACE_SCOPE_CAT(name, cat) TraceScope _trace_scope_##__LINE__(name, cat, __FILE__, __LINE__, TRACE_FUNC_SIG)
+#define TRACE_SCOPE_ARGS(name, cat, ...)               \
+    TraceScopeArgs _trace_scope_args_##__LINE__(       \
         name, cat, __FILE__, __LINE__, TRACE_FUNC_SIG, \
         Tracer::instance().enabled() ? trace_detail::make_args_json(__VA_ARGS__) : std::string())
-#define TRACE_FUNCTION()                                                                                    \
-    TraceScope _trace_scope_##__LINE__(TRACE_FUNC_SIG, "app", __FILE__, __LINE__, \
-                                       TRACE_FUNC_SIG)
-#define TRACE_FUNCTION_CAT(cat)                                                                           \
-    TraceScope _trace_scope_##__LINE__(TRACE_FUNC_SIG, cat, __FILE__, __LINE__, \
-                                       TRACE_FUNC_SIG)
+#define TRACE_FUNCTION() TraceScope _trace_scope_##__LINE__(TRACE_FUNC_SIG, "app", __FILE__, __LINE__, TRACE_FUNC_SIG)
+#define TRACE_FUNCTION_CAT(cat) \
+    TraceScope _trace_scope_##__LINE__(TRACE_FUNC_SIG, cat, __FILE__, __LINE__, TRACE_FUNC_SIG)
