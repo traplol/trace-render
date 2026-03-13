@@ -233,6 +233,7 @@ void App::update() {
         ImGui::DockBuilderDockWindow("Statistics", dock_bottom);
         ImGui::DockBuilderDockWindow("Instances", dock_right_bottom);
         ImGui::DockBuilderDockWindow("Diagnostics", dock_right_bottom);
+        ImGui::DockBuilderDockWindow("Source", dock_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
     } else {
@@ -269,6 +270,7 @@ void App::update() {
         stats_.render(model_, query_db_, view_);
         instances_.render(model_, view_);
         diagnostics_.stats = timeline_.diag_stats;
+        source_.render(model_, view_);
         diagnostics_.render(model_, view_);
     } else {
         // Welcome screen
@@ -298,6 +300,10 @@ void App::update() {
         ImGui::End();
 
         ImGui::Begin("Instances");
+        ImGui::TextDisabled("No trace loaded.");
+        ImGui::End();
+
+        ImGui::Begin("Source");
         ImGui::TextDisabled("No trace loaded.");
         ImGui::End();
 
