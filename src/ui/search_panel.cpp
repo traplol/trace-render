@@ -1,18 +1,10 @@
 #include "search_panel.h"
 #include "format_time.h"
+#include "string_utils.h"
 #include "tracing.h"
 #include "imgui.h"
 #include <algorithm>
-#include <cctype>
 #include <cstdio>
-
-static bool contains_case_insensitive(const std::string& haystack, const std::string& needle) {
-    if (needle.empty()) return true;
-    auto it = std::search(haystack.begin(), haystack.end(), needle.begin(), needle.end(), [](char a, char b) {
-        return std::tolower((unsigned char)a) == std::tolower((unsigned char)b);
-    });
-    return it != haystack.end();
-}
 
 void SearchPanel::render(const TraceModel& model, ViewState& view) {
     TRACE_SCOPE_CAT("Search", "ui");

@@ -1,5 +1,6 @@
 #include "detail_panel.h"
 #include "format_time.h"
+#include "string_utils.h"
 #include "tracing.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -7,7 +8,6 @@
 #include <cstdio>
 #include <algorithm>
 #include <vector>
-#include <cctype>
 #include <cmath>
 #include <unordered_map>
 
@@ -782,60 +782,17 @@ void DetailPanel::rebuild_filter(const TraceModel& model) {
     TRACE_FUNCTION_CAT("ui");
     active_filter_ = filter_buf_;
 
-    // Convert filter to lowercase for case-insensitive matching
-    std::string lower_filter = active_filter_;
-    for (auto& ch : lower_filter) ch = (char)std::tolower((unsigned char)ch);
-
     filtered_children_.clear();
     for (size_t i = 0; i < children_.size(); i++) {
-        if (lower_filter.empty()) {
+        if (contains_case_insensitive(model.get_string(children_[i].name_idx), active_filter_)) {
             filtered_children_.push_back(i);
-            continue;
         }
-        const auto& name = model.get_string(children_[i].name_idx);
-        // Case-insensitive substring search
-        bool found = false;
-        if (name.size() >= lower_filter.size()) {
-            for (size_t j = 0; j <= name.size() - lower_filter.size(); j++) {
-                bool match = true;
-                for (size_t k = 0; k < lower_filter.size(); k++) {
-                    if ((char)std::tolower((unsigned char)name[j + k]) != lower_filter[k]) {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (found) filtered_children_.push_back(i);
     }
 
     filtered_aggregated_.clear();
     for (size_t i = 0; i < aggregated_.size(); i++) {
-        if (lower_filter.empty()) {
+        if (contains_case_insensitive(model.get_string(aggregated_[i].name_idx), active_filter_)) {
             filtered_aggregated_.push_back(i);
-            continue;
         }
-        const auto& name = model.get_string(aggregated_[i].name_idx);
-        bool found = false;
-        if (name.size() >= lower_filter.size()) {
-            for (size_t j = 0; j <= name.size() - lower_filter.size(); j++) {
-                bool match = true;
-                for (size_t k = 0; k < lower_filter.size(); k++) {
-                    if ((char)std::tolower((unsigned char)name[j + k]) != lower_filter[k]) {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (found) filtered_aggregated_.push_back(i);
     }
 }
