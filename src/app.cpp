@@ -15,14 +15,105 @@ void App::init(SDL_Window* window) {
     TRACE_FUNCTION_CAT("app");
     window_ = window;
     toolbar_.set_window(window);
+#ifndef __EMSCRIPTEN__
     load_settings();
     SDL_GL_SetSwapInterval(vsync_ ? 1 : 0);
+#endif
 }
 
 void App::shutdown() {
     TRACE_FUNCTION_CAT("app");
+#ifndef __EMSCRIPTEN__
     if (load_thread_.joinable()) load_thread_.join();
+#endif
     save_settings();
+}
+
+#ifdef __EMSCRIPTEN__
+
+void App::open_file(const std::string& path) {
+    // In WASM, open_file loads synchronously (no threads)
+    if (loading_) return;
+
+    loading_filename_ = path;
+    auto pos = path.find_last_of("/\\");
+    if (pos != std::string::npos) loading_filename_ = path.substr(pos + 1);
+
+    status_message_ = "Loading: " + loading_filename_;
+
+    TraceParser parser;
+    parser.time_unit_ns = view_.time_unit_ns;
+
+    TraceModel new_model;
+    bool ok = parser.parse(path, new_model);
+
+    if (ok) {
+        model_ = std::move(new_model);
+        query_db_.load(model_);
+        has_trace_ = true;
+        view_.view_start_ts = 0.0;
+        view_.view_end_ts = 1000.0;
+        view_.selected_event_idx = -1;
+        view_.hidden_pids.clear();
+        view_.hidden_tids.clear();
+        view_.hidden_cats.clear();
+        view_.search_query.clear();
+        view_.search_results.clear();
+        view_.search_current = -1;
+        if (model_.min_ts_ < model_.max_ts_) {
+            view_.zoom_to_fit(model_.min_ts_, model_.max_ts_);
+        }
+        status_message_ = "Loaded: " + loading_filename_ + " (" + std::to_string(model_.events_.size()) + " events, " +
+                          std::to_string(model_.processes_.size()) + " processes)";
+    } else {
+        status_message_ = "Error: " + parser.error_message;
+        has_trace_ = false;
+    }
+}
+
+void App::open_buffer(const char* data, size_t size, const std::string& filename) {
+    if (loading_) return;
+
+    loading_filename_ = filename;
+    status_message_ = "Loading: " + loading_filename_;
+
+    TraceParser parser;
+    parser.time_unit_ns = view_.time_unit_ns;
+
+    TraceModel new_model;
+    bool ok = parser.parse_buffer(data, size, new_model);
+
+    if (ok) {
+        model_ = std::move(new_model);
+        query_db_.load(model_);
+        has_trace_ = true;
+        view_.view_start_ts = 0.0;
+        view_.view_end_ts = 1000.0;
+        view_.selected_event_idx = -1;
+        view_.hidden_pids.clear();
+        view_.hidden_tids.clear();
+        view_.hidden_cats.clear();
+        view_.search_query.clear();
+        view_.search_results.clear();
+        view_.search_current = -1;
+        if (model_.min_ts_ < model_.max_ts_) {
+            view_.zoom_to_fit(model_.min_ts_, model_.max_ts_);
+        }
+        status_message_ = "Loaded: " + loading_filename_ + " (" + std::to_string(model_.events_.size()) + " events, " +
+                          std::to_string(model_.processes_.size()) + " processes)";
+    } else {
+        status_message_ = "Error: " + parser.error_message;
+        has_trace_ = false;
+    }
+}
+
+#else  // !__EMSCRIPTEN__
+
+void App::open_buffer(const char* data, size_t size, const std::string& filename) {
+    (void)data;
+    (void)size;
+    (void)filename;
+    // Desktop uses open_file with filesystem paths
 }
 
 void App::open_file(const std::string& path) {
@@ -99,6 +190,10 @@ void App::open_file(const std::string& path) {
     });
 }
 
+#endif  // __EMSCRIPTEN__
+
+#ifndef __EMSCRIPTEN__
+
 void App::finish_load() {
     TRACE_FUNCTION_CAT("app");
     if (load_thread_.joinable()) load_thread_.join();
@@ -130,6 +225,8 @@ void App::finish_load() {
     load_finished_ = false;
 }
 
+#endif  // !__EMSCRIPTEN__
+
 void App::render_loading_overlay() {
     TRACE_FUNCTION_CAT("ui");
     ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -145,14 +242,17 @@ void App::render_loading_overlay() {
                      ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
     ImGui::PopStyleColor();
 
+#ifdef __EMSCRIPTEN__
+    float progress = load_progress_;
+    std::string phase = loading_phase_;
+#else
     float progress = load_progress_.load(std::memory_order_relaxed);
-
-    // Get current phase
     std::string phase;
     {
         std::lock_guard<std::mutex> lock(phase_mutex_);
         phase = loading_phase_;
     }
+#endif
 
     // Center the loading content
     float content_w = 600.0f;
@@ -195,10 +295,12 @@ void App::render_loading_overlay() {
 void App::update() {
     TRACE_SCOPE("App::update");
 
+#ifndef __EMSCRIPTEN__
     // Check if background load is complete
     if (load_finished_.load(std::memory_order_acquire)) {
         finish_load();
     }
+#endif
 
     // Set up dockspace over the entire viewport
     ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -262,6 +364,12 @@ void App::update() {
         open_file(toolbar_.file_path());
         toolbar_.clear_request();
     }
+#ifdef __EMSCRIPTEN__
+    if (toolbar_.file_data_ready()) {
+        open_buffer(toolbar_.file_data().data(), toolbar_.file_data().size(), toolbar_.file_name());
+        toolbar_.clear_file_data();
+    }
+#endif
     if (toolbar_.settings_requested()) {
         show_settings_ = true;
         toolbar_.clear_settings_request();
@@ -339,11 +447,17 @@ void App::update() {
                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings);
         ImGui::Text("%s", status_message_.c_str());
         if (loading_) {
+#ifdef __EMSCRIPTEN__
+            std::string phase = loading_phase_;
+            float phase_progress = load_phase_progress_;
+#else
             std::string phase;
             {
                 std::lock_guard<std::mutex> lock(phase_mutex_);
                 phase = loading_phase_;
             }
+            float phase_progress = load_phase_progress_.load(std::memory_order_relaxed);
+#endif
             if (!phase.empty()) {
                 ImGui::SameLine();
                 ImGui::TextDisabled("|");
@@ -351,7 +465,6 @@ void App::update() {
                 ImGui::Text("%s", phase.c_str());
             }
             ImGui::SameLine();
-            float phase_progress = load_phase_progress_.load(std::memory_order_relaxed);
             ImGui::ProgressBar(phase_progress, ImVec2(150, 0));
         }
         if (has_trace_ && !loading_ && view_.selected_event_idx >= 0) {
@@ -396,9 +509,11 @@ void App::render_settings_modal() {
         ImGui::ColorEdit4("Selection Border Color", view_.sel_border_color,
                           ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 
+#ifndef __EMSCRIPTEN__
         if (ImGui::Checkbox("VSync", &vsync_)) {
             SDL_GL_SetSwapInterval(vsync_ ? 1 : 0);
         }
+#endif
 
         ImGui::SeparatorText("Parser");
 
@@ -432,6 +547,7 @@ void App::render_settings_modal() {
     }
 }
 
+#ifndef __EMSCRIPTEN__
 std::string App::settings_path() const {
     std::string dir;
     if (const char* xdg = std::getenv("XDG_CONFIG_HOME")) {
@@ -514,3 +630,13 @@ void App::load_settings() {
         // Ignore malformed settings file
     }
 }
+
+#else  // __EMSCRIPTEN__
+
+std::string App::settings_path() const {
+    return "";
+}
+void App::save_settings() {}
+void App::load_settings() {}
+
+#endif  // __EMSCRIPTEN__

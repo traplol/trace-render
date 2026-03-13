@@ -14,15 +14,17 @@ FetchContent_Declare(json
 )
 
 # --- SDL3 ---
-FetchContent_Declare(SDL3
-  GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-  GIT_TAG        release-3.2.8
-  GIT_SHALLOW    TRUE
-)
-set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-set(SDL_STATIC ON  CACHE BOOL "" FORCE)
-set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
-set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+if(NOT EMSCRIPTEN)
+  FetchContent_Declare(SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-3.2.8
+    GIT_SHALLOW    TRUE
+  )
+  set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+  set(SDL_STATIC ON  CACHE BOOL "" FORCE)
+  set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+  set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+endif()
 
 # --- Dear ImGui (docking branch) ---
 FetchContent_Declare(imgui
@@ -35,7 +37,12 @@ FetchContent_Declare(imgui
 FetchContent_Declare(sqlite3
   URL        https://www.sqlite.org/2024/sqlite-amalgamation-3450100.zip
 )
-FetchContent_MakeAvailable(json SDL3 imgui sqlite3)
+
+if(EMSCRIPTEN)
+  FetchContent_MakeAvailable(json imgui sqlite3)
+else()
+  FetchContent_MakeAvailable(json SDL3 imgui sqlite3)
+endif()
 
 # Build SQLite as a static library
 add_library(sqlite3_lib STATIC ${sqlite3_SOURCE_DIR}/sqlite3.c)
@@ -56,52 +63,84 @@ target_include_directories(imgui_lib PUBLIC
   ${imgui_SOURCE_DIR}
   ${imgui_SOURCE_DIR}/backends
 )
-target_link_libraries(imgui_lib PUBLIC SDL3::SDL3-static)
 
-find_package(OpenGL REQUIRED)
+if(EMSCRIPTEN)
+  # SDL3 is provided via Emscripten port
+  target_compile_options(imgui_lib PUBLIC -sUSE_SDL=3)
+  target_link_options(imgui_lib PUBLIC -sUSE_SDL=3)
+else()
+  target_link_libraries(imgui_lib PUBLIC SDL3::SDL3-static)
+  find_package(OpenGL REQUIRED)
+endif()
 
 # --- Application ---
 file(GLOB_RECURSE APP_SOURCES src/*.cpp)
 add_executable(perfetto_imgui ${APP_SOURCES})
 target_include_directories(perfetto_imgui PRIVATE src)
-target_link_libraries(perfetto_imgui PRIVATE
-  imgui_lib
-  nlohmann_json::nlohmann_json
-  sqlite3_lib
-  SDL3::SDL3-static
-  OpenGL::GL
-)
 
-# --- Tests ---
-option(BUILD_TESTS "Build unit tests" ON)
-if(BUILD_TESTS)
-  enable_testing()
-
-  FetchContent_Declare(googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG        v1.15.2
-    GIT_SHALLOW    TRUE
+if(EMSCRIPTEN)
+  target_link_libraries(perfetto_imgui PRIVATE
+    imgui_lib
+    nlohmann_json::nlohmann_json
+    sqlite3_lib
   )
-  set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
-  set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-  FetchContent_MakeAvailable(googletest)
-
-  # Collect non-main source files for linking with tests
-  file(GLOB_RECURSE LIB_SOURCES src/*.cpp)
-  list(FILTER LIB_SOURCES EXCLUDE REGEX "src/main\\.cpp$")
-
-  file(GLOB TEST_SOURCES tests/*.cpp)
-  add_executable(perfetto_tests ${TEST_SOURCES} ${LIB_SOURCES})
-  target_include_directories(perfetto_tests PRIVATE src)
-  target_link_libraries(perfetto_tests PRIVATE
-    GTest::gtest_main
+  # Emscripten linker flags
+  target_link_options(perfetto_imgui PRIVATE
+    -sUSE_SDL=3
+    -sMAX_WEBGL_VERSION=2
+    -sMIN_WEBGL_VERSION=2
+    -sALLOW_MEMORY_GROWTH=1
+    -sINITIAL_MEMORY=134217728
+    -sEXPORTED_FUNCTIONS=_main,_wasm_file_loaded,_malloc,_free
+    -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,lengthBytesUTF8,stringToUTF8
+    --shell-file=${CMAKE_SOURCE_DIR}/web/shell.html
+  )
+  set_target_properties(perfetto_imgui PROPERTIES
+    SUFFIX ".html"
+    OUTPUT_NAME "index"
+  )
+else()
+  target_link_libraries(perfetto_imgui PRIVATE
     imgui_lib
     nlohmann_json::nlohmann_json
     sqlite3_lib
     SDL3::SDL3-static
     OpenGL::GL
   )
+endif()
 
-  include(GoogleTest)
-  gtest_discover_tests(perfetto_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+# --- Tests (desktop only) ---
+if(NOT EMSCRIPTEN)
+  option(BUILD_TESTS "Build unit tests" ON)
+  if(BUILD_TESTS)
+    enable_testing()
+
+    FetchContent_Declare(googletest
+      GIT_REPOSITORY https://github.com/google/googletest.git
+      GIT_TAG        v1.15.2
+      GIT_SHALLOW    TRUE
+    )
+    set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+
+    # Collect non-main source files for linking with tests
+    file(GLOB_RECURSE LIB_SOURCES src/*.cpp)
+    list(FILTER LIB_SOURCES EXCLUDE REGEX "src/main\\.cpp$")
+
+    file(GLOB TEST_SOURCES tests/*.cpp)
+    add_executable(perfetto_tests ${TEST_SOURCES} ${LIB_SOURCES})
+    target_include_directories(perfetto_tests PRIVATE src)
+    target_link_libraries(perfetto_tests PRIVATE
+      GTest::gtest_main
+      imgui_lib
+      nlohmann_json::nlohmann_json
+      sqlite3_lib
+      SDL3::SDL3-static
+      OpenGL::GL
+    )
+
+    include(GoogleTest)
+    gtest_discover_tests(perfetto_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  endif()
 endif()
