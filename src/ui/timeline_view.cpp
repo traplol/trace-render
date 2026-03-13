@@ -569,7 +569,9 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
             view.view_end_ts = center + half;
         }
         if (ImGui::IsKeyPressed(ImGuiKey_F)) {
-            if (view.selected_event_idx >= 0) {
+            if (view.has_range_selection) {
+                view.zoom_to_fit(view.range_start_ts, view.range_end_ts);
+            } else if (view.selected_event_idx >= 0) {
                 view.navigate_to_event(view.selected_event_idx, model.events_[view.selected_event_idx]);
             } else if (model.min_ts_ < model.max_ts_) {
                 view.zoom_to_fit(model.min_ts_, model.max_ts_);
