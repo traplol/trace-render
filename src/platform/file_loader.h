@@ -1,15 +1,17 @@
 #pragma once
 #include "model/trace_model.h"
+#include "model/query_db.h"
 #include <memory>
 #include <string>
+#include <vector>
 
 class FileLoader {
 public:
     FileLoader();
     ~FileLoader();
 
-    void load_file(const std::string& path, bool time_ns);
-    void load_buffer(const char* data, size_t size, const std::string& filename, bool time_ns);
+    void load_file(const std::string& path, bool time_ns, QueryDb* query_db = nullptr);
+    void load_buffer(std::vector<char> data, const std::string& filename, bool time_ns, QueryDb* query_db = nullptr);
 
     bool is_loading() const;
     bool poll_finished();  // returns true once when loading completes

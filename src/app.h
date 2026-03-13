@@ -16,6 +16,7 @@
 #include "ui/source_panel.h"
 #include "model/query_db.h"
 #include <string>
+#include <vector>
 
 struct SDL_Window;
 
@@ -25,7 +26,7 @@ public:
     void update();
     void shutdown();
     void open_file(const std::string& path);
-    void open_buffer(const char* data, size_t size, const std::string& filename);
+    void open_buffer(std::vector<char> data, const std::string& filename);
     void set_time_unit_ns(bool ns) { view_.time_unit_ns = ns; }
 
     bool has_trace() const { return has_trace_; }

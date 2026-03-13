@@ -30,13 +30,13 @@ void App::shutdown() {
 
 void App::open_file(const std::string& path) {
     if (loader_.is_loading()) return;
-    loader_.load_file(path, view_.time_unit_ns);
+    loader_.load_file(path, view_.time_unit_ns, &query_db_);
     status_message_ = "Loading: " + loader_.filename();
 }
 
-void App::open_buffer(const char* data, size_t size, const std::string& filename) {
+void App::open_buffer(std::vector<char> data, const std::string& filename) {
     if (loader_.is_loading()) return;
-    loader_.load_buffer(data, size, filename, view_.time_unit_ns);
+    loader_.load_buffer(std::move(data), filename, view_.time_unit_ns, &query_db_);
     status_message_ = "Loading: " + loader_.filename();
 }
 
@@ -44,7 +44,6 @@ void App::finish_load() {
     TRACE_FUNCTION_CAT("app");
     if (loader_.success()) {
         model_ = loader_.take_model();
-        query_db_.load(model_);
         has_trace_ = true;
         view_.view_start_ts = 0.0;
         view_.view_end_ts = 1000.0;
@@ -133,7 +132,7 @@ void App::update() {
     if (platform::has_pending_file()) {
         auto f = platform::take_pending_file();
         if (!f.data.empty()) {
-            open_buffer(f.data.data(), f.data.size(), f.name);
+            open_buffer(std::move(f.data), f.name);
         } else {
             open_file(f.path);
         }

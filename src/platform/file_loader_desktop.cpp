@@ -18,38 +18,14 @@ struct FileLoader::Impl {
     std::string error_;
     std::string filename_;
     TraceModel model;
-};
 
-FileLoader::FileLoader() : impl_(std::make_unique<Impl>()) {}
-FileLoader::~FileLoader() {
-    join();
-}
-
-void FileLoader::load_file(const std::string& path, bool time_ns) {
-    join();
-
-    // Extract display name
-    impl_->filename_ = path;
-    auto pos = path.find_last_of("/\\");
-    if (pos != std::string::npos) impl_->filename_ = path.substr(pos + 1);
-
-    impl_->loading = true;
-    impl_->finished = false;
-    impl_->progress = 0.0f;
-    impl_->phase_progress = 0.0f;
-    impl_->success_ = false;
-    impl_->error_.clear();
-
-    impl_->thread = std::thread([this, path, time_ns]() {
-        TRACE_SCOPE_CAT("OpenFile", "io");
-
-        TraceParser parser;
+    void setup_progress(TraceParser& parser) {
         parser.on_progress = [this](const char* ph, float p) {
             {
-                std::lock_guard<std::mutex> lock(impl_->phase_mutex);
-                impl_->phase_str = ph;
+                std::lock_guard<std::mutex> lock(phase_mutex);
+                phase_str = ph;
             }
-            impl_->phase_progress.store(p, std::memory_order_relaxed);
+            phase_progress.store(p, std::memory_order_relaxed);
 
             float global = 0.0f;
             if (std::string_view(ph) == "Reading file") {
@@ -61,25 +37,64 @@ void FileLoader::load_file(const std::string& path, bool time_ns) {
             } else {
                 global = 0.80f + p * 0.20f;
             }
-            impl_->progress.store(global, std::memory_order_relaxed);
+            progress.store(global, std::memory_order_relaxed);
         };
+    }
+
+    void finish_parse(bool ok, TraceParser& parser, TraceModel& new_model, QueryDb* query_db) {
+        if (ok) {
+            model = std::move(new_model);
+            if (query_db) {
+                {
+                    std::lock_guard<std::mutex> lock(phase_mutex);
+                    phase_str = "Building query DB";
+                }
+                phase_progress.store(0.0f, std::memory_order_relaxed);
+                progress.store(0.90f, std::memory_order_relaxed);
+                query_db->load(model);
+            }
+            success_ = true;
+        } else {
+            success_ = false;
+            error_ = parser.error_message;
+        }
+        finished.store(true, std::memory_order_release);
+    }
+};
+
+FileLoader::FileLoader() : impl_(std::make_unique<Impl>()) {}
+FileLoader::~FileLoader() {
+    join();
+}
+
+void FileLoader::load_file(const std::string& path, bool time_ns, QueryDb* query_db) {
+    join();
+
+    impl_->filename_ = path;
+    auto pos = path.find_last_of("/\\");
+    if (pos != std::string::npos) impl_->filename_ = path.substr(pos + 1);
+
+    impl_->loading = true;
+    impl_->finished = false;
+    impl_->progress = 0.0f;
+    impl_->phase_progress = 0.0f;
+    impl_->success_ = false;
+    impl_->error_.clear();
+
+    impl_->thread = std::thread([this, path, time_ns, query_db]() {
+        TRACE_SCOPE_CAT("OpenFile", "io");
+
+        TraceParser parser;
+        impl_->setup_progress(parser);
         parser.time_unit_ns = time_ns;
 
         TraceModel new_model;
         bool ok = parser.parse(path, new_model);
-
-        if (ok) {
-            impl_->model = std::move(new_model);
-            impl_->success_ = true;
-        } else {
-            impl_->success_ = false;
-            impl_->error_ = parser.error_message;
-        }
-        impl_->finished.store(true, std::memory_order_release);
+        impl_->finish_parse(ok, parser, new_model, query_db);
     });
 }
 
-void FileLoader::load_buffer(const char* data, size_t size, const std::string& filename, bool time_ns) {
+void FileLoader::load_buffer(std::vector<char> data, const std::string& filename, bool time_ns, QueryDb* query_db) {
     join();
 
     impl_->filename_ = filename;
@@ -90,24 +105,16 @@ void FileLoader::load_buffer(const char* data, size_t size, const std::string& f
     impl_->success_ = false;
     impl_->error_.clear();
 
-    // Copy buffer for thread safety
-    std::string buf(data, size);
+    impl_->thread = std::thread([this, data = std::move(data), time_ns, query_db]() {
+        TRACE_SCOPE_CAT("OpenBuffer", "io");
 
-    impl_->thread = std::thread([this, buf = std::move(buf), time_ns]() {
         TraceParser parser;
+        impl_->setup_progress(parser);
         parser.time_unit_ns = time_ns;
 
         TraceModel new_model;
-        bool ok = parser.parse_buffer(buf.data(), buf.size(), new_model);
-
-        if (ok) {
-            impl_->model = std::move(new_model);
-            impl_->success_ = true;
-        } else {
-            impl_->success_ = false;
-            impl_->error_ = parser.error_message;
-        }
-        impl_->finished.store(true, std::memory_order_release);
+        bool ok = parser.parse_buffer(data.data(), data.size(), new_model);
+        impl_->finish_parse(ok, parser, new_model, query_db);
     });
 }
 

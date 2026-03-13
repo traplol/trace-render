@@ -36,21 +36,39 @@ static void main_loop_step() {
         return;
     }
 
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplSDL3_NewFrame();
-    ImGui::NewFrame();
+    {
+        TRACE_SCOPE_CAT("NewFrame", "imgui");
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
+    }
 
-    g_app->update();
+    {
+        TRACE_SCOPE_CAT("AppUpdate", "app");
+        g_app->update();
+    }
 
-    ImGui::Render();
-    int display_w, display_h;
-    SDL_GetWindowSizeInPixels(g_window, &display_w, &display_h);
-    glViewport(0, 0, display_w, display_h);
-    glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    {
+        TRACE_SCOPE_CAT("Render", "imgui");
+        ImGui::Render();
+        int display_w, display_h;
+        SDL_GetWindowSizeInPixels(g_window, &display_w, &display_h);
+        glViewport(0, 0, display_w, display_h);
+        glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    }
 
-    SDL_GL_SwapWindow(g_window);
+    {
+        TRACE_SCOPE_CAT("SwapBuffers", "gl");
+        SDL_GL_SwapWindow(g_window);
+    }
+
+    // Write FPS counter event every frame
+    if (Tracer::instance().enabled()) {
+        ImGuiIO& io = ImGui::GetIO();
+        Tracer::instance().write_counter("FPS", "perf", Tracer::instance().now_us(), "fps", (double)io.Framerate);
+    }
 }
 
 int main(int argc, char* argv[]) {

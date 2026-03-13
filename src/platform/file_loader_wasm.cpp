@@ -37,7 +37,7 @@ struct FileLoader::Impl {
 FileLoader::FileLoader() : impl_(std::make_unique<Impl>()) {}
 FileLoader::~FileLoader() = default;
 
-void FileLoader::load_file(const std::string& path, bool time_ns) {
+void FileLoader::load_file(const std::string& path, bool time_ns, QueryDb* query_db) {
     impl_->filename_ = path;
     auto pos = path.find_last_of("/\\");
     if (pos != std::string::npos) impl_->filename_ = path.substr(pos + 1);
@@ -59,6 +59,7 @@ void FileLoader::load_file(const std::string& path, bool time_ns) {
 
     if (ok) {
         impl_->model = std::move(new_model);
+        if (query_db) query_db->load(impl_->model);
         impl_->success_ = true;
     } else {
         impl_->success_ = false;
@@ -67,7 +68,7 @@ void FileLoader::load_file(const std::string& path, bool time_ns) {
     impl_->finished = true;
 }
 
-void FileLoader::load_buffer(const char* data, size_t size, const std::string& filename, bool time_ns) {
+void FileLoader::load_buffer(std::vector<char> data, const std::string& filename, bool time_ns, QueryDb* query_db) {
     impl_->filename_ = filename;
 
     impl_->loading = true;
@@ -83,10 +84,11 @@ void FileLoader::load_buffer(const char* data, size_t size, const std::string& f
 
     TRACE_SCOPE_CAT("OpenBuffer", "io");
     TraceModel new_model;
-    bool ok = parser.parse_buffer(data, size, new_model);
+    bool ok = parser.parse_buffer(data.data(), data.size(), new_model);
 
     if (ok) {
         impl_->model = std::move(new_model);
+        if (query_db) query_db->load(impl_->model);
         impl_->success_ = true;
     } else {
         impl_->success_ = false;
