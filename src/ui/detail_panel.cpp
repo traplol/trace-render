@@ -1,5 +1,6 @@
 #include "detail_panel.h"
 #include "format_time.h"
+#include "sort_utils.h"
 #include "string_utils.h"
 #include "tracing.h"
 #include "imgui.h"
@@ -538,22 +539,22 @@ void DetailPanel::render_aggregated_table(const TraceModel& model, ViewState& vi
                                 break;
                             }
                             case 1:
-                                cmp = (a.count < b.count) ? -1 : (a.count > b.count) ? 1 : 0;
+                                cmp = compare(a.count, b.count);
                                 break;
                             case 2:
-                                cmp = (a.total_dur < b.total_dur) ? -1 : (a.total_dur > b.total_dur) ? 1 : 0;
+                                cmp = compare(a.total_dur, b.total_dur);
                                 break;
                             case 3:
-                                cmp = (a.avg_dur < b.avg_dur) ? -1 : (a.avg_dur > b.avg_dur) ? 1 : 0;
+                                cmp = compare(a.avg_dur, b.avg_dur);
                                 break;
                             case 4:
-                                cmp = (a.min_dur < b.min_dur) ? -1 : (a.min_dur > b.min_dur) ? 1 : 0;
+                                cmp = compare(a.min_dur, b.min_dur);
                                 break;
                             case 5:
-                                cmp = (a.max_dur < b.max_dur) ? -1 : (a.max_dur > b.max_dur) ? 1 : 0;
+                                cmp = compare(a.max_dur, b.max_dur);
                                 break;
                             case 6:
-                                cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0;
+                                cmp = compare(a.pct, b.pct);
                                 break;
                         }
                         return asc ? (cmp < 0) : (cmp > 0);
@@ -645,10 +646,10 @@ void DetailPanel::render_children_table(const TraceModel& model, ViewState& view
                                 break;
                             }
                             case 1:
-                                cmp = (a.dur < b.dur) ? -1 : (a.dur > b.dur) ? 1 : 0;
+                                cmp = compare(a.dur, b.dur);
                                 break;
                             case 2:
-                                cmp = (a.pct < b.pct) ? -1 : (a.pct > b.pct) ? 1 : 0;
+                                cmp = compare(a.pct, b.pct);
                                 break;
                         }
                         return asc ? (cmp < 0) : (cmp > 0);

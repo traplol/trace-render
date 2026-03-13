@@ -1,5 +1,6 @@
 #include "instance_panel.h"
 #include "format_time.h"
+#include "sort_utils.h"
 #include "tracing.h"
 #include "imgui.h"
 #include <algorithm>
@@ -104,13 +105,13 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                         int cmp = 0;
                         switch (spec.ColumnUserID) {
                             case 1:
-                                cmp = (a.ts < b.ts) ? -1 : (a.ts > b.ts) ? 1 : 0;
+                                cmp = compare(a.ts, b.ts);
                                 break;
                             case 2:
-                                cmp = (a.dur < b.dur) ? -1 : (a.dur > b.dur) ? 1 : 0;
+                                cmp = compare(a.dur, b.dur);
                                 break;
                             case 3:
-                                cmp = (a.tid < b.tid) ? -1 : (a.tid > b.tid) ? 1 : 0;
+                                cmp = compare(a.tid, b.tid);
                                 break;
                         }
                         return asc ? (cmp < 0) : (cmp > 0);

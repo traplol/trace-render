@@ -1,5 +1,6 @@
 #include "search_panel.h"
 #include "format_time.h"
+#include "sort_utils.h"
 #include "string_utils.h"
 #include "tracing.h"
 #include "imgui.h"
@@ -101,10 +102,10 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
                         int cmp = 0;
                         switch (spec.ColumnUserID) {
                             case 0:  // Time
-                                cmp = (a.ts < b.ts) ? -1 : (a.ts > b.ts) ? 1 : 0;
+                                cmp = compare(a.ts, b.ts);
                                 break;
                             case 1:  // Duration
-                                cmp = (a.dur < b.dur) ? -1 : (a.dur > b.dur) ? 1 : 0;
+                                cmp = compare(a.dur, b.dur);
                                 break;
                             case 2: {  // Name
                                 const auto& na = model.get_string(a.name_idx);
