@@ -228,6 +228,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 const auto& frame = model.events_[idx];
                 bool is_selected = (idx == (uint32_t)view.selected_event_idx);
 
+                char self_buf[64];
+                double self = model.compute_self_time(idx);
+                format_time(self, self_buf, sizeof(self_buf));
+
                 char id_buf[32];
                 snprintf(id_buf, sizeof(id_buf), "##frame%d", i);
                 if (ImGui::Selectable(id_buf, is_selected, ImGuiSelectableFlags_AllowOverlap)) {
@@ -235,22 +239,18 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                         view.navigate_to_event(idx, frame);
                     }
                 }
+                bool row_hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
                 ImGui::SameLine();
 
-                // Name with indentation
-                char self_buf[64];
-                double self = model.compute_self_time(idx);
-                format_time(self, self_buf, sizeof(self_buf));
-
                 if (is_selected) {
-                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.4f, 1.0f), "%*s%s", i * 2, "",
-                                       model.get_string(frame.name_idx).c_str());
+                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.4f, 1.0f), "%s", model.get_string(frame.name_idx).c_str());
                 } else {
-                    ImGui::Text("%*s%s", i * 2, "", model.get_string(frame.name_idx).c_str());
+                    ImGui::TextUnformatted(model.get_string(frame.name_idx).c_str());
                 }
                 ImGui::SameLine();
                 ImGui::TextDisabled("  self: %s", self_buf);
-                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+
+                if (row_hovered) {
                     char wall_buf[64];
                     format_time(frame.dur, wall_buf, sizeof(wall_buf));
                     float self_pct = frame.dur > 0 ? (float)(self / frame.dur * 100.0) : 0.0f;
