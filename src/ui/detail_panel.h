@@ -1,6 +1,7 @@
 #pragma once
 #include "model/trace_model.h"
 #include "ui/view_state.h"
+#include "ui/range_stats.h"
 #include <unordered_set>
 
 class DetailPanel {
@@ -8,6 +9,14 @@ public:
     void render(const TraceModel& model, ViewState& view);
 
 private:
+    // Range selection cache
+    bool range_dirty_ = true;
+    double cached_range_start_ = 0.0;
+    double cached_range_end_ = 0.0;
+    RangeStats range_stats_;
+
+    void render_range_selection(const TraceModel& model, ViewState& view);
+
     struct ChildInfo {
         uint32_t event_idx;
         uint32_t name_idx;

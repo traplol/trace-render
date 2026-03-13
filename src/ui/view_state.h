@@ -15,6 +15,23 @@ struct ViewState {
     int32_t selected_event_idx = -1;
     int32_t pending_scroll_event_idx = -1;  // set by navigate_to_event, consumed by TimelineView
 
+    // Range selection (drag on ruler)
+    bool has_range_selection = false;
+    double range_start_ts = 0.0;
+    double range_end_ts = 0.0;
+
+    void set_range_selection(double start, double end) {
+        has_range_selection = true;
+        range_start_ts = std::min(start, end);
+        range_end_ts = std::max(start, end);
+    }
+
+    void clear_range_selection() {
+        has_range_selection = false;
+        range_start_ts = 0.0;
+        range_end_ts = 0.0;
+    }
+
     // Filtering
     std::unordered_set<uint32_t> hidden_pids;
     std::unordered_set<uint32_t> hidden_tids;

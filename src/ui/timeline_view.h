@@ -21,6 +21,10 @@ private:
     bool show_goto_ = false;
     char goto_buf_[128] = {};
 
+    // Ruler drag for range selection
+    bool ruler_dragging_ = false;
+    double ruler_drag_start_ts_ = 0.0;
+
     CounterTrackRenderer counter_renderer_;
     FlowRenderer flow_renderer_;
 

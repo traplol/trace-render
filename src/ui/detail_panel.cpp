@@ -112,9 +112,100 @@ static void render_json_value(const nlohmann::json& j, int depth = 0) {
     }
 }
 
+void DetailPanel::render_range_selection(const TraceModel& model, ViewState& view) {
+    // Recompute if range changed
+    if (cached_range_start_ != view.range_start_ts || cached_range_end_ != view.range_end_ts || range_dirty_) {
+        cached_range_start_ = view.range_start_ts;
+        cached_range_end_ = view.range_end_ts;
+        range_stats_ = compute_range_stats(model, view.range_start_ts, view.range_end_ts);
+        range_dirty_ = false;
+    }
+
+    char time_buf[64];
+    format_time(range_stats_.range_duration, time_buf, sizeof(time_buf));
+    ImGui::Text("Range Duration: %s", time_buf);
+    ImGui::Text("Events in range: %u", range_stats_.total_events);
+
+    if (ImGui::SmallButton("Zoom to Range")) {
+        view.zoom_to_fit(view.range_start_ts, view.range_end_ts);
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Clear")) {
+        view.clear_range_selection();
+    }
+
+    ImGui::Separator();
+
+    if (range_stats_.summaries.empty()) {
+        ImGui::TextDisabled("No duration events in range.");
+        return;
+    }
+
+    if (ImGui::BeginTable("RangeTable", 5,
+                          ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV |
+                              ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
+                          ImVec2(0, ImGui::GetContentRegionAvail().y))) {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_None, 0.0f);
+        ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_None, 0.0f);
+        ImGui::TableSetupColumn("Total", ImGuiTableColumnFlags_None, 0.0f);
+        ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_None, 0.0f);
+        ImGui::TableSetupColumn("%", ImGuiTableColumnFlags_None, 0.0f);
+        ImGui::TableHeadersRow();
+
+        char buf[64];
+        ImGuiListClipper clipper;
+        clipper.Begin((int)range_stats_.summaries.size());
+        while (clipper.Step()) {
+            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
+                const auto& s = range_stats_.summaries[i];
+                ImGui::TableNextRow();
+
+                ImGui::TableNextColumn();
+                char id_buf[32];
+                snprintf(id_buf, sizeof(id_buf), "##rs%d", i);
+                if (ImGui::Selectable(id_buf, false,
+                                      ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
+                    view.navigate_to_event(s.longest_idx, model.events_[s.longest_idx]);
+                }
+                ImGui::SameLine();
+                ImGui::TextUnformatted(model.get_string(s.name_idx).c_str());
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                    ImGui::SetTooltip("%s", model.get_string(s.name_idx).c_str());
+
+                ImGui::TableNextColumn();
+                ImGui::Text("%u", s.count);
+
+                ImGui::TableNextColumn();
+                format_time(s.total_dur, buf, sizeof(buf));
+                ImGui::TextUnformatted(buf);
+
+                ImGui::TableNextColumn();
+                format_time(s.avg_dur(), buf, sizeof(buf));
+                ImGui::TextUnformatted(buf);
+
+                ImGui::TableNextColumn();
+                float pct =
+                    range_stats_.range_duration > 0 ? (float)(s.total_dur / range_stats_.range_duration * 100.0) : 0.0f;
+                render_heat_bar(pct);
+            }
+        }
+
+        ImGui::EndTable();
+    }
+}
+
 void DetailPanel::render(const TraceModel& model, ViewState& view) {
     TRACE_SCOPE_CAT("Details", "ui");
     ImGui::Begin("Details");
+
+    if (view.has_range_selection) {
+        ImGui::SeparatorText("Range Selection");
+        range_dirty_ = (cached_range_start_ != view.range_start_ts || cached_range_end_ != view.range_end_ts);
+        render_range_selection(model, view);
+        ImGui::End();
+        return;
+    }
 
     if (view.selected_event_idx < 0 || view.selected_event_idx >= (int32_t)model.events_.size()) {
         ImGui::TextDisabled("Click a slice in the timeline to see details.");
