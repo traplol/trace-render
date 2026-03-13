@@ -31,6 +31,7 @@ float CounterTrackRenderer::render(ImDrawList* dl, ImVec2 area_min, float y_offs
 
         ImU32 color = ColorPalette::COLORS[color_idx % ColorPalette::NUM_COLORS];
         render_series(dl, track_min, track_max, series, view, color);
+        layouts_.push_back({&series, track_min, track_max});
 
         total_height += track_h + view.track_padding;
         color_idx++;
@@ -113,4 +114,35 @@ void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec
     dl->AddText(ImVec2(track_min.x + 6, track_max.y - font_h - 4), IM_COL32(140, 140, 140, 200), buf);
 
     dl->PopClipRect();
+}
+
+bool CounterTrackRenderer::hit_test(float mouse_x, float mouse_y, float track_left, float track_width,
+                                    const ViewState& view, CounterHitResult& result) const {
+    for (const auto& layout : layouts_) {
+        if (mouse_y < layout.track_min.y || mouse_y >= layout.track_max.y) continue;
+        if (mouse_x < layout.track_min.x || mouse_x >= layout.track_max.x) continue;
+
+        const auto& series = *layout.series;
+        if (series.points.empty()) continue;
+
+        double mouse_time = view.x_to_time(mouse_x, track_left, track_width);
+
+        // Find the last point at or before mouse_time (step function: value holds until next point)
+        auto it = std::upper_bound(series.points.begin(), series.points.end(), mouse_time,
+                                   [](double t, const std::pair<double, double>& p) { return t < p.first; });
+
+        if (it == series.points.begin()) {
+            // Before first point
+            result.series = &series;
+            result.timestamp = series.points.front().first;
+            result.value = series.points.front().second;
+        } else {
+            --it;
+            result.series = &series;
+            result.timestamp = it->first;
+            result.value = it->second;
+        }
+        return true;
+    }
+    return false;
 }
