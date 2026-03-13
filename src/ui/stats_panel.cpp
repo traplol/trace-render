@@ -127,6 +127,7 @@ void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
 }
 
 void StatsPanel::render_schema_popup(QueryDb& db) {
+    TRACE_FUNCTION_CAT("ui");
     if (show_schema_) {
         ImGui::OpenPopup("Schema Browser");
         show_schema_ = false;
@@ -265,6 +266,7 @@ void StatsPanel::render_schema_popup(QueryDb& db) {
 }
 
 void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db, ViewState& view) {
+    TRACE_FUNCTION_CAT("ui");
     if (tab.query_buf_dirty) {
         tab.query_buf_dirty = false;
         snprintf(tab.query_buf, sizeof(tab.query_buf), "%s", tab.query.c_str());
@@ -644,6 +646,7 @@ std::string QueryBuilderState::build_sql(const char* const* columns, int num_col
 }
 
 void StatsPanel::render_builder_popup(QueryDb& db) {
+    TRACE_FUNCTION_CAT("ui");
     if (show_builder_) {
         ImGui::OpenPopup("Query Builder");
         show_builder_ = false;

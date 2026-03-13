@@ -7,6 +7,7 @@
 #include <cmath>
 
 void InstancePanel::select_function_by_name(const std::string& name, const TraceModel& model) {
+    TRACE_FUNCTION_CAT("ui");
     selected_name_ = name;
     instances_.clear();
     instance_cursor_ = -1;

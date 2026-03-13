@@ -166,7 +166,7 @@ TEST_F(TracingIntegration, TraceScopeArgsDisabled) {
 
 TEST_F(TracingIntegration, TraceScopeArgsEnabled) {
     Tracer::instance().set_output(tmp_path_);
-    { TRACE_SCOPE_ARGS("my_func", "my_cat", "iterations", 1000, "name", "test"); }
+    { TRACE_SCOPE_ARGS("my_func", "my_cat", "iterations", 1000, "label", "test"); }
     Tracer::instance().close();
 
     auto j = read_trace();
@@ -174,9 +174,57 @@ TEST_F(TracingIntegration, TraceScopeArgsEnabled) {
     auto& ev = j["traceEvents"][0];
     EXPECT_EQ(ev["name"], "my_func");
     EXPECT_EQ(ev["cat"], "my_cat");
+    // Location args are always present
+    EXPECT_TRUE(ev["args"].contains("file"));
+    EXPECT_TRUE(ev["args"].contains("line"));
+    EXPECT_TRUE(ev["args"].contains("func"));
+    // User-supplied args are merged in
     EXPECT_EQ(ev["args"]["iterations"], 1000);
-    EXPECT_EQ(ev["args"]["name"], "test");
+    EXPECT_EQ(ev["args"]["label"], "test");
     EXPECT_GE(ev["dur"].get<int>(), 0);  // dur can be 0 if scope completes within 1us
+}
+
+TEST_F(TracingIntegration, TraceScopeEmitsLocation) {
+    Tracer::instance().set_output(tmp_path_);
+    { TRACE_SCOPE_CAT("test_scope", "test"); }
+    Tracer::instance().close();
+
+    auto j = read_trace();
+    ASSERT_GE(j["traceEvents"].size(), 1);
+    auto& ev = j["traceEvents"][0];
+    EXPECT_EQ(ev["name"], "test_scope");
+    EXPECT_EQ(ev["cat"], "test");
+    // All scopes now emit file/line/func
+    ASSERT_TRUE(ev.contains("args"));
+    EXPECT_TRUE(ev["args"].contains("file"));
+    EXPECT_TRUE(ev["args"].contains("line"));
+    EXPECT_TRUE(ev["args"].contains("func"));
+    // File should be just the basename
+    std::string file = ev["args"]["file"].get<std::string>();
+    EXPECT_EQ(file, "test_tracing.cpp");
+    // Line should be a positive integer
+    EXPECT_GT(ev["args"]["line"].get<int>(), 0);
+    // Func should contain the test function name
+    std::string func = ev["args"]["func"].get<std::string>();
+    EXPECT_NE(func.find("TraceScopeEmitsLocation"), std::string::npos);
+}
+
+TEST_F(TracingIntegration, TraceFunctionMacro) {
+    Tracer::instance().set_output(tmp_path_);
+    { TRACE_FUNCTION(); }
+    Tracer::instance().close();
+
+    auto j = read_trace();
+    ASSERT_GE(j["traceEvents"].size(), 1);
+    auto& ev = j["traceEvents"][0];
+    // TRACE_FUNCTION uses __PRETTY_FUNCTION__ as the event name
+    std::string name = ev["name"].get<std::string>();
+    EXPECT_NE(name.find("TraceFunctionMacro"), std::string::npos);
+    EXPECT_EQ(ev["cat"], "app");
+    ASSERT_TRUE(ev.contains("args"));
+    EXPECT_TRUE(ev["args"].contains("file"));
+    EXPECT_TRUE(ev["args"].contains("line"));
+    EXPECT_TRUE(ev["args"].contains("func"));
 }
 
 TEST_F(TracingIntegration, MultipleEvents) {

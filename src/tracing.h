@@ -117,7 +117,23 @@ std::string make_args_json(Args&&... args) {
     return out;
 }
 
+// Strip directory from __FILE__ at compile time
+inline const char* strip_path(const char* path) {
+    const char* last = path;
+    for (const char* p = path; *p; ++p) {
+        if (*p == '/' || *p == '\\') last = p + 1;
+    }
+    return last;
+}
+
 }  // namespace trace_detail
+
+// Portable qualified function name
+#if defined(_MSC_VER)
+#define TRACE_FUNC_SIG __FUNCSIG__
+#else
+#define TRACE_FUNC_SIG __PRETTY_FUNCTION__
+#endif
 
 class Tracer {
 public:
@@ -218,10 +234,11 @@ private:
     std::chrono::steady_clock::time_point epoch_;
 };
 
-// RAII scope tracer (no args — zero overhead when disabled)
+// RAII scope tracer — always emits file/line/func as args
 class TraceScope {
 public:
-    TraceScope(const char* name, const char* cat = "app") : name_(name), cat_(cat) {
+    TraceScope(const char* name, const char* cat, const char* file, int line, const char* func)
+        : name_(name), cat_(cat), file_(file), line_(line), func_(func) {
         if (Tracer::instance().enabled()) {
             start_ = Tracer::instance().now_us();
             active_ = true;
@@ -230,7 +247,8 @@ public:
     ~TraceScope() {
         if (active_) {
             uint64_t end = Tracer::instance().now_us();
-            Tracer::instance().write_complete(name_, cat_, start_, end - start_);
+            auto args = trace_detail::make_args_json("file", file_, "line", line_, "func", func_);
+            Tracer::instance().write_complete(name_, cat_, start_, end - start_, args.c_str());
         }
     }
 
@@ -240,16 +258,21 @@ public:
 private:
     const char* name_;
     const char* cat_;
+    const char* file_;
+    int line_;
+    const char* func_;
     uint64_t start_ = 0;
     bool active_ = false;
 };
 
-// RAII scope tracer with args (separate class to avoid heap alloc in the common path)
+// RAII scope tracer with extra args (merges location + user-supplied args)
 class TraceScopeArgs {
 public:
-    TraceScopeArgs(const char* name, const char* cat, std::string args_json) : name_(name), cat_(cat) {
+    TraceScopeArgs(const char* name, const char* cat, const char* file, int line, const char* func,
+                   std::string extra_args)
+        : name_(name), cat_(cat), file_(file), line_(line), func_(func) {
         if (Tracer::instance().enabled()) {
-            args_json_ = std::move(args_json);
+            extra_args_ = std::move(extra_args);
             start_ = Tracer::instance().now_us();
             active_ = true;
         }
@@ -257,7 +280,12 @@ public:
     ~TraceScopeArgs() {
         if (active_) {
             uint64_t end = Tracer::instance().now_us();
-            Tracer::instance().write_complete(name_, cat_, start_, end - start_, args_json_.c_str());
+            auto args = trace_detail::make_args_json("file", file_, "line", line_, "func", func_);
+            if (!extra_args_.empty()) {
+                args += ',';
+                args += extra_args_;
+            }
+            Tracer::instance().write_complete(name_, cat_, start_, end - start_, args.c_str());
         }
     }
 
@@ -267,13 +295,25 @@ public:
 private:
     const char* name_;
     const char* cat_;
-    std::string args_json_;
+    const char* file_;
+    int line_;
+    const char* func_;
+    std::string extra_args_;
     uint64_t start_ = 0;
     bool active_ = false;
 };
 
-#define TRACE_SCOPE(name) TraceScope _trace_scope_##__LINE__(name)
-#define TRACE_SCOPE_CAT(name, cat) TraceScope _trace_scope_##__LINE__(name, cat)
-#define TRACE_SCOPE_ARGS(name, cat, ...)         \
-    TraceScopeArgs _trace_scope_args_##__LINE__( \
-        name, cat, Tracer::instance().enabled() ? trace_detail::make_args_json(__VA_ARGS__) : std::string())
+#define TRACE_SCOPE(name) \
+    TraceScope _trace_scope_##__LINE__(name, "app", trace_detail::strip_path(__FILE__), __LINE__, TRACE_FUNC_SIG)
+#define TRACE_SCOPE_CAT(name, cat) \
+    TraceScope _trace_scope_##__LINE__(name, cat, trace_detail::strip_path(__FILE__), __LINE__, TRACE_FUNC_SIG)
+#define TRACE_SCOPE_ARGS(name, cat, ...)                                         \
+    TraceScopeArgs _trace_scope_args_##__LINE__(                                 \
+        name, cat, trace_detail::strip_path(__FILE__), __LINE__, TRACE_FUNC_SIG, \
+        Tracer::instance().enabled() ? trace_detail::make_args_json(__VA_ARGS__) : std::string())
+#define TRACE_FUNCTION()                                                                                    \
+    TraceScope _trace_scope_##__LINE__(TRACE_FUNC_SIG, "app", trace_detail::strip_path(__FILE__), __LINE__, \
+                                       TRACE_FUNC_SIG)
+#define TRACE_FUNCTION_CAT(cat)                                                                           \
+    TraceScope _trace_scope_##__LINE__(TRACE_FUNC_SIG, cat, trace_detail::strip_path(__FILE__), __LINE__, \
+                                       TRACE_FUNC_SIG)

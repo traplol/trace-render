@@ -1,8 +1,10 @@
 #include "flow_renderer.h"
+#include "tracing.h"
 #include <cmath>
 
 void FlowRenderer::render(ImDrawList* dl, const TraceModel& model, const ViewState& view, ImVec2 area_min,
                           ImVec2 area_max, float label_width) {
+    TRACE_FUNCTION_CAT("timeline");
     if (!view.show_flows || track_positions_.empty()) return;
 
     float track_left = area_min.x + label_width;

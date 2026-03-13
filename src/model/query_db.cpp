@@ -155,6 +155,7 @@ void QueryDb::load(const TraceModel& model) {
 }
 
 QueryDb::QueryResult QueryDb::execute(const std::string& sql) {
+    TRACE_FUNCTION_CAT("model");
     QueryResult result;
     if (!db_ || !loaded_) {
         result.error = "No trace loaded";
@@ -202,6 +203,7 @@ int QueryDb::progress_callback(void* data) {
 }
 
 void QueryDb::execute_async(const std::string& sql) {
+    TRACE_FUNCTION_CAT("model");
     // Wait for any previous query
     if (query_thread_.joinable()) query_thread_.join();
 
@@ -272,6 +274,7 @@ void QueryDb::cancel_query() {
 }
 
 QueryDb::QueryResult QueryDb::take_result() {
+    TRACE_FUNCTION_CAT("model");
     if (query_thread_.joinable()) query_thread_.join();
     std::lock_guard<std::mutex> lock(result_mutex_);
     query_done_ = false;

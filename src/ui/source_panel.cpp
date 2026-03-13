@@ -109,6 +109,7 @@ void SourcePanel::load_settings(const json& j) {
 }
 
 void SourcePanel::load_file(const std::string& path) {
+    TRACE_FUNCTION_CAT("io");
     cached_lines_.clear();
     cached_error_.clear();
 
@@ -125,6 +126,7 @@ void SourcePanel::load_file(const std::string& path) {
 }
 
 void SourcePanel::resolve_and_load(const std::string& raw_file) {
+    TRACE_FUNCTION_CAT("io");
     std::string full_path = remap_source_path(raw_file, strip_prefix_, local_base_);
 
     if (full_path != cached_file_) {

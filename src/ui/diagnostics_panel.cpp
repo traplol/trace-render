@@ -1,4 +1,5 @@
 #include "diagnostics_panel.h"
+#include "tracing.h"
 #include "format_time.h"
 #include "imgui.h"
 #include <cstdio>
@@ -42,6 +43,7 @@ static void format_bytes(size_t bytes, char* buf, size_t buf_size) {
 }
 
 void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
+    TRACE_FUNCTION_CAT("ui");
     ImGui::Begin("Diagnostics");
 
     // Update frame timing

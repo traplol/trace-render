@@ -1,10 +1,12 @@
 #include "counter_track.h"
+#include "tracing.h"
 #include "model/color_palette.h"
 #include <algorithm>
 #include <cstdio>
 
 float CounterTrackRenderer::render(ImDrawList* dl, ImVec2 area_min, float y_offset, float width,
                                    const TraceModel& model, uint32_t pid, const ViewState& view) {
+    TRACE_FUNCTION_CAT("timeline");
     float total_height = 0.0f;
     uint32_t color_idx = 0;
 
@@ -39,6 +41,7 @@ float CounterTrackRenderer::render(ImDrawList* dl, ImVec2 area_min, float y_offs
 
 void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec2 track_max,
                                          const CounterSeries& series, const ViewState& view, ImU32 color) {
+    TRACE_FUNCTION_CAT("timeline");
     if (series.points.empty()) return;
 
     float track_w = track_max.x - track_min.x;

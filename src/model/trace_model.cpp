@@ -124,6 +124,7 @@ void TraceModel::build_index() {
 }
 
 int32_t TraceModel::find_parent_event(uint32_t event_idx) const {
+    TRACE_FUNCTION_CAT("model");
     if (event_idx >= events_.size()) return -1;
     const auto& ev = events_[event_idx];
     if (ev.depth == 0) return -1;
@@ -144,6 +145,7 @@ int32_t TraceModel::find_parent_event(uint32_t event_idx) const {
 }
 
 std::vector<uint32_t> TraceModel::build_call_stack(uint32_t event_idx) const {
+    TRACE_FUNCTION_CAT("model");
     std::vector<uint32_t> stack;
     if (event_idx >= events_.size()) return stack;
 
@@ -161,6 +163,7 @@ std::vector<uint32_t> TraceModel::build_call_stack(uint32_t event_idx) const {
 }
 
 double TraceModel::compute_self_time(uint32_t event_idx) const {
+    TRACE_FUNCTION_CAT("model");
     if (event_idx >= events_.size()) return 0.0;
     const auto& ev = events_[event_idx];
     if (ev.dur <= 0) return 0.0;

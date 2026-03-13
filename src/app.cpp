@@ -12,6 +12,7 @@
 #include <chrono>
 
 void App::init(SDL_Window* window) {
+    TRACE_FUNCTION_CAT("app");
     window_ = window;
     toolbar_.set_window(window);
     load_settings();
@@ -19,6 +20,7 @@ void App::init(SDL_Window* window) {
 }
 
 void App::shutdown() {
+    TRACE_FUNCTION_CAT("app");
     if (load_thread_.joinable()) load_thread_.join();
     save_settings();
 }
@@ -98,6 +100,7 @@ void App::open_file(const std::string& path) {
 }
 
 void App::finish_load() {
+    TRACE_FUNCTION_CAT("app");
     if (load_thread_.joinable()) load_thread_.join();
 
     std::lock_guard<std::mutex> lock(load_mutex_);
@@ -128,6 +131,7 @@ void App::finish_load() {
 }
 
 void App::render_loading_overlay() {
+    TRACE_FUNCTION_CAT("ui");
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImVec2 center = vp->GetCenter();
 
@@ -361,6 +365,7 @@ void App::update() {
 }
 
 void App::render_settings_modal() {
+    TRACE_FUNCTION_CAT("ui");
     ImGui::OpenPopup("Settings");
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -438,6 +443,7 @@ std::string App::settings_path() const {
 }
 
 void App::save_settings() {
+    TRACE_FUNCTION_CAT("io");
     std::string path = settings_path();
     std::filesystem::create_directories(std::filesystem::path(path).parent_path());
 
@@ -464,6 +470,7 @@ void App::save_settings() {
 }
 
 void App::load_settings() {
+    TRACE_FUNCTION_CAT("io");
     std::string path = settings_path();
     std::ifstream f(path);
     if (!f.is_open()) return;

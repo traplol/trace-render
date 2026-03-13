@@ -312,6 +312,7 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
 
 int32_t TimelineView::hit_test(float click_x, float click_y, ImVec2 area_min, ImVec2 area_max, const TraceModel& model,
                                const ViewState& view) {
+    TRACE_FUNCTION_CAT("timeline");
     float track_left = area_min.x + view.label_width;
     float track_width = (area_max.x - area_min.x) - view.label_width;
 

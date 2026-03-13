@@ -343,6 +343,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 }
 
 void DetailPanel::render_aggregated_table(const TraceModel& model, ViewState& view) {
+    TRACE_FUNCTION_CAT("ui");
     if (ImGui::BeginTable("AggChildrenTable", 7,
                           ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
                               ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
@@ -453,6 +454,7 @@ void DetailPanel::render_aggregated_table(const TraceModel& model, ViewState& vi
 }
 
 void DetailPanel::render_children_table(const TraceModel& model, ViewState& view) {
+    TRACE_FUNCTION_CAT("ui");
     if (ImGui::BeginTable("ChildrenTable", 3,
                           ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
                               ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
@@ -533,6 +535,7 @@ void DetailPanel::render_children_table(const TraceModel& model, ViewState& view
 }
 
 void DetailPanel::rebuild_children(const TraceModel& model, const TraceEvent& ev) {
+    TRACE_FUNCTION_CAT("ui");
     children_.clear();
     double immediate_children_total = 0.0;
 
@@ -570,6 +573,7 @@ void DetailPanel::rebuild_children(const TraceModel& model, const TraceEvent& ev
 }
 
 void DetailPanel::rebuild_aggregated(const TraceModel& model, double parent_dur) {
+    TRACE_FUNCTION_CAT("ui");
     aggregated_.clear();
 
     // Group by name_idx using a map to accumulator index
@@ -600,6 +604,7 @@ void DetailPanel::rebuild_aggregated(const TraceModel& model, double parent_dur)
 }
 
 void DetailPanel::rebuild_filter(const TraceModel& model) {
+    TRACE_FUNCTION_CAT("ui");
     active_filter_ = filter_buf_;
 
     // Convert filter to lowercase for case-insensitive matching
