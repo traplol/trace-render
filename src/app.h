@@ -12,6 +12,7 @@
 #include "ui/stats_panel.h"
 #include "ui/instance_panel.h"
 #include "ui/diagnostics_panel.h"
+#include "ui/source_panel.h"
 #include "model/query_db.h"
 #include <string>
 #include <thread>
@@ -43,6 +44,7 @@ private:
     StatsPanel stats_;
     InstancePanel instances_;
     DiagnosticsPanel diagnostics_;
+    SourcePanel source_;
     QueryDb query_db_;
 
     bool has_trace_ = false;
