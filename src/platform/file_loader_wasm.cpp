@@ -1,6 +1,7 @@
 #include "file_loader.h"
 #include "parser/trace_parser.h"
 #include "tracing.h"
+#include <string_view>
 
 struct FileLoader::Impl {
     bool loading = false;
@@ -12,6 +13,25 @@ struct FileLoader::Impl {
     std::string error_;
     std::string filename_;
     TraceModel model;
+
+    void setup_progress(TraceParser& parser) {
+        parser.on_progress = [this](const char* ph, float p) {
+            phase_str = ph;
+            phase_progress_ = p;
+
+            float global = 0.0f;
+            if (std::string_view(ph) == "Reading file") {
+                global = p * 0.25f;
+            } else if (std::string_view(ph) == "Parsing JSON") {
+                global = 0.25f + p * 0.35f;
+            } else if (std::string_view(ph) == "Building index") {
+                global = 0.60f + p * 0.20f;
+            } else {
+                global = 0.80f + p * 0.20f;
+            }
+            progress_ = global;
+        };
+    }
 };
 
 FileLoader::FileLoader() : impl_(std::make_unique<Impl>()) {}
@@ -22,9 +42,18 @@ void FileLoader::load_file(const std::string& path, bool time_ns) {
     auto pos = path.find_last_of("/\\");
     if (pos != std::string::npos) impl_->filename_ = path.substr(pos + 1);
 
+    impl_->loading = true;
+    impl_->finished = false;
+    impl_->progress_ = 0.0f;
+    impl_->phase_progress_ = 0.0f;
+    impl_->success_ = false;
+    impl_->error_.clear();
+
     TraceParser parser;
     parser.time_unit_ns = time_ns;
+    impl_->setup_progress(parser);
 
+    TRACE_SCOPE_CAT("OpenFile", "io");
     TraceModel new_model;
     bool ok = parser.parse(path, new_model);
 
@@ -41,9 +70,18 @@ void FileLoader::load_file(const std::string& path, bool time_ns) {
 void FileLoader::load_buffer(const char* data, size_t size, const std::string& filename, bool time_ns) {
     impl_->filename_ = filename;
 
+    impl_->loading = true;
+    impl_->finished = false;
+    impl_->progress_ = 0.0f;
+    impl_->phase_progress_ = 0.0f;
+    impl_->success_ = false;
+    impl_->error_.clear();
+
     TraceParser parser;
     parser.time_unit_ns = time_ns;
+    impl_->setup_progress(parser);
 
+    TRACE_SCOPE_CAT("OpenBuffer", "io");
     TraceModel new_model;
     bool ok = parser.parse_buffer(data, size, new_model);
 

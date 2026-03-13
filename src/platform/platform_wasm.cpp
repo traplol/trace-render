@@ -7,7 +7,7 @@ static bool g_has_pending = false;
 
 extern "C" {
 EMSCRIPTEN_KEEPALIVE
-void wasm_file_loaded(const char* filename, const char* data, int size) {
+void wasm_file_loaded(const char* filename, const char* data, unsigned int size) {
     g_pending.name = filename;
     g_pending.path.clear();
     g_pending.data.assign(data, data + size);
@@ -28,20 +28,7 @@ static void trigger_file_input() {
             input.addEventListener(
                 'change', function(e) {
                     var file = e.target.files[0];
-                    if (!file) return;
-                    var reader = new FileReader();
-                    reader.onload = function() {
-                        var data = new Uint8Array(reader.result);
-                        var nameLen = lengthBytesUTF8(file.name) + 1;
-                        var namePtr = _malloc(nameLen);
-                        stringToUTF8(file.name, namePtr, nameLen);
-                        var dataPtr = _malloc(data.length);
-                        HEAPU8.set(data, dataPtr);
-                        _wasm_file_loaded(namePtr, dataPtr, data.length);
-                        _free(namePtr);
-                        _free(dataPtr);
-                    };
-                    reader.readAsArrayBuffer(file);
+                    if (file) loadFileToWasm(file);
                     input.value = null;
                 });
         }
