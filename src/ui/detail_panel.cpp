@@ -237,16 +237,25 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 }
                 ImGui::SameLine();
 
+                // Name with indentation
+                char self_buf[64];
+                double self = model.compute_self_time(idx);
+                format_time(self, self_buf, sizeof(self_buf));
+
                 if (is_selected) {
                     ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.4f, 1.0f), "%*s%s", i * 2, "",
                                        model.get_string(frame.name_idx).c_str());
                 } else {
                     ImGui::Text("%*s%s", i * 2, "", model.get_string(frame.name_idx).c_str());
                 }
+                ImGui::SameLine();
+                ImGui::TextDisabled("  self: %s", self_buf);
                 if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
-                    char tip_buf[128];
-                    format_time(frame.dur, tip_buf, sizeof(tip_buf));
-                    ImGui::SetTooltip("%s (%s)", model.get_string(frame.name_idx).c_str(), tip_buf);
+                    char wall_buf[64];
+                    format_time(frame.dur, wall_buf, sizeof(wall_buf));
+                    float self_pct = frame.dur > 0 ? (float)(self / frame.dur * 100.0) : 0.0f;
+                    ImGui::SetTooltip("%s\nWall: %s | Self: %s (%.1f%%)", model.get_string(frame.name_idx).c_str(),
+                                      wall_buf, self_buf, self_pct);
                 }
             }
             ImGui::EndTabItem();

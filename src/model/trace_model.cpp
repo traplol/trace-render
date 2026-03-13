@@ -159,3 +159,25 @@ std::vector<uint32_t> TraceModel::build_call_stack(uint32_t event_idx) const {
     std::reverse(stack.begin(), stack.end());
     return stack;
 }
+
+double TraceModel::compute_self_time(uint32_t event_idx) const {
+    if (event_idx >= events_.size()) return 0.0;
+    const auto& ev = events_[event_idx];
+    if (ev.dur <= 0) return 0.0;
+
+    const auto* proc = find_process(ev.pid);
+    if (!proc) return ev.dur;
+    const auto* thread = proc->find_thread(ev.tid);
+    if (!thread) return ev.dur;
+
+    double children_total = 0.0;
+    for (uint32_t idx : thread->event_indices) {
+        const auto& child = events_[idx];
+        if (child.depth != ev.depth + 1) continue;
+        if (child.ts < ev.ts) continue;
+        if (child.ts > ev.end_ts()) break;
+        if (child.end_ts() > ev.end_ts()) continue;
+        if (child.dur > 0) children_total += child.dur;
+    }
+    return ev.dur - children_total;
+}

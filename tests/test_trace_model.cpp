@@ -318,3 +318,26 @@ TEST(CallStack, BuildCallStackFromRoot) {
     ASSERT_EQ(stack.size(), 1u);
     EXPECT_EQ(model.get_string(model.events_[stack[0]].name_idx), "root");
 }
+
+TEST(CallStack, ComputeSelfTimeLeaf) {
+    auto model = make_nested_model();
+    // leaf (idx 2) has no children, self time == wall time (100)
+    EXPECT_DOUBLE_EQ(model.compute_self_time(2), 100.0);
+}
+
+TEST(CallStack, ComputeSelfTimeMid) {
+    auto model = make_nested_model();
+    // mid (idx 1) has dur=300, leaf child dur=100, so self=200
+    EXPECT_DOUBLE_EQ(model.compute_self_time(1), 200.0);
+}
+
+TEST(CallStack, ComputeSelfTimeRoot) {
+    auto model = make_nested_model();
+    // root (idx 0) has dur=500, mid child dur=300, so self=200
+    EXPECT_DOUBLE_EQ(model.compute_self_time(0), 200.0);
+}
+
+TEST(CallStack, ComputeSelfTimeOutOfBounds) {
+    auto model = make_nested_model();
+    EXPECT_DOUBLE_EQ(model.compute_self_time(999), 0.0);
+}

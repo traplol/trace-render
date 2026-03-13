@@ -127,6 +127,9 @@ public:
     // Returns event indices ordered from root (index 0) to the given event (last element).
     std::vector<uint32_t> build_call_stack(uint32_t event_idx) const;
 
+    // Compute self time for an event (wall time minus immediate children's durations).
+    double compute_self_time(uint32_t event_idx) const;
+
     void query_visible(const ThreadInfo& thread, double start_ts, double end_ts, std::vector<uint32_t>& out) const {
         thread.block_index.query(start_ts, end_ts, thread.event_indices, events_, out);
     }
