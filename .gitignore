@@ -5,7 +5,7 @@ perfetto_imgui.ini
 .cache/
 compile_commands.json
 *.png
-!screenshot.png
+!screenshots/*.png
 *.jpg
 test_trace*.json
 src/ui/.timeline_view.cpp.swp
