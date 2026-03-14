@@ -14,8 +14,8 @@ public:
     QueryDb();
     ~QueryDb();
 
-    // Populate the database from a trace model
-    void load(const TraceModel& model);
+    // Populate the database from a trace model (inserts data, no indexes)
+    void load(const TraceModel& model, std::function<void(float)> on_progress = nullptr);
 
     struct QueryResult {
         std::vector<std::string> columns;
@@ -38,6 +38,11 @@ public:
 
     bool is_loaded() const { return loaded_; }
 
+    // Background index creation (called after load, runs in background)
+    void create_indexes_async();
+    bool is_indexing() const { return indexing_.load(std::memory_order_relaxed); }
+    float indexing_progress() const { return indexing_progress_.load(std::memory_order_relaxed); }
+
 private:
     sqlite3* db_ = nullptr;
     bool loaded_ = false;
@@ -53,4 +58,9 @@ private:
     std::mutex result_mutex_;
 
     static int progress_callback(void* data);
+
+    // Background index creation state
+    std::thread index_thread_;
+    std::atomic<bool> indexing_{false};
+    std::atomic<float> indexing_progress_{0.0f};
 };

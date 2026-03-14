@@ -445,17 +445,20 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
 
     // Read file in chunks to report progress
     std::string content(file_size, '\0');
-    constexpr size_t CHUNK = 4 * 1024 * 1024;  // 4MB chunks
-    size_t read_so_far = 0;
-    while (read_so_far < file_size) {
-        size_t to_read = std::min(CHUNK, file_size - read_so_far);
-        file.read(&content[read_so_far], to_read);
-        read_so_far += to_read;
-        if (on_progress) {
-            on_progress("Reading file", (float)read_so_far / (float)file_size);
+    {
+        TRACE_SCOPE_CAT("ReadFile", "io");
+        constexpr size_t CHUNK = 4 * 1024 * 1024;  // 4MB chunks
+        size_t read_so_far = 0;
+        while (read_so_far < file_size) {
+            size_t to_read = std::min(CHUNK, file_size - read_so_far);
+            file.read(&content[read_so_far], to_read);
+            read_so_far += to_read;
+            if (on_progress) {
+                on_progress("Reading file", (float)read_so_far / (float)file_size);
+            }
         }
+        file.close();
     }
-    file.close();
 
     model.clear();
     // Intern empty string at index 0
@@ -469,7 +472,11 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
     // Rough estimate: ~100 bytes per event in JSON
     handler.estimated_events = file_size / 100;
 
-    bool result = json::sax_parse(content, &handler);
+    bool result;
+    {
+        TRACE_SCOPE_CAT("ParseJSON", "io");
+        result = json::sax_parse(content, &handler);
+    }
 
     // Free the raw JSON string before building the index
     content.clear();
@@ -480,8 +487,9 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
         return false;
     }
 
-    if (on_progress) on_progress("Building index", 0.5f);
-    model.build_index();
+    if (on_progress) on_progress("Building index", 0.0f);
+    model.build_index(on_progress ? [this](float p) { on_progress("Building index", p); }
+                                  : std::function<void(float)>{});
 
     if (on_progress) on_progress("Done", 1.0f);
 
@@ -509,8 +517,9 @@ bool TraceParser::parse_buffer(const char* data, size_t size, TraceModel& model)
         return false;
     }
 
-    if (on_progress) on_progress("Building index", 0.5f);
-    model.build_index();
+    if (on_progress) on_progress("Building index", 0.0f);
+    model.build_index(on_progress ? [this](float p) { on_progress("Building index", p); }
+                                  : std::function<void(float)>{});
 
     if (on_progress) on_progress("Done", 1.0f);
 
