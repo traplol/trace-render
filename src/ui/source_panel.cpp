@@ -1,10 +1,13 @@
 #include "source_panel.h"
 #include "tracing.h"
 #include "imgui.h"
+#include "imgui_internal.h"
+#include "imgui_stdlib.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <sstream>
 #include <cctype>
+#include <cmath>
 
 using json = nlohmann::json;
 
@@ -132,6 +135,21 @@ void SourcePanel::resolve_and_load(const std::string& raw_file) {
     if (full_path != cached_file_) {
         cached_file_ = full_path;
         load_file(cached_file_);
+        build_display_text();
+    }
+}
+
+void SourcePanel::build_display_text() {
+    cached_display_text_.clear();
+    if (cached_lines_.empty()) return;
+
+    size_t estimated = 0;
+    for (const auto& line : cached_lines_) estimated += line.size() + 1;
+    cached_display_text_.reserve(estimated);
+
+    for (const auto& line : cached_lines_) {
+        cached_display_text_ += line;
+        cached_display_text_ += '\n';
     }
 }
 
@@ -185,6 +203,7 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
             cached_raw_file_.clear();
             cached_file_.clear();
             cached_lines_.clear();
+            cached_display_text_.clear();
             cached_line_ = -1;
             cached_error_.clear();
         }
@@ -220,51 +239,87 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
 
     ImGui::Separator();
 
-    // Source code display
-    float line_height = ImGui::GetTextLineHeightWithSpacing();
+    // Source code display: gutter (line numbers) + InputTextMultiline (selectable code)
     ImVec2 avail = ImGui::GetContentRegionAvail();
+    int num_lines = (int)cached_lines_.size();
+    float font_size = ImGui::GetFontSize();
 
-    ImGui::BeginChild("##source_scroll", avail, ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
+    // Compute gutter width
+    int num_digits = (num_lines > 0) ? (int)std::log10((double)num_lines) + 1 : 1;
+    if (num_digits < 4) num_digits = 4;
+    char measure_buf[32];
+    snprintf(measure_buf, sizeof(measure_buf), " %*d ", num_digits, num_lines);
+    float gutter_w = ImGui::CalcTextSize(measure_buf).x;
+    float code_w = avail.x - gutter_w;
 
-    // Scroll to target line
-    if (need_scroll_ && cached_line_ > 0) {
-        need_scroll_ = false;
-        // Center the target line in the visible area
-        float target_y = (cached_line_ - 1) * line_height;
-        float visible_h = ImGui::GetWindowHeight();
-        float scroll_y = target_y - visible_h / 2.0f;
-        if (scroll_y < 0) scroll_y = 0;
-        ImGui::SetScrollY(scroll_y);
+    // Save cursor position — we render the code first (to get scroll state),
+    // then come back and render the gutter with same-frame scroll sync.
+    ImVec2 region_start = ImGui::GetCursorPos();
+
+    // --- Code area (rendered first to obtain scroll state) ---
+    ImGui::SetCursorPos(ImVec2(region_start.x + gutter_w, region_start.y));
+    ImGuiID code_child_id = ImGui::GetID("##source_text");
+    ImGui::InputTextMultiline("##source_text", &cached_display_text_, ImVec2(code_w, avail.y),
+                              ImGuiInputTextFlags_ReadOnly);
+
+    // Find the child window InputTextMultiline created internally
+    ImGuiWindow* code_child = nullptr;
+    for (ImGuiWindow* w : GImGui->Windows) {
+        if (w->ChildId == code_child_id) {
+            code_child = w;
+            break;
+        }
     }
 
-    // Use clipper for large files
-    ImGuiListClipper clipper;
-    clipper.Begin((int)cached_lines_.size());
-    while (clipper.Step()) {
-        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-            int line_num = i + 1;
-            bool is_target = (line_num == cached_line_);
+    float scroll_y = 0.0f;
+    if (code_child) {
+        // Scroll to target line (centered)
+        if (need_scroll_ && cached_line_ > 0) {
+            code_child->ScrollTarget.y = (cached_line_ - 1) * font_size;
+            code_child->ScrollTargetCenterRatio.y = 0.5f;
+            need_scroll_ = false;
+        }
 
-            if (is_target) {
-                // Highlight the target line
-                ImVec2 pos = ImGui::GetCursorScreenPos();
-                float width = ImGui::GetContentRegionAvail().x + ImGui::GetScrollMaxX();
-                ImGui::GetWindowDrawList()->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + line_height),
-                                                          IM_COL32(255, 200, 0, 60));
-            }
+        scroll_y = code_child->Scroll.y;
 
-            // Line number (right-aligned in a fixed gutter)
-            ImGui::TextDisabled("%5d", line_num);
-            ImGui::SameLine();
-
-            if (is_target) {
-                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.6f, 1.0f), "%s", cached_lines_[i].c_str());
-            } else {
-                ImGui::TextUnformatted(cached_lines_[i].c_str());
+        // Draw line highlight. ContentRegionRect.Min already includes -Scroll,
+        // so the line's screen Y is simply origin + line_index * font_size.
+        if (cached_line_ > 0) {
+            float y = code_child->ContentRegionRect.Min.y + (cached_line_ - 1) * font_size;
+            ImVec2 clip_min = code_child->InnerRect.Min;
+            ImVec2 clip_max = code_child->InnerRect.Max;
+            if (y + font_size > clip_min.y && y < clip_max.y) {
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                dl->PushClipRect(clip_min, clip_max, true);
+                dl->AddRectFilled(ImVec2(clip_min.x, ImMax(y, clip_min.y)),
+                                  ImVec2(clip_max.x, ImMin(y + font_size, clip_max.y)), IM_COL32(255, 200, 0, 60));
+                dl->PopClipRect();
             }
         }
     }
 
+    // --- Gutter (rendered after code, positioned to the left, same-frame scroll) ---
+    ImGui::SetCursorPos(region_start);
+    ImGui::BeginChild("##gutter", ImVec2(gutter_w, avail.y), ImGuiChildFlags_None,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::SetScrollY(scroll_y);
+
+    // Match InputTextMultiline's line spacing (font_size, no ItemSpacing)
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+    ImGuiListClipper clipper;
+    clipper.Begin(num_lines, font_size);
+    while (clipper.Step()) {
+        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
+            if ((i + 1) == cached_line_)
+                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.6f, 1.0f), "%*d", num_digits, i + 1);
+            else
+                ImGui::TextDisabled("%*d", num_digits, i + 1);
+        }
+    }
+    ImGui::PopStyleVar();
     ImGui::EndChild();
+
+    if (need_scroll_) need_scroll_ = false;
+
     ImGui::End();
 }

@@ -35,10 +35,12 @@ private:
     std::string cached_file_;      // resolved local path (after remapping)
     int cached_line_ = -1;
     std::vector<std::string> cached_lines_;
+    std::string cached_display_text_;  // code-only text for InputTextMultiline
     std::string cached_error_;
     bool need_scroll_ = false;
     bool path_settings_changed_ = false;
 
     void load_file(const std::string& path);
     void resolve_and_load(const std::string& raw_file);
+    void build_display_text();
 };
