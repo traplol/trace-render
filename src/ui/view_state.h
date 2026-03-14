@@ -29,6 +29,7 @@ struct ViewState {
 
     void clear_range_selection() {
         has_range_selection = false;
+        range_selecting = false;
         range_start_ts = 0.0;
         range_end_ts = 0.0;
     }
