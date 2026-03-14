@@ -9,6 +9,19 @@
 #include <cstdlib>
 #include <cstring>
 
+#ifdef _MSC_VER
+#include <intrin.h>
+static inline int ctz32(uint32_t x) {
+    unsigned long idx;
+    _BitScanForward(&idx, x);
+    return (int)idx;
+}
+#else
+static inline int ctz32(uint32_t x) {
+    return __builtin_ctz(x);
+}
+#endif
+
 void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max, const ViewState& view) {
     TRACE_SCOPE_CAT("TimeRuler", "timeline");
     float ruler_height = view.ruler_height;
@@ -179,7 +192,7 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
                         // present in this block without iterating individual events
                         uint32_t mask = blk.depth_mask;
                         while (mask) {
-                            int d = __builtin_ctz(mask);
+                            int d = ctz32(mask);
                             mask &= mask - 1;
                             auto& run = depth_merges[d];
                             if (blk_x1 <= run.x_end + MERGE_THRESHOLD_PX) {
