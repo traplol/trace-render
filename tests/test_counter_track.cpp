@@ -154,7 +154,7 @@ TEST(MergeCounterPoints, StopAfterFirstPastEnd) {
 }
 
 TEST(MergeCounterPoints, AllPointsBeforeView) {
-    // All points before view — last one should still appear (stepped back by lower_bound)
+    // Both points are before view_start; lower_bound returns end(), backs up to -100 only
     auto segs = merge({{-200.0, 1.0}, {-100.0, 2.0}});
     ASSERT_EQ(segs.size(), 1u);
     EXPECT_DOUBLE_EQ(segs[0].last_val, 2.0);

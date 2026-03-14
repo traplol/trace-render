@@ -42,6 +42,7 @@ float CounterTrackRenderer::render(ImDrawList* dl, ImVec2 area_min, float y_offs
     return total_height;
 }
 
+// Mirrors ViewState::time_to_x — keep in sync if the mapping changes.
 static float time_to_x(double ts, double view_start, double view_end, float track_x, float track_w) {
     return track_x + (float)((ts - view_start) / (view_end - view_start)) * track_w;
 }
