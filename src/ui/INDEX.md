@@ -3,7 +3,8 @@ All ImGui panels and rendering components. Each panel has a `render(model, view)
 
 ## view_state.h — shared viewport + interaction state passed by ref to every render call
 ```
-void set_range_selection(double start, double end); void clear_range_selection();
+void set_range_selection(double start, double end);
+void clear_range_selection();
 ImU32 sel_border_color_u32() const;
 float time_to_x(double ts, float timeline_left, float timeline_width) const;
 double x_to_time(float x, float timeline_left, float timeline_width) const;
@@ -35,9 +36,11 @@ void render(const TraceModel&, ViewState&);
 ## stats_panel.h / stats_panel.cpp — SQL editor + result table + visual query builder; tabs serialized to JSON
 ```
 void render(const TraceModel&, QueryDb&, ViewState&);
-nlohmann::json save_tabs() const; void load_tabs(const nlohmann::json&);
+nlohmann::json save_tabs() const;
+void load_tabs(const nlohmann::json&);
 // QueryBuilderState
-void reset(); std::string build_sql(const char* const* columns, int num_columns) const;
+void reset();
+std::string build_sql(const char* const* columns, int num_columns) const;
 ```
 
 ## instance_panel.h / instance_panel.cpp — lists all instances of the selected function; keyboard navigation
@@ -57,7 +60,8 @@ DiagStats stats;  // fields: visible_slices, drawn_slices, merged_slices, merge_
 bool extract_source_location(const TraceModel&, const TraceEvent&, std::string& file, int& line);
 std::string remap_source_path(const std::string& trace_path, const std::string& strip_prefix, const std::string& local_base);
 void render(const TraceModel&, ViewState&);
-nlohmann::json save_settings() const; void load_settings(const nlohmann::json&);
+nlohmann::json save_settings() const;
+void load_settings(const nlohmann::json&);
 ```
 
 ## counter_track.h / counter_track.cpp — renders counter series as step-function graphs; sub-pixel merging + hover hit-test
@@ -80,7 +84,9 @@ static uint64_t make_key(uint32_t pid, uint32_t tid);
 ## toolbar.h / toolbar.cpp — open-file button, zoom controls, time unit toggle, memory readout, settings button
 ```
 void render(const TraceModel&, ViewState&, float rss_mb);
-void set_window(SDL_Window*); bool settings_requested() const; void clear_settings_request();
+void set_window(SDL_Window*);
+bool settings_requested() const;
+void clear_settings_request();
 ```
 
 ## range_stats.h / range_stats.cpp — per-name stats (count, total/min/max/avg dur) for events in a time range
