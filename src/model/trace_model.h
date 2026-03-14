@@ -7,7 +7,6 @@
 #include <unordered_set>
 #include <cstdint>
 #include <algorithm>
-#include <set>
 #include <climits>
 #include <utility>
 
@@ -77,8 +76,8 @@ public:
     double min_ts_ = 1e18;
     double max_ts_ = -1e18;
 
-    // Pre-computed unique category indices (built in build_index)
-    std::set<uint32_t> categories_;
+    // Pre-computed unique category indices, sorted alphabetically by name (built in build_index)
+    std::vector<uint32_t> categories_;
 
     uint32_t intern_string(const std::string& s) {
         auto it = string_map_.find(s);
