@@ -8,10 +8,7 @@ void FilterPanel::render(const TraceModel& model, ViewState& view) {
 
     // Process / Thread tree
     if (ImGui::CollapsingHeader("Processes & Threads", ImGuiTreeNodeFlags_DefaultOpen)) {
-        TRACE_SCOPE_ARGS("Processes & Threads", "ui", "num_processes", (int)model.processes_.size());
         for (const auto& proc : model.processes_) {
-            TRACE_SCOPE_ARGS("Process", "ui", "pid", (int)proc.pid, "name", proc.name.c_str(), "num_threads",
-                             (int)proc.threads.size());
             bool proc_visible = !view.hidden_pids.count(proc.pid);
             if (ImGui::Checkbox(("##proc_" + std::to_string(proc.pid)).c_str(), &proc_visible)) {
                 if (proc_visible)
@@ -22,7 +19,6 @@ void FilterPanel::render(const TraceModel& model, ViewState& view) {
             ImGui::SameLine();
 
             if (ImGui::TreeNode(proc.name.c_str())) {
-                TRACE_SCOPE_ARGS("ThreadList", "ui", "pid", (int)proc.pid, "num_threads", (int)proc.threads.size());
                 for (const auto& thread : proc.threads) {
                     bool thread_visible = !view.hidden_tids.count(thread.tid);
                     if (ImGui::Checkbox(("##thread_" + std::to_string(thread.tid)).c_str(), &thread_visible)) {
@@ -41,8 +37,6 @@ void FilterPanel::render(const TraceModel& model, ViewState& view) {
 
     // Category filter
     if (ImGui::CollapsingHeader("Categories", ImGuiTreeNodeFlags_DefaultOpen)) {
-        TRACE_SCOPE_ARGS("Categories", "ui", "num_categories", (int)model.categories_.size());
-
         if (ImGui::Button("All")) {
             view.hidden_cats.clear();
         }
@@ -51,16 +45,14 @@ void FilterPanel::render(const TraceModel& model, ViewState& view) {
             for (uint32_t c : model.categories_) view.hidden_cats.insert(c);
         }
 
-        {
-            for (uint32_t cat_idx : model.categories_) {
-                const std::string& cat_name = model.get_string(cat_idx);
-                bool visible = !view.hidden_cats.count(cat_idx);
-                if (ImGui::Checkbox(cat_name.empty() ? "(empty)" : cat_name.c_str(), &visible)) {
-                    if (visible)
-                        view.hidden_cats.erase(cat_idx);
-                    else
-                        view.hidden_cats.insert(cat_idx);
-                }
+        for (uint32_t cat_idx : model.categories_) {
+            const std::string& cat_name = model.get_string(cat_idx);
+            bool visible = !view.hidden_cats.count(cat_idx);
+            if (ImGui::Checkbox(cat_name.empty() ? "(empty)" : cat_name.c_str(), &visible)) {
+                if (visible)
+                    view.hidden_cats.erase(cat_idx);
+                else
+                    view.hidden_cats.insert(cat_idx);
             }
         }
     }

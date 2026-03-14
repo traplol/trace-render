@@ -373,8 +373,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 int depth_offset = (int)stack.size() - 1 - (int)ev.depth;
                 ImGui::Separator();
 
-                // Pre-filter: build list of visible indices (skip collapsed subtrees)
+                // Pre-filter: build list of visible indices (skip collapsed subtrees).
                 // This is O(n) but only integer comparisons, very fast even for thousands.
+                // Note: when a node is toggled, stack_collapsed_ updates immediately but
+                // visible is rebuilt next frame. This is fine — ImGui is immediate-mode.
                 std::vector<uint32_t> visible;
                 visible.reserve(cached_stack_children_.size());
                 {
@@ -388,24 +390,13 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                     }
                 }
 
-                struct RowInfo {
-                    float y_center;
-                    int depth;
-                    int parent_idx;
-                };
-                struct ArrowInfo {
-                    ImVec2 pos;
-                    ImGuiDir dir;
-                };
-                std::vector<RowInfo> rows;
-                std::vector<ArrowInfo> arrows;
-
                 float arrow_sz = ImGui::GetFontSize();
                 float row_height = ImGui::GetTextLineHeightWithSpacing();
                 ImDrawList* dl = ImGui::GetWindowDrawList();
                 float base_x = ImGui::GetCursorScreenPos().x;
+                float list_start_y = ImGui::GetCursorScreenPos().y;
 
-                // Use clipper to only render visible rows
+                // Use clipper to only create ImGui widgets for on-screen rows
                 ImGuiListClipper clipper;
                 clipper.Begin((int)visible.size(), row_height);
                 while (clipper.Step()) {
@@ -434,10 +425,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                     stack_collapsed_.erase(idx);
                                 else
                                     stack_collapsed_.insert(idx);
-                                is_collapsed = !is_collapsed;
                             }
-                            ImGuiDir dir = is_collapsed ? ImGuiDir_Right : ImGuiDir_Down;
-                            arrows.push_back({cursor, dir});
+                            ImGuiDir dir = stack_collapsed_.count(idx) > 0 ? ImGuiDir_Right : ImGuiDir_Down;
+                            ImU32 arrow_col = ImGui::GetColorU32(ImGuiCol_Text);
+                            ImGui::RenderArrow(dl, cursor, arrow_col, dir, 1.0f);
                             ImGui::SameLine();
                         } else {
                             ImGui::Dummy(ImVec2(arrow_sz, arrow_sz));
@@ -455,10 +446,6 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                         ImGui::SameLine();
                         ImGui::TextDisabled("  self: %s", self_buf);
 
-                        // Record row position for tree lines
-                        float row_y = ImGui::GetCursorScreenPos().y - row_height * 0.6f;
-                        rows.push_back({row_y, vis_depth, vis_depth - 1});
-
                         if (indent > 0) ImGui::Unindent(indent);
 
                         if (row_hovered) {
@@ -471,37 +458,39 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                     }
                 }
 
-                // Draw tree connector lines for rendered rows only
+                // Draw tree connector lines over all visible entries using arithmetic
+                // Y positions (row_height * i) so lines are correct even for off-screen rows.
                 ImU32 line_col = ImGui::GetColorU32(ImGuiCol_TextDisabled);
                 float line_thickness = 1.0f;
 
+                // Compute depth and Y center for every visible row arithmetically
                 std::unordered_map<int, float> first_y_at_depth;
                 std::unordered_map<int, float> last_y_at_depth;
-                for (auto& row : rows) {
-                    int pd = row.parent_idx;
-                    if (first_y_at_depth.find(pd) == first_y_at_depth.end()) first_y_at_depth[pd] = row.y_center;
-                    last_y_at_depth[pd] = row.y_center;
+
+                for (int i = 0; i < (int)visible.size(); i++) {
+                    const auto& frame = model.events_[visible[i]];
+                    int vis_depth = (int)frame.depth + depth_offset;
+                    int parent_depth = vis_depth - 1;
+                    float row_y = list_start_y + row_height * (i + 0.4f);
+
+                    // Horizontal connector
+                    float line_x = base_x + parent_depth * indent_per_level + arrow_sz * 0.5f;
+                    float h_end_x = base_x + vis_depth * indent_per_level + arrow_sz * 0.5f;
+                    dl->AddLine(ImVec2(line_x, row_y), ImVec2(h_end_x, row_y), line_col, line_thickness);
+
+                    // Track vertical line extents per parent depth
+                    if (first_y_at_depth.find(parent_depth) == first_y_at_depth.end())
+                        first_y_at_depth[parent_depth] = row_y;
+                    last_y_at_depth[parent_depth] = row_y;
                 }
 
-                for (auto& row : rows) {
-                    int pd = row.parent_idx;
-                    float line_x = base_x + pd * indent_per_level + arrow_sz * 0.5f;
-                    float h_end_x = base_x + row.depth * indent_per_level + arrow_sz * 0.5f;
-                    dl->AddLine(ImVec2(line_x, row.y_center), ImVec2(h_end_x, row.y_center), line_col, line_thickness);
-                }
-
+                // Vertical lines per depth level
                 for (auto& [depth, first_y] : first_y_at_depth) {
                     float last_y = last_y_at_depth[depth];
                     float line_x = base_x + depth * indent_per_level + arrow_sz * 0.5f;
                     if (first_y < last_y) {
                         dl->AddLine(ImVec2(line_x, first_y), ImVec2(line_x, last_y), line_col, line_thickness);
                     }
-                }
-
-                // Draw arrows on top of tree lines
-                ImU32 arrow_col = ImGui::GetColorU32(ImGuiCol_Text);
-                for (auto& arrow : arrows) {
-                    ImGui::RenderArrow(dl, arrow.pos, arrow_col, arrow.dir, 1.0f);
                 }
             }
             ImGui::EndTabItem();
