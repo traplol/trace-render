@@ -63,12 +63,12 @@ TEST(MakeArgsJson, StdString) {
 TEST(MakeArgsJson, StringEscaping) {
     auto result = trace_detail::make_args_json("msg", "he said \"hello\"\nand\\left");
     // Should produce: "msg":"he said \"hello\"\nand\\left"
-    EXPECT_EQ(result, R"x("msg":"he said \"hello\"\nand\\left")x");
+    EXPECT_EQ(result, "\"msg\":\"he said \\\"hello\\\"\\nand\\\\left\"");
 }
 
 TEST(MakeArgsJson, KeyEscaping) {
     auto result = trace_detail::make_args_json("key\"with\"quotes", 1);
-    EXPECT_EQ(result, R"x("key\"with\"quotes":1)x");
+    EXPECT_EQ(result, "\"key\\\"with\\\"quotes\":1");
 }
 
 TEST(MakeArgsJson, ControlCharEscaping) {
