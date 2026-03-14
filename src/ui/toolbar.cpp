@@ -8,6 +8,8 @@ void Toolbar::render(const TraceModel& model, ViewState& view) {
     TRACE_SCOPE_CAT("Toolbar", "ui");
     if (ImGui::BeginMainMenuBar()) {
         ImGui::TextDisabled("%.0f FPS", ImGui::GetIO().Framerate);
+        ImGui::SameLine();
+        ImGui::TextDisabled("%.0f MB", rss_mb_);
         ImGui::Separator();
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Open...", "Ctrl+O")) {

@@ -46,13 +46,15 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
     TRACE_FUNCTION_CAT("ui");
     ImGui::Begin("Diagnostics");
 
-    // Update frame timing
+    // Update frame timing and memory
     auto now = std::chrono::steady_clock::now();
+    current_rss_mb_ = get_rss_bytes() / (1024.0f * 1024.0f);
     if (!first_frame_) {
         float dt = std::chrono::duration<float>(now - last_frame_).count();
         float fps = (dt > 0.0f) ? 1.0f / dt : 0.0f;
         fps_history_[history_idx_] = fps;
         frame_time_history_[history_idx_] = dt * 1000.0f;
+        memory_history_[history_idx_] = current_rss_mb_;
         history_idx_ = (history_idx_ + 1) % HISTORY_SIZE;
     }
     first_frame_ = false;
@@ -83,6 +85,16 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
         char rss_str[32];
         format_bytes(rss, rss_str, sizeof(rss_str));
         ImGui::Text("Process RSS: %s", rss_str);
+
+        // Memory sparkline
+        float max_mem = 0.0f;
+        for (int i = 0; i < HISTORY_SIZE; i++)
+            if (memory_history_[i] > max_mem) max_mem = memory_history_[i];
+        max_mem = max_mem > 0.0f ? max_mem * 1.2f : 100.0f;
+        char mem_overlay[32];
+        snprintf(mem_overlay, sizeof(mem_overlay), "%.0f MB", current_rss_mb_);
+        ImGui::PlotLines("##memory", memory_history_, HISTORY_SIZE, history_idx_, mem_overlay, 0.0f, max_mem,
+                         ImVec2(-1, 50));
 
         if (!model.events_.empty()) {
             ImGui::Separator();

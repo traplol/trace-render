@@ -30,6 +30,7 @@ public:
     void set_time_unit_ns(bool ns) { view_.time_unit_ns = ns; }
 
     bool has_trace() const { return has_trace_; }
+    float diagnostics_rss_mb() const { return diagnostics_.current_rss_mb(); }
 
 private:
     TraceModel model_;

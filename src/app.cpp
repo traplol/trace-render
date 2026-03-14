@@ -199,6 +199,7 @@ void App::update() {
     ImGui::End();
 
     // Menu bar / toolbar
+    toolbar_.set_rss_mb(diagnostics_.current_rss_mb());
     toolbar_.render(model_, view_);
     if (toolbar_.settings_requested()) {
         show_settings_ = true;
