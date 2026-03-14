@@ -1,7 +1,6 @@
 #include "filter_panel.h"
 #include "tracing.h"
 #include "imgui.h"
-#include <set>
 
 void FilterPanel::render(const TraceModel& model, ViewState& view) {
     TRACE_SCOPE_CAT("Filters", "ui");
@@ -42,29 +41,18 @@ void FilterPanel::render(const TraceModel& model, ViewState& view) {
 
     // Category filter
     if (ImGui::CollapsingHeader("Categories", ImGuiTreeNodeFlags_DefaultOpen)) {
-        TRACE_SCOPE_CAT("Categories", "ui");
-
-        // Collect unique categories
-        std::set<uint32_t> cats;
-        {
-            TRACE_SCOPE_ARGS("CollectCategories", "ui", "num_events", (int)model.events_.size());
-            for (const auto& ev : model.events_) {
-                if (ev.is_end_event || ev.ph == Phase::Metadata) continue;
-                cats.insert(ev.cat_idx);
-            }
-        }
+        TRACE_SCOPE_ARGS("Categories", "ui", "num_categories", (int)model.categories_.size());
 
         if (ImGui::Button("All")) {
             view.hidden_cats.clear();
         }
         ImGui::SameLine();
         if (ImGui::Button("None")) {
-            for (uint32_t c : cats) view.hidden_cats.insert(c);
+            for (uint32_t c : model.categories_) view.hidden_cats.insert(c);
         }
 
         {
-            TRACE_SCOPE_ARGS("CategoryCheckboxes", "ui", "num_categories", (int)cats.size());
-            for (uint32_t cat_idx : cats) {
+            for (uint32_t cat_idx : model.categories_) {
                 const std::string& cat_name = model.get_string(cat_idx);
                 bool visible = !view.hidden_cats.count(cat_idx);
                 if (ImGui::Checkbox(cat_name.empty() ? "(empty)" : cat_name.c_str(), &visible)) {
