@@ -4,6 +4,7 @@
 #include <fstream>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <limits>
 
 using json = nlohmann::json;
@@ -110,7 +111,12 @@ class TracingIntegration : public ::testing::Test {
 protected:
     std::string tmp_path_;
 
-    void SetUp() override { tmp_path_ = "/tmp/test_tracing_" + std::to_string(getpid()) + ".json"; }
+    void SetUp() override {
+        const char* tmp = std::getenv("TEMP");
+        if (!tmp) tmp = std::getenv("TMP");
+        if (!tmp) tmp = "/tmp";
+        tmp_path_ = std::string(tmp) + "/test_tracing_" + std::to_string(getpid()) + ".json";
+    }
     void TearDown() override { std::remove(tmp_path_.c_str()); }
 
     json read_trace() {
