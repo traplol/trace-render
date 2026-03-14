@@ -312,12 +312,14 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
         }
     }
 
-    // Render gutter (left side) — disabled so it's not interactable
+    // Render gutter (left side) — disabled so it's not interactable, no scrollbars
     ImGui::SetCursorPos(region_start);
     ImGui::BeginDisabled();
+    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 0.0f);
     ImGuiID gutter_child_id = ImGui::GetID("##gutter");
     ImGui::InputTextMultiline("##gutter", &cached_gutter_text_, ImVec2(gutter_w, avail.y),
                               ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoHorizontalScroll);
+    ImGui::PopStyleVar();
     ImGui::EndDisabled();
 
     // Find gutter child window and sync its scroll to the code area
