@@ -161,6 +161,7 @@ void SourcePanel::build_gutter_text() {
 
     int num_digits = (int)std::log10((double)num_lines) + 1;
     if (num_digits < 4) num_digits = 4;
+    if (num_digits > 10) num_digits = 10;
 
     char buf[32];
     for (int i = 1; i <= num_lines; i++) {
