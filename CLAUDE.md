@@ -32,6 +32,10 @@ cmake -B build
 cmake --build build
 ```
 
+## Pre-computing derived data
+
+Derived data (e.g. unique categories, self times, depth, parent indices) should be computed once in `TraceModel::build_index()`, not per-frame in UI code. If a value can be calculated at index time, store it on the model and look it up during rendering. This keeps the render loop fast and avoids redundant O(n) scans every frame.
+
 ## Time formatting
 
 Use `format_time()` from `src/ui/format_time.h` whenever displaying time values in the UI. Do not write inline time formatting or create local `format_time` variants. The function takes microseconds and auto-selects the appropriate unit (ns/us/ms/s). For ruler tick labels, use `format_ruler_time()` from the same header.
