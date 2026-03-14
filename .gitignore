@@ -1,5 +1,5 @@
 build/
-perfetto_imgui.ini
+trace_render.ini
 *.o
 *.d
 .cache/

@@ -29,7 +29,7 @@ float platform::default_font_scale() {
 }
 
 const char* platform::ini_filename() {
-    return "perfetto_imgui.ini";
+    return "trace_render.ini";
 }
 
 void platform::run_main_loop(void (*step)(), bool* running) {
@@ -41,9 +41,9 @@ void platform::run_main_loop(void (*step)(), bool* running) {
 std::string platform::settings_path() {
     std::string dir;
     if (const char* xdg = std::getenv("XDG_CONFIG_HOME")) {
-        dir = std::string(xdg) + "/perfetto-imgui";
+        dir = std::string(xdg) + "/trace-render";
     } else if (const char* home = std::getenv("HOME")) {
-        dir = std::string(home) + "/.config/perfetto-imgui";
+        dir = std::string(home) + "/.config/trace-render";
     } else {
         dir = ".";
     }

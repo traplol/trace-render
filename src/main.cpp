@@ -80,8 +80,8 @@ int main(int argc, char* argv[]) {
 
     platform::set_gl_attributes();
 
-    SDL_Window* window = SDL_CreateWindow("Perfetto Trace Viewer", 1600, 900,
-                                          SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
+    SDL_Window* window =
+        SDL_CreateWindow("TraceRender", 1600, 900, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
     if (!window) {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
         return 1;

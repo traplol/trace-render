@@ -7,7 +7,7 @@ Build a from-scratch Chrome JSON trace viewer using C++ and Dear ImGui (SDL3 + O
 
 ### Directory Structure
 ```
-perfetto-imgui/
+trace-render/
   CMakeLists.txt
   src/
     main.cpp                 # SDL3/OpenGL init, main loop
@@ -110,7 +110,7 @@ perfetto-imgui/
 
 ## Verification
 1. Build: `cmake -B build && cmake --build build`
-2. Run: `./build/perfetto_imgui`
+2. Run: `./build/trace_render`
 3. Open a Chrome trace file (record from `chrome://tracing` or use a sample)
 4. Verify: timeline shows colored slices, zoom/pan works, clicking shows details
 5. Test with a large trace (50MB+) to verify performance (should maintain 60fps)

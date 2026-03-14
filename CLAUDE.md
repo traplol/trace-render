@@ -21,7 +21,7 @@ After making any code changes and before pushing to git, always run the test sui
 ./scripts/run_tests.sh
 ```
 
-If tests fail, run `./build/perfetto_tests` directly to see detailed failure output. Do not push code that fails tests.
+If tests fail, run `./build/trace_render_tests` directly to see detailed failure output. Do not push code that fails tests.
 
 When modifying business logic (model, parser, indexing, view state, or any non-UI code), always add or update corresponding unit tests in `tests/`.
 

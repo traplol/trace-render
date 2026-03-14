@@ -1,4 +1,4 @@
-# Perfetto Trace Viewer
+# TraceRender
 
 A fast, native Chrome trace viewer built with C++ and [Dear ImGui](https://github.com/ocornut/imgui).
 
@@ -50,16 +50,16 @@ All other dependencies (SDL3, Dear ImGui, nlohmann/json, SQLite3) are fetched au
 
 ```bash
 # Open with file dialog
-./build/perfetto_imgui
+./build/trace_render
 
 # Open a trace file directly
-./build/perfetto_imgui trace.json
+./build/trace_render trace.json
 
 # Interpret timestamps as nanoseconds (default is microseconds)
-./build/perfetto_imgui -ns trace.json
+./build/trace_render -ns trace.json
 
 # Self-profiling: emit an internal trace of the viewer itself
-./build/perfetto_imgui --trace output.json trace.json
+./build/trace_render --trace output.json trace.json
 ```
 
 You can also drag & drop a trace file onto the window.

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(perfetto_imgui LANGUAGES C CXX)
+project(trace_render LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -81,17 +81,17 @@ if(EMSCRIPTEN)
 else()
   list(FILTER APP_SOURCES EXCLUDE REGEX "platform_wasm\\.cpp$|file_loader_wasm\\.cpp$")
 endif()
-add_executable(perfetto_imgui ${APP_SOURCES})
-target_include_directories(perfetto_imgui PRIVATE src)
+add_executable(trace_render ${APP_SOURCES})
+target_include_directories(trace_render PRIVATE src)
 
 if(EMSCRIPTEN)
-  target_link_libraries(perfetto_imgui PRIVATE
+  target_link_libraries(trace_render PRIVATE
     imgui_lib
     nlohmann_json::nlohmann_json
     sqlite3_lib
   )
   # Emscripten linker flags
-  target_link_options(perfetto_imgui PRIVATE
+  target_link_options(trace_render PRIVATE
     -sUSE_SDL=3
     -sMAX_WEBGL_VERSION=2
     -sMIN_WEBGL_VERSION=2
@@ -101,12 +101,12 @@ if(EMSCRIPTEN)
     -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,lengthBytesUTF8,stringToUTF8
     --shell-file=${CMAKE_SOURCE_DIR}/web/shell.html
   )
-  set_target_properties(perfetto_imgui PROPERTIES
+  set_target_properties(trace_render PROPERTIES
     SUFFIX ".html"
     OUTPUT_NAME "index"
   )
 else()
-  target_link_libraries(perfetto_imgui PRIVATE
+  target_link_libraries(trace_render PRIVATE
     imgui_lib
     nlohmann_json::nlohmann_json
     sqlite3_lib
@@ -136,9 +136,9 @@ if(NOT EMSCRIPTEN)
     list(FILTER LIB_SOURCES EXCLUDE REGEX "platform_wasm\\.cpp$|file_loader_wasm\\.cpp$")
 
     file(GLOB TEST_SOURCES tests/*.cpp)
-    add_executable(perfetto_tests ${TEST_SOURCES} ${LIB_SOURCES})
-    target_include_directories(perfetto_tests PRIVATE src)
-    target_link_libraries(perfetto_tests PRIVATE
+    add_executable(trace_render_tests ${TEST_SOURCES} ${LIB_SOURCES})
+    target_include_directories(trace_render_tests PRIVATE src)
+    target_link_libraries(trace_render_tests PRIVATE
       GTest::gtest_main
       imgui_lib
       nlohmann_json::nlohmann_json
@@ -148,6 +148,6 @@ if(NOT EMSCRIPTEN)
     )
 
     include(GoogleTest)
-    gtest_discover_tests(perfetto_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    gtest_discover_tests(trace_render_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endif()
 endif()
