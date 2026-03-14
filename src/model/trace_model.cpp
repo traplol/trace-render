@@ -12,6 +12,9 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
     }
     size_t threads_done = 0;
 
+    // Progress weighting: SortEvents ~20%, MatchBEPairs ~5%, ProcessThreads ~75%
+    if (on_progress) on_progress(0.0f);
+
     // Sort events within each thread by timestamp, then by duration descending
     // so that parent events (longer duration) come before children at the same ts.
     // Uses key extraction for cache-friendly sorting: copy (ts, dur, index) into a
@@ -43,6 +46,8 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
             }
         }
     }
+
+    if (on_progress) on_progress(0.20f);
 
     // Match B/E pairs and compute duration
     {
@@ -142,7 +147,7 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
 
                 threads_done++;
                 if (on_progress && total_threads > 0) {
-                    on_progress((float)threads_done / (float)total_threads);
+                    on_progress(0.25f + 0.75f * (float)threads_done / (float)total_threads);
                 }
             }
         }

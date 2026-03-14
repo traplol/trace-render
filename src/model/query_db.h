@@ -40,7 +40,7 @@ public:
 
     // Background index creation (called after load, runs in background)
     void create_indexes_async();
-    bool is_indexing() const { return indexing_.load(std::memory_order_relaxed); }
+    bool is_indexing() const { return indexing_.load(std::memory_order_acquire); }
     float indexing_progress() const { return indexing_progress_.load(std::memory_order_relaxed); }
 
 private:

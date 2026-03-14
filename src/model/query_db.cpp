@@ -184,7 +184,7 @@ void QueryDb::create_indexes_async() {
         indexing_progress_.store(0.75f, std::memory_order_relaxed);
         sqlite3_exec(db_, "CREATE INDEX IF NOT EXISTS idx_counters_name ON counters(name)", nullptr, nullptr, nullptr);
         indexing_progress_.store(1.0f, std::memory_order_relaxed);
-        indexing_ = false;
+        indexing_.store(false, std::memory_order_release);
     });
 }
 
