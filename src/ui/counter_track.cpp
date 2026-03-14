@@ -65,47 +65,87 @@ void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec
         return track_max.y - normalized * (track_h - 4) - 2;
     };
 
-    // Draw area fill and line
-    ImVec2 prev_pt;
+    ImU32 fill_color = (color & 0x00FFFFFF) | 0x70000000;
+
+    // Sub-pixel merging: when multiple points map to the same pixel column,
+    // merge them into a single min/max vertical band to avoid redundant draws.
+    float prev_x = 0.0f;
+    float prev_y = 0.0f;
     bool have_prev = false;
 
+    // Current pixel bucket for merging
+    int cur_pixel = -1;
+    float bucket_x = 0.0f;
+    double bucket_min_val = 0.0;
+    double bucket_max_val = 0.0;
+    double bucket_last_val = 0.0;
+
+    auto flush_step = [&](float x, float y) {
+        if (have_prev) {
+            ImVec2 step_pt(x, prev_y);
+            dl->AddLine(ImVec2(prev_x, prev_y), step_pt, color, 1.5f);
+            dl->AddLine(step_pt, ImVec2(x, y), color, 1.5f);
+            dl->AddQuadFilled(ImVec2(prev_x, prev_y), step_pt, ImVec2(x, track_max.y), ImVec2(prev_x, track_max.y),
+                              fill_color);
+        }
+        prev_x = x;
+        prev_y = y;
+        have_prev = true;
+    };
+
+    auto flush_bucket = [&]() {
+        if (cur_pixel < 0) return;
+        // For a merged bucket, draw a vertical band from min to max
+        float y_min = val_to_y(bucket_max_val);
+        float y_max = val_to_y(bucket_min_val);
+        float y_last = val_to_y(bucket_last_val);
+
+        if (have_prev && y_min != y_max) {
+            // Draw vertical band for the merged range
+            dl->AddLine(ImVec2(prev_x, prev_y), ImVec2(bucket_x, prev_y), color, 1.5f);
+            dl->AddRectFilled(ImVec2(bucket_x - 0.5f, y_min), ImVec2(bucket_x + 0.5f, y_max), color);
+            dl->AddQuadFilled(ImVec2(prev_x, prev_y), ImVec2(bucket_x, prev_y), ImVec2(bucket_x, track_max.y),
+                              ImVec2(prev_x, track_max.y), fill_color);
+            prev_x = bucket_x;
+            prev_y = y_last;
+            have_prev = true;
+        } else {
+            flush_step(bucket_x, y_last);
+        }
+    };
+
     for (; it != series.points.end(); ++it) {
-        if (it->first > view.view_end_ts) {
-            // Draw one more point for continuity
-            float x = view.time_to_x((double)it->first, track_min.x, track_w);
-            float y = val_to_y(it->second);
-            if (have_prev) {
-                // Step function: horizontal then vertical
-                ImVec2 step_pt(x, prev_pt.y);
-                dl->AddLine(prev_pt, step_pt, color, 3.0f);
-                dl->AddLine(step_pt, ImVec2(x, y), color, 3.0f);
-            }
+        bool past_end = it->first > view.view_end_ts;
+        float x = view.time_to_x((double)it->first, track_min.x, track_w);
+        int pixel = (int)x;
+
+        if (pixel == cur_pixel && !past_end) {
+            // Merge into current bucket
+            if (it->second < bucket_min_val) bucket_min_val = it->second;
+            if (it->second > bucket_max_val) bucket_max_val = it->second;
+            bucket_last_val = it->second;
+            continue;
+        }
+
+        // Flush previous bucket
+        flush_bucket();
+
+        if (past_end) {
+            // One final point for continuity
+            flush_step(x, val_to_y(it->second));
             break;
         }
 
-        float x = view.time_to_x((double)it->first, track_min.x, track_w);
-        float y = val_to_y(it->second);
-
-        if (have_prev) {
-            // Step function
-            ImVec2 step_pt(x, prev_pt.y);
-            dl->AddLine(prev_pt, step_pt, color, 3.0f);
-            dl->AddLine(step_pt, ImVec2(x, y), color, 3.0f);
-
-            // Area fill (semi-transparent)
-            ImU32 fill_color = (color & 0x00FFFFFF) | 0x70000000;
-            ImVec2 quad[4] = {
-                prev_pt,
-                step_pt,
-                ImVec2(x, track_max.y),
-                ImVec2(prev_pt.x, track_max.y),
-            };
-            dl->AddQuadFilled(quad[0], quad[1], quad[2], quad[3], fill_color);
-        }
-
-        prev_pt = ImVec2(x, y);
-        have_prev = true;
+        // Start new bucket
+        cur_pixel = pixel;
+        bucket_x = x;
+        bucket_min_val = it->second;
+        bucket_max_val = it->second;
+        bucket_last_val = it->second;
     }
+
+    // Flush any remaining bucket
+    flush_bucket();
 
     // Min/max labels
     char buf[64];
