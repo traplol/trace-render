@@ -59,7 +59,15 @@ void FileLoader::load_file(const std::string& path, bool time_ns, QueryDb* query
 
     if (ok) {
         impl_->model = std::move(new_model);
-        if (query_db) query_db->load(impl_->model);
+        if (query_db) {
+            impl_->phase_str = "Building query DB";
+            impl_->phase_progress_ = 0.0f;
+            impl_->progress_ = 0.80f;
+            query_db->load(impl_->model, [this](float p) {
+                impl_->phase_progress_ = p;
+                impl_->progress_ = 0.80f + p * 0.20f;
+            });
+        }
         impl_->success_ = true;
     } else {
         impl_->success_ = false;
@@ -88,7 +96,15 @@ void FileLoader::load_buffer(std::vector<char> data, const std::string& filename
 
     if (ok) {
         impl_->model = std::move(new_model);
-        if (query_db) query_db->load(impl_->model);
+        if (query_db) {
+            impl_->phase_str = "Building query DB";
+            impl_->phase_progress_ = 0.0f;
+            impl_->progress_ = 0.80f;
+            query_db->load(impl_->model, [this](float p) {
+                impl_->phase_progress_ = p;
+                impl_->progress_ = 0.80f + p * 0.20f;
+            });
+        }
         impl_->success_ = true;
     } else {
         impl_->success_ = false;

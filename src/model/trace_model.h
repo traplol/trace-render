@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <climits>
+#include <functional>
 #include <utility>
 
 struct ThreadInfo {
@@ -120,7 +121,7 @@ public:
         return processes_.back();
     }
 
-    void build_index();
+    void build_index(std::function<void(float)> on_progress = nullptr);
 
     // Find the parent event (depth-1, same thread, enclosing time range).
     // Returns -1 if no parent found.

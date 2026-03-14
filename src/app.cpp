@@ -59,6 +59,7 @@ void App::finish_load() {
         }
         status_message_ = "Loaded: " + loader_.filename() + " (" + std::to_string(model_.events_.size()) + " events, " +
                           std::to_string(model_.processes_.size()) + " processes)";
+        query_db_.create_indexes_async();
     } else {
         status_message_ = "Error: " + loader_.error();
         has_trace_ = false;
@@ -286,6 +287,13 @@ void App::update() {
             }
             ImGui::SameLine();
             ImGui::ProgressBar(loader_.phase_progress(), ImVec2(150, 0));
+        } else if (query_db_.is_indexing()) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("|");
+            ImGui::SameLine();
+            ImGui::Text("Building query indexes");
+            ImGui::SameLine();
+            ImGui::ProgressBar(query_db_.indexing_progress(), ImVec2(150, 0));
         }
         if (has_trace_ && !loader_.is_loading() && view_.selected_event_idx >= 0) {
             ImGui::SameLine(ImGui::GetWindowWidth() - 900);

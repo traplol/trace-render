@@ -50,8 +50,11 @@ struct FileLoader::Impl {
                     phase_str = "Building query DB";
                 }
                 phase_progress.store(0.0f, std::memory_order_relaxed);
-                progress.store(0.90f, std::memory_order_relaxed);
-                query_db->load(model);
+                progress.store(0.80f, std::memory_order_relaxed);
+                query_db->load(model, [this](float p) {
+                    phase_progress.store(p, std::memory_order_relaxed);
+                    progress.store(0.80f + p * 0.20f, std::memory_order_relaxed);
+                });
             }
             success_ = true;
         } else {

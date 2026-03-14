@@ -3,22 +3,24 @@
 #include <sqlite3.h>
 
 QueryDb::QueryDb() {
-    sqlite3_open(":memory:", &db_);
+    sqlite3_open_v2(":memory:", &db_, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nullptr);
 }
 
 QueryDb::~QueryDb() {
     cancel_query();
     if (query_thread_.joinable()) query_thread_.join();
+    if (index_thread_.joinable()) index_thread_.join();
     if (db_) sqlite3_close(db_);
 }
 
-void QueryDb::load(const TraceModel& model) {
+void QueryDb::load(const TraceModel& model, std::function<void(float)> on_progress) {
     TRACE_SCOPE_CAT("QueryDb::load", "model");
     if (!db_) return;
 
-    // Cancel any running query first
+    // Cancel any running query and wait for background indexing
     cancel_query();
     if (query_thread_.joinable()) query_thread_.join();
+    if (index_thread_.joinable()) index_thread_.join();
 
     // Drop existing tables
     sqlite3_exec(db_, "DROP TABLE IF EXISTS events", nullptr, nullptr, nullptr);
@@ -75,83 +77,115 @@ void QueryDb::load(const TraceModel& model) {
     sqlite3_exec(db_, "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
 
     // Events
-    sqlite3_stmt* stmt = nullptr;
-    sqlite3_prepare_v2(db_, "INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?)", -1, &stmt, nullptr);
+    {
+        TRACE_SCOPE_CAT("InsertEvents", "model");
+        sqlite3_stmt* stmt = nullptr;
+        sqlite3_prepare_v2(db_, "INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?)", -1, &stmt, nullptr);
 
-    for (uint32_t i = 0; i < (uint32_t)model.events_.size(); i++) {
-        const auto& ev = model.events_[i];
-        if (ev.is_end_event) continue;
+        uint32_t event_count = (uint32_t)model.events_.size();
+        for (uint32_t i = 0; i < event_count; i++) {
+            const auto& ev = model.events_[i];
+            if (ev.is_end_event) continue;
 
-        const auto& name = model.get_string(ev.name_idx);
-        const auto& cat = model.get_string(ev.cat_idx);
+            const auto& name = model.get_string(ev.name_idx);
+            const auto& cat = model.get_string(ev.cat_idx);
 
-        char phase_str[2] = {(char)ev.ph, '\0'};
+            char phase_str[2] = {(char)ev.ph, '\0'};
 
-        sqlite3_bind_int(stmt, 1, i);
-        sqlite3_bind_text(stmt, 2, name.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 3, cat.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 4, phase_str, -1, SQLITE_TRANSIENT);
-        sqlite3_bind_double(stmt, 5, ev.ts);
-        sqlite3_bind_double(stmt, 6, ev.dur);
-        sqlite3_bind_double(stmt, 7, ev.end_ts());
-        sqlite3_bind_int(stmt, 8, ev.pid);
-        sqlite3_bind_int(stmt, 9, ev.tid);
-        sqlite3_bind_int(stmt, 10, ev.depth);
+            sqlite3_bind_int(stmt, 1, i);
+            sqlite3_bind_text(stmt, 2, name.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_bind_text(stmt, 3, cat.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_bind_text(stmt, 4, phase_str, -1, SQLITE_TRANSIENT);
+            sqlite3_bind_double(stmt, 5, ev.ts);
+            sqlite3_bind_double(stmt, 6, ev.dur);
+            sqlite3_bind_double(stmt, 7, ev.end_ts());
+            sqlite3_bind_int(stmt, 8, ev.pid);
+            sqlite3_bind_int(stmt, 9, ev.tid);
+            sqlite3_bind_int(stmt, 10, ev.depth);
 
-        sqlite3_step(stmt);
-        sqlite3_reset(stmt);
+            sqlite3_step(stmt);
+            sqlite3_reset(stmt);
+
+            if (on_progress && (i & 0xFFFF) == 0 && event_count > 0) {
+                on_progress((float)i / (float)event_count);
+            }
+        }
+        sqlite3_finalize(stmt);
     }
-    sqlite3_finalize(stmt);
 
-    // Processes
-    sqlite3_prepare_v2(db_, "INSERT INTO processes VALUES (?,?)", -1, &stmt, nullptr);
+    // Processes and threads
+    {
+        TRACE_SCOPE_CAT("InsertProcessesAndThreads", "model");
+        sqlite3_stmt* stmt = nullptr;
+        sqlite3_prepare_v2(db_, "INSERT INTO processes VALUES (?,?)", -1, &stmt, nullptr);
 
-    for (const auto& proc : model.processes_) {
-        sqlite3_bind_int(stmt, 1, proc.pid);
-        sqlite3_bind_text(stmt, 2, proc.name.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_step(stmt);
-        sqlite3_reset(stmt);
-    }
-    sqlite3_finalize(stmt);
-
-    // Threads
-    sqlite3_prepare_v2(db_, "INSERT INTO threads VALUES (?,?,?)", -1, &stmt, nullptr);
-
-    for (const auto& proc : model.processes_) {
-        for (const auto& thread : proc.threads) {
-            sqlite3_bind_int(stmt, 1, thread.tid);
-            sqlite3_bind_int(stmt, 2, proc.pid);
-            sqlite3_bind_text(stmt, 3, thread.name.c_str(), -1, SQLITE_TRANSIENT);
+        for (const auto& proc : model.processes_) {
+            sqlite3_bind_int(stmt, 1, proc.pid);
+            sqlite3_bind_text(stmt, 2, proc.name.c_str(), -1, SQLITE_TRANSIENT);
             sqlite3_step(stmt);
             sqlite3_reset(stmt);
         }
+        sqlite3_finalize(stmt);
+
+        sqlite3_prepare_v2(db_, "INSERT INTO threads VALUES (?,?,?)", -1, &stmt, nullptr);
+
+        for (const auto& proc : model.processes_) {
+            for (const auto& thread : proc.threads) {
+                sqlite3_bind_int(stmt, 1, thread.tid);
+                sqlite3_bind_int(stmt, 2, proc.pid);
+                sqlite3_bind_text(stmt, 3, thread.name.c_str(), -1, SQLITE_TRANSIENT);
+                sqlite3_step(stmt);
+                sqlite3_reset(stmt);
+            }
+        }
+        sqlite3_finalize(stmt);
     }
-    sqlite3_finalize(stmt);
 
     // Counters
-    sqlite3_prepare_v2(db_, "INSERT INTO counters VALUES (?,?,?,?)", -1, &stmt, nullptr);
+    {
+        TRACE_SCOPE_CAT("InsertCounters", "model");
+        sqlite3_stmt* stmt = nullptr;
+        sqlite3_prepare_v2(db_, "INSERT INTO counters VALUES (?,?,?,?)", -1, &stmt, nullptr);
 
-    for (const auto& cs : model.counter_series_) {
-        for (const auto& pt : cs.points) {
-            sqlite3_bind_int(stmt, 1, cs.pid);
-            sqlite3_bind_text(stmt, 2, cs.name.c_str(), -1, SQLITE_TRANSIENT);
-            sqlite3_bind_double(stmt, 3, pt.first);
-            sqlite3_bind_double(stmt, 4, pt.second);
-            sqlite3_step(stmt);
-            sqlite3_reset(stmt);
+        for (const auto& cs : model.counter_series_) {
+            for (const auto& pt : cs.points) {
+                sqlite3_bind_int(stmt, 1, cs.pid);
+                sqlite3_bind_text(stmt, 2, cs.name.c_str(), -1, SQLITE_TRANSIENT);
+                sqlite3_bind_double(stmt, 3, pt.first);
+                sqlite3_bind_double(stmt, 4, pt.second);
+                sqlite3_step(stmt);
+                sqlite3_reset(stmt);
+            }
         }
+        sqlite3_finalize(stmt);
     }
-    sqlite3_finalize(stmt);
 
     sqlite3_exec(db_, "COMMIT", nullptr, nullptr, nullptr);
 
-    // Create indexes
-    sqlite3_exec(db_, "CREATE INDEX idx_events_name ON events(name)", nullptr, nullptr, nullptr);
-    sqlite3_exec(db_, "CREATE INDEX idx_events_ts ON events(ts)", nullptr, nullptr, nullptr);
-    sqlite3_exec(db_, "CREATE INDEX idx_events_pid_tid ON events(pid, tid)", nullptr, nullptr, nullptr);
-    sqlite3_exec(db_, "CREATE INDEX idx_counters_name ON counters(name)", nullptr, nullptr, nullptr);
+    if (on_progress) on_progress(1.0f);
 
     loaded_ = true;
+}
+
+void QueryDb::create_indexes_async() {
+    if (index_thread_.joinable()) index_thread_.join();
+
+    indexing_ = true;
+    indexing_progress_ = 0.0f;
+
+    index_thread_ = std::thread([this]() {
+        TRACE_SCOPE_CAT("CreateIndexes", "model");
+        sqlite3_exec(db_, "CREATE INDEX IF NOT EXISTS idx_events_name ON events(name)", nullptr, nullptr, nullptr);
+        indexing_progress_.store(0.25f, std::memory_order_relaxed);
+        sqlite3_exec(db_, "CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts)", nullptr, nullptr, nullptr);
+        indexing_progress_.store(0.50f, std::memory_order_relaxed);
+        sqlite3_exec(db_, "CREATE INDEX IF NOT EXISTS idx_events_pid_tid ON events(pid, tid)", nullptr, nullptr,
+                     nullptr);
+        indexing_progress_.store(0.75f, std::memory_order_relaxed);
+        sqlite3_exec(db_, "CREATE INDEX IF NOT EXISTS idx_counters_name ON counters(name)", nullptr, nullptr, nullptr);
+        indexing_progress_.store(1.0f, std::memory_order_relaxed);
+        indexing_.store(false, std::memory_order_release);
+    });
 }
 
 QueryDb::QueryResult QueryDb::execute(const std::string& sql) {

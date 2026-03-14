@@ -365,6 +365,10 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
             tab.has_result = false;
             tab.result = {};
         }
+        if (db.is_indexing()) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(indexes building — queries may be slow)");
+        }
     }
 
     ImGui::EndChild();
