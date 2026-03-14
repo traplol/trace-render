@@ -25,7 +25,7 @@ const char* platform::glsl_version() {
 }
 
 float platform::default_font_scale() {
-    return 3.0f;
+    return 1.4f;
 }
 
 const char* platform::ini_filename() {

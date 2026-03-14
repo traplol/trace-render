@@ -45,13 +45,13 @@ struct ViewState {
     int32_t search_current = -1;
 
     // Layout
-    float track_height = 60.0f;
-    float track_padding = 12.0f;
-    float counter_track_height = 180.0f;
-    float label_width = 600.0f;
-    float ruler_height = 30.0f;
-    float proc_header_height = 22.0f;
-    float scrollbar_scale = 1.0f;
+    float track_height = 54.0f;
+    float track_padding = 8.0f;
+    float counter_track_height = 175.0f;
+    float label_width = 221.0f;
+    float ruler_height = 37.0f;
+    float proc_header_height = 36.0f;
+    float scrollbar_scale = 1.3f;
 
     // Selection border color (RGBA)
     float sel_border_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
