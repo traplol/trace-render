@@ -252,12 +252,11 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
     float gutter_w = ImGui::CalcTextSize(measure_buf).x;
     float code_w = avail.x - gutter_w;
 
-    // Save cursor position — we render the code first (to get scroll state),
-    // then come back and render the gutter with same-frame scroll sync.
+    // Position code area to the right of the gutter
+    ImVec2 region_screen = ImGui::GetCursorScreenPos();
     ImVec2 region_start = ImGui::GetCursorPos();
-
-    // --- Code area (rendered first to obtain scroll state) ---
     ImGui::SetCursorPos(ImVec2(region_start.x + gutter_w, region_start.y));
+
     ImGuiID code_child_id = ImGui::GetID("##source_text");
     ImGui::InputTextMultiline("##source_text", &cached_display_text_, ImVec2(code_w, avail.y),
                               ImGuiInputTextFlags_ReadOnly);
@@ -271,7 +270,6 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
         }
     }
 
-    float scroll_y = 0.0f;
     if (code_child) {
         // Scroll to target line (centered)
         if (need_scroll_ && cached_line_ > 0) {
@@ -280,45 +278,46 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
             need_scroll_ = false;
         }
 
-        scroll_y = code_child->Scroll.y;
+        ImVec2 origin = code_child->ContentRegionRect.Min;
+        ImVec2 clip_min = code_child->InnerRect.Min;
+        ImVec2 clip_max = code_child->InnerRect.Max;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
 
-        // Draw line highlight. ContentRegionRect.Min already includes -Scroll,
-        // so the line's screen Y is simply origin + line_index * font_size.
+        // Draw line highlight
         if (cached_line_ > 0) {
-            float y = code_child->ContentRegionRect.Min.y + (cached_line_ - 1) * font_size;
-            ImVec2 clip_min = code_child->InnerRect.Min;
-            ImVec2 clip_max = code_child->InnerRect.Max;
+            float y = origin.y + (cached_line_ - 1) * font_size;
             if (y + font_size > clip_min.y && y < clip_max.y) {
-                ImDrawList* dl = ImGui::GetWindowDrawList();
                 dl->PushClipRect(clip_min, clip_max, true);
                 dl->AddRectFilled(ImVec2(clip_min.x, ImMax(y, clip_min.y)),
                                   ImVec2(clip_max.x, ImMin(y + font_size, clip_max.y)), IM_COL32(255, 200, 0, 60));
                 dl->PopClipRect();
             }
         }
-    }
 
-    // --- Gutter (rendered after code, positioned to the left, same-frame scroll) ---
-    ImGui::SetCursorPos(region_start);
-    // Use ImGuiChildFlags_Borders to match InputTextMultiline's child padding/inset
-    ImGui::BeginChild("##gutter", ImVec2(gutter_w, avail.y), ImGuiChildFlags_Borders,
-                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::SetScrollY(scroll_y);
+        // Draw line numbers directly using the code child's Y coordinates.
+        // This guarantees zero drift — same origin, same line height.
+        float gutter_x = region_screen.x;
+        ImVec2 gutter_clip_min(gutter_x, clip_min.y);
+        ImVec2 gutter_clip_max(gutter_x + gutter_w, clip_max.y);
+        dl->PushClipRect(gutter_clip_min, gutter_clip_max, true);
 
-    // Match InputTextMultiline's line spacing (font_size, no ItemSpacing)
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-    ImGuiListClipper clipper;
-    clipper.Begin(num_lines, font_size);
-    while (clipper.Step()) {
-        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-            if ((i + 1) == cached_line_)
-                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.6f, 1.0f), "%*d", num_digits, i + 1);
-            else
-                ImGui::TextDisabled("%*d", num_digits, i + 1);
+        int first_visible = ImMax(0, (int)(code_child->Scroll.y / font_size) - 1);
+        int last_visible = ImMin(num_lines - 1, first_visible + (int)(clip_max.y - clip_min.y) / (int)font_size + 2);
+
+        ImU32 color_target = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 0.6f, 1.0f));
+        ImU32 color_dimmed = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+        ImFont* font = ImGui::GetFont();
+        char line_buf[32];
+
+        for (int i = first_visible; i <= last_visible; i++) {
+            float y = origin.y + i * font_size;
+            snprintf(line_buf, sizeof(line_buf), "%*d", num_digits, i + 1);
+            ImU32 color = ((i + 1) == cached_line_) ? color_target : color_dimmed;
+            dl->AddText(font, font_size, ImVec2(gutter_x, y), color, line_buf);
         }
+
+        dl->PopClipRect();
     }
-    ImGui::PopStyleVar();
-    ImGui::EndChild();
 
     if (need_scroll_) need_scroll_ = false;
 
