@@ -42,6 +42,61 @@ float CounterTrackRenderer::render(ImDrawList* dl, ImVec2 area_min, float y_offs
     return total_height;
 }
 
+static float time_to_x(double ts, double view_start, double view_end, float track_x, float track_w) {
+    return track_x + (float)((ts - view_start) / (view_end - view_start)) * track_w;
+}
+
+std::vector<MergedCounterSegment> merge_counter_points(const std::vector<std::pair<double, double>>& points,
+                                                       double view_start, double view_end, float track_x,
+                                                       float track_w) {
+    std::vector<MergedCounterSegment> result;
+    if (points.empty()) return result;
+
+    // Find the first point before or at view_start
+    auto it = std::lower_bound(
+        points.begin(), points.end(), std::make_pair(view_start, -1e300),
+        [](const std::pair<double, double>& a, const std::pair<double, double>& b) { return a.first < b.first; });
+    if (it != points.begin()) --it;
+
+    bool have_bucket = false;
+    int cur_pixel = 0;
+    MergedCounterSegment bucket{};
+
+    auto flush_bucket = [&]() {
+        if (have_bucket) result.push_back(bucket);
+        have_bucket = false;
+    };
+
+    for (; it != points.end(); ++it) {
+        bool past_end = it->first > view_end;
+        float x = time_to_x(it->first, view_start, view_end, track_x, track_w);
+        int pixel = (int)x;
+
+        if (have_bucket && pixel == cur_pixel && !past_end) {
+            if (it->second < bucket.min_val) bucket.min_val = it->second;
+            if (it->second > bucket.max_val) bucket.max_val = it->second;
+            bucket.last_val = it->second;
+            bucket.point_count++;
+            continue;
+        }
+
+        flush_bucket();
+
+        // Start new bucket (including the final past-end point for continuity)
+        cur_pixel = pixel;
+        bucket = {x, it->second, it->second, it->second, 1};
+        have_bucket = true;
+
+        if (past_end) {
+            flush_bucket();
+            break;
+        }
+    }
+
+    flush_bucket();
+    return result;
+}
+
 void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec2 track_max,
                                          const CounterSeries& series, const ViewState& view, ImU32 color) {
     TRACE_FUNCTION_CAT("timeline");
@@ -54,98 +109,42 @@ void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec
 
     dl->PushClipRect(track_min, track_max, true);
 
-    // Find the first point before or at view_start
-    auto it = std::lower_bound(
-        series.points.begin(), series.points.end(), std::make_pair(view.view_start_ts, -1e300),
-        [](const std::pair<double, double>& a, const std::pair<double, double>& b) { return a.first < b.first; });
-    if (it != series.points.begin()) --it;
-
     auto val_to_y = [&](double val) -> float {
         float normalized = (float)((val - series.min_val) / value_range);
         return track_max.y - normalized * (track_h - 4) - 2;
     };
 
     ImU32 fill_color = (color & 0x00FFFFFF) | 0x70000000;
+    auto segments = merge_counter_points(series.points, view.view_start_ts, view.view_end_ts, track_min.x, track_w);
 
-    // Sub-pixel merging: when multiple points map to the same pixel column,
-    // merge them into a single min/max vertical band to avoid redundant draws.
     float prev_x = 0.0f;
     float prev_y = 0.0f;
     bool have_prev = false;
 
-    // Current pixel bucket for merging
-    int cur_pixel = -1;
-    float bucket_x = 0.0f;
-    double bucket_min_val = 0.0;
-    double bucket_max_val = 0.0;
-    double bucket_last_val = 0.0;
+    for (const auto& seg : segments) {
+        float y_last = val_to_y(seg.last_val);
 
-    auto flush_step = [&](float x, float y) {
-        if (have_prev) {
-            ImVec2 step_pt(x, prev_y);
-            dl->AddLine(ImVec2(prev_x, prev_y), step_pt, color, 1.5f);
-            dl->AddLine(step_pt, ImVec2(x, y), color, 1.5f);
-            dl->AddQuadFilled(ImVec2(prev_x, prev_y), step_pt, ImVec2(x, track_max.y), ImVec2(prev_x, track_max.y),
-                              fill_color);
-        }
-        prev_x = x;
-        prev_y = y;
-        have_prev = true;
-    };
-
-    auto flush_bucket = [&]() {
-        if (cur_pixel < 0) return;
-        // For a merged bucket, draw a vertical band from min to max
-        float y_min = val_to_y(bucket_max_val);
-        float y_max = val_to_y(bucket_min_val);
-        float y_last = val_to_y(bucket_last_val);
-
-        if (have_prev && y_min != y_max) {
-            // Draw vertical band for the merged range
-            dl->AddLine(ImVec2(prev_x, prev_y), ImVec2(bucket_x, prev_y), color, 1.5f);
-            dl->AddRectFilled(ImVec2(bucket_x - 0.5f, y_min), ImVec2(bucket_x + 0.5f, y_max), color);
-            dl->AddQuadFilled(ImVec2(prev_x, prev_y), ImVec2(bucket_x, prev_y), ImVec2(bucket_x, track_max.y),
-                              ImVec2(prev_x, track_max.y), fill_color);
-            prev_x = bucket_x;
+        if (seg.point_count > 1 && have_prev) {
+            // Merged bucket: draw horizontal connector, vertical min/max band, and area fill
+            float y_min = val_to_y(seg.max_val);
+            float y_max = val_to_y(seg.min_val);
+            dl->AddLine(ImVec2(prev_x, prev_y), ImVec2(seg.x, prev_y), color, 1.5f);
+            dl->AddRectFilled(ImVec2(seg.x - 0.5f, y_min), ImVec2(seg.x + 0.5f, y_max), color);
+            dl->AddRectFilled(ImVec2(prev_x, prev_y), ImVec2(seg.x, track_max.y), fill_color);
+            prev_x = seg.x;
+            prev_y = y_last;
+        } else {
+            // Single point or first segment: draw step function
+            if (have_prev) {
+                dl->AddLine(ImVec2(prev_x, prev_y), ImVec2(seg.x, prev_y), color, 1.5f);
+                dl->AddLine(ImVec2(seg.x, prev_y), ImVec2(seg.x, y_last), color, 1.5f);
+                dl->AddRectFilled(ImVec2(prev_x, prev_y), ImVec2(seg.x, track_max.y), fill_color);
+            }
+            prev_x = seg.x;
             prev_y = y_last;
             have_prev = true;
-        } else {
-            flush_step(bucket_x, y_last);
         }
-    };
-
-    for (; it != series.points.end(); ++it) {
-        bool past_end = it->first > view.view_end_ts;
-        float x = view.time_to_x((double)it->first, track_min.x, track_w);
-        int pixel = (int)x;
-
-        if (pixel == cur_pixel && !past_end) {
-            // Merge into current bucket
-            if (it->second < bucket_min_val) bucket_min_val = it->second;
-            if (it->second > bucket_max_val) bucket_max_val = it->second;
-            bucket_last_val = it->second;
-            continue;
-        }
-
-        // Flush previous bucket
-        flush_bucket();
-
-        if (past_end) {
-            // One final point for continuity
-            flush_step(x, val_to_y(it->second));
-            break;
-        }
-
-        // Start new bucket
-        cur_pixel = pixel;
-        bucket_x = x;
-        bucket_min_val = it->second;
-        bucket_max_val = it->second;
-        bucket_last_val = it->second;
     }
-
-    // Flush any remaining bucket
-    flush_bucket();
 
     // Min/max labels
     char buf[64];

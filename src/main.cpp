@@ -1,5 +1,6 @@
 #include "app.h"
 #include "platform/platform.h"
+#include "platform/memory.h"
 #include "tracing.h"
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
@@ -70,7 +71,7 @@ static void main_loop_step() {
         ImGuiIO& io = ImGui::GetIO();
         uint64_t now_us = Tracer::instance().now_us();
         Tracer::instance().write_counter("FPS", "perf", now_us, "fps", (double)io.Framerate);
-        Tracer::instance().write_counter("Memory (MB)", "perf", now_us, "rss_mb", (double)g_app->diagnostics_rss_mb());
+        Tracer::instance().write_counter("Memory (MB)", "perf", now_us, "rss_mb", get_rss_bytes() / (1024.0 * 1024.0));
     }
 }
 

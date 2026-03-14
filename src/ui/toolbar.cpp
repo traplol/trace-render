@@ -4,12 +4,12 @@
 #include "imgui.h"
 #include <SDL3/SDL.h>
 
-void Toolbar::render(const TraceModel& model, ViewState& view) {
+void Toolbar::render(const TraceModel& model, ViewState& view, float rss_mb) {
     TRACE_SCOPE_CAT("Toolbar", "ui");
     if (ImGui::BeginMainMenuBar()) {
         ImGui::TextDisabled("%.0f FPS", ImGui::GetIO().Framerate);
         ImGui::SameLine();
-        ImGui::TextDisabled("%.0f MB", rss_mb_);
+        ImGui::TextDisabled("%.0f MB", rss_mb);
         ImGui::Separator();
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Open...", "Ctrl+O")) {
