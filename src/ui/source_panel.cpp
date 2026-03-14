@@ -300,7 +300,8 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
 
     // --- Gutter (rendered after code, positioned to the left, same-frame scroll) ---
     ImGui::SetCursorPos(region_start);
-    ImGui::BeginChild("##gutter", ImVec2(gutter_w, avail.y), ImGuiChildFlags_None,
+    // Use ImGuiChildFlags_Borders to match InputTextMultiline's child padding/inset
+    ImGui::BeginChild("##gutter", ImVec2(gutter_w, avail.y), ImGuiChildFlags_Borders,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::SetScrollY(scroll_y);
 
