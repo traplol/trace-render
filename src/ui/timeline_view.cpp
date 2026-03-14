@@ -452,9 +452,11 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         if (ruler_dragging_) {
             if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || !ImGui::IsWindowFocused()) {
                 ruler_dragging_ = false;
+                view.range_selecting = false;
             } else {
                 double current_ts = view.x_to_time(io.MousePos.x, track_left, track_width);
                 if (std::abs(current_ts - ruler_drag_start_ts_) > 0.0) {
+                    view.range_selecting = true;
                     view.set_range_selection(ruler_drag_start_ts_, current_ts);
                 }
             }

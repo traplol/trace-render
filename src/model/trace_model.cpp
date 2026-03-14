@@ -130,13 +130,19 @@ void TraceModel::build_index() {
         return a.pid < b.pid;
     });
 
-    // Compute global time range
+    // Compute global time range and collect unique categories
+    categories_.clear();
+    std::unordered_set<uint32_t> cat_set;
     for (const auto& ev : events_) {
         if (ev.ph == Phase::Metadata || ev.is_end_event) continue;
         if (ev.ts < min_ts_) min_ts_ = ev.ts;
         double end = ev.dur > 0 ? ev.end_ts() : ev.ts;
         if (end > max_ts_) max_ts_ = end;
+        cat_set.insert(ev.cat_idx);
     }
+    categories_.assign(cat_set.begin(), cat_set.end());
+    std::sort(categories_.begin(), categories_.end(),
+              [this](uint32_t a, uint32_t b) { return strings_[a] < strings_[b]; });
 
     // Compute counter series min/max
     for (auto& cs : counter_series_) {
