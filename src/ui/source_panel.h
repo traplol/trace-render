@@ -36,6 +36,7 @@ private:
     int cached_line_ = -1;
     std::vector<std::string> cached_lines_;
     std::string cached_display_text_;  // code-only text for InputTextMultiline
+    std::string cached_gutter_text_;   // line numbers text for gutter InputTextMultiline
     std::string cached_error_;
     bool need_scroll_ = false;
     bool path_settings_changed_ = false;
@@ -43,4 +44,5 @@ private:
     void load_file(const std::string& path);
     void resolve_and_load(const std::string& raw_file);
     void build_display_text();
+    void build_gutter_text();
 };

@@ -136,6 +136,7 @@ void SourcePanel::resolve_and_load(const std::string& raw_file) {
         cached_file_ = full_path;
         load_file(cached_file_);
         build_display_text();
+        build_gutter_text();
     }
 }
 
@@ -150,6 +151,22 @@ void SourcePanel::build_display_text() {
     for (const auto& line : cached_lines_) {
         cached_display_text_ += line;
         cached_display_text_ += '\n';
+    }
+}
+
+void SourcePanel::build_gutter_text() {
+    cached_gutter_text_.clear();
+    int num_lines = (int)cached_lines_.size();
+    if (num_lines == 0) return;
+
+    int num_digits = (int)std::log10((double)num_lines) + 1;
+    if (num_digits < 4) num_digits = 4;
+
+    char buf[32];
+    for (int i = 1; i <= num_lines; i++) {
+        snprintf(buf, sizeof(buf), "%*d", num_digits, i);
+        cached_gutter_text_ += buf;
+        cached_gutter_text_ += '\n';
     }
 }
 
@@ -204,6 +221,7 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
             cached_file_.clear();
             cached_lines_.clear();
             cached_display_text_.clear();
+            cached_gutter_text_.clear();
             cached_line_ = -1;
             cached_error_.clear();
         }
@@ -239,21 +257,21 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
 
     ImGui::Separator();
 
-    // Source code display: gutter (line numbers) + InputTextMultiline (selectable code)
+    // Source code display: gutter (line numbers) + code (selectable text)
+    // Both use InputTextMultiline for identical line spacing — zero drift.
     ImVec2 avail = ImGui::GetContentRegionAvail();
-    int num_lines = (int)cached_lines_.size();
     float font_size = ImGui::GetFontSize();
 
     // Compute gutter width
+    int num_lines = (int)cached_lines_.size();
     int num_digits = (num_lines > 0) ? (int)std::log10((double)num_lines) + 1 : 1;
     if (num_digits < 4) num_digits = 4;
     char measure_buf[32];
-    snprintf(measure_buf, sizeof(measure_buf), " %*d ", num_digits, num_lines);
+    snprintf(measure_buf, sizeof(measure_buf), " %*d  ", num_digits, num_lines);
     float gutter_w = ImGui::CalcTextSize(measure_buf).x;
     float code_w = avail.x - gutter_w;
 
-    // Position code area to the right of the gutter
-    ImVec2 region_screen = ImGui::GetCursorScreenPos();
+    // Render code first (right side) to obtain scroll state
     ImVec2 region_start = ImGui::GetCursorPos();
     ImGui::SetCursorPos(ImVec2(region_start.x + gutter_w, region_start.y));
 
@@ -261,63 +279,58 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
     ImGui::InputTextMultiline("##source_text", &cached_display_text_, ImVec2(code_w, avail.y),
                               ImGuiInputTextFlags_ReadOnly);
 
-    // Find the child window InputTextMultiline created internally
+    // Find code child window
     ImGuiWindow* code_child = nullptr;
-    for (ImGuiWindow* w : GImGui->Windows) {
+    for (ImGuiWindow* w : GImGui->Windows)
         if (w->ChildId == code_child_id) {
             code_child = w;
             break;
         }
-    }
 
+    float scroll_y = 0.0f;
     if (code_child) {
         // Scroll to target line (centered)
         if (need_scroll_ && cached_line_ > 0) {
             code_child->ScrollTarget.y = (cached_line_ - 1) * font_size;
             code_child->ScrollTargetCenterRatio.y = 0.5f;
-            need_scroll_ = false;
         }
-
-        ImVec2 origin = code_child->ContentRegionRect.Min;
-        ImVec2 clip_min = code_child->InnerRect.Min;
-        ImVec2 clip_max = code_child->InnerRect.Max;
-        ImDrawList* dl = ImGui::GetWindowDrawList();
+        scroll_y = code_child->Scroll.y;
 
         // Draw line highlight
         if (cached_line_ > 0) {
+            ImVec2 origin = code_child->ContentRegionRect.Min;
+            ImVec2 clip_min = code_child->InnerRect.Min;
+            ImVec2 clip_max = code_child->InnerRect.Max;
             float y = origin.y + (cached_line_ - 1) * font_size;
             if (y + font_size > clip_min.y && y < clip_max.y) {
+                ImDrawList* dl = ImGui::GetWindowDrawList();
                 dl->PushClipRect(clip_min, clip_max, true);
                 dl->AddRectFilled(ImVec2(clip_min.x, ImMax(y, clip_min.y)),
                                   ImVec2(clip_max.x, ImMin(y + font_size, clip_max.y)), IM_COL32(255, 200, 0, 60));
                 dl->PopClipRect();
             }
         }
-
-        // Draw line numbers directly using the code child's Y coordinates.
-        // This guarantees zero drift — same origin, same line height.
-        float gutter_x = region_screen.x;
-        ImVec2 gutter_clip_min(gutter_x, clip_min.y);
-        ImVec2 gutter_clip_max(gutter_x + gutter_w, clip_max.y);
-        dl->PushClipRect(gutter_clip_min, gutter_clip_max, true);
-
-        int first_visible = ImMax(0, (int)(code_child->Scroll.y / font_size) - 1);
-        int last_visible = ImMin(num_lines - 1, first_visible + (int)(clip_max.y - clip_min.y) / (int)font_size + 2);
-
-        ImU32 color_target = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 0.6f, 1.0f));
-        ImU32 color_dimmed = ImGui::GetColorU32(ImGuiCol_TextDisabled);
-        ImFont* font = ImGui::GetFont();
-        char line_buf[32];
-
-        for (int i = first_visible; i <= last_visible; i++) {
-            float y = origin.y + i * font_size;
-            snprintf(line_buf, sizeof(line_buf), "%*d", num_digits, i + 1);
-            ImU32 color = ((i + 1) == cached_line_) ? color_target : color_dimmed;
-            dl->AddText(font, font_size, ImVec2(gutter_x, y), color, line_buf);
-        }
-
-        dl->PopClipRect();
     }
+
+    // Render gutter (left side) — disabled so it's not interactable
+    ImGui::SetCursorPos(region_start);
+    ImGui::BeginDisabled();
+    ImGuiID gutter_child_id = ImGui::GetID("##gutter");
+    ImGui::InputTextMultiline("##gutter", &cached_gutter_text_, ImVec2(gutter_w, avail.y),
+                              ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoHorizontalScroll);
+    ImGui::EndDisabled();
+
+    // Find gutter child window and sync its scroll to the code area
+    for (ImGuiWindow* w : GImGui->Windows)
+        if (w->ChildId == gutter_child_id) {
+            w->Scroll.y = scroll_y;
+            // Also set scroll target on initial navigation so both scroll together
+            if (need_scroll_ && cached_line_ > 0) {
+                w->ScrollTarget.y = (cached_line_ - 1) * font_size;
+                w->ScrollTargetCenterRatio.y = 0.5f;
+            }
+            break;
+        }
 
     if (need_scroll_) need_scroll_ = false;
 
