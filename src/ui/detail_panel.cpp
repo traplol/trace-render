@@ -113,16 +113,29 @@ static void render_json_value(const nlohmann::json& j, int depth = 0) {
 }
 
 void DetailPanel::render_range_selection(const TraceModel& model, ViewState& view) {
-    // Recompute if range changed
-    if (cached_range_start_ != view.range_start_ts || cached_range_end_ != view.range_end_ts) {
+    TRACE_SCOPE_CAT("RangeSelection", "ui");
+
+    // Defer expensive stats computation while actively drag-selecting;
+    // only compute once the drag finishes.
+    if (!view.range_selecting &&
+        (cached_range_start_ != view.range_start_ts || cached_range_end_ != view.range_end_ts)) {
+        TRACE_SCOPE_CAT("ComputeRangeStats", "ui");
         cached_range_start_ = view.range_start_ts;
         cached_range_end_ = view.range_end_ts;
         range_stats_ = compute_range_stats(model, view.range_start_ts, view.range_end_ts);
     }
 
+    // Always show the live range duration (cheap to compute)
     char time_buf[64];
-    format_time(range_stats_.range_duration, time_buf, sizeof(time_buf));
+    double duration = view.range_end_ts - view.range_start_ts;
+    format_time(duration, time_buf, sizeof(time_buf));
     ImGui::Text("Range Duration: %s", time_buf);
+
+    if (view.range_selecting) {
+        ImGui::TextDisabled("Selecting...");
+        return;
+    }
+
     ImGui::Text("Events in range: %u", range_stats_.total_events);
 
     if (ImGui::SmallButton("Zoom to Range")) {
@@ -296,8 +309,9 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
     // --- Tab bar for Call Stack / Children / Arguments ---
     if (ImGui::BeginTabBar("##DetailTabs")) {
-        // Call Stack tab
+        // Call Stack tab — rebuild cache if selected event changed
         if (cached_stack_event_idx_ != view.selected_event_idx) {
+            TRACE_SCOPE_CAT("RebuildCallStack", "ui");
             cached_stack_event_idx_ = view.selected_event_idx;
             cached_call_stack_ = model.build_call_stack(view.selected_event_idx);
 

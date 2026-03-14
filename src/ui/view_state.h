@@ -17,6 +17,7 @@ struct ViewState {
 
     // Range selection (drag on ruler)
     bool has_range_selection = false;
+    bool range_selecting = false;  // true while actively drag-selecting
     double range_start_ts = 0.0;
     double range_end_ts = 0.0;
 
