@@ -7,7 +7,7 @@ struct SDL_Window;
 
 class Toolbar {
 public:
-    void render(const TraceModel& model, ViewState& view);
+    void render(const TraceModel& model, ViewState& view, float rss_mb);
     void set_window(SDL_Window* window) { window_ = window; }
 
     bool settings_requested() const { return settings_requested_; }

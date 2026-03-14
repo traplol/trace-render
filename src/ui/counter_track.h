@@ -14,6 +14,25 @@ struct CounterHitResult {
 // Returns false if time is before the first point or series is empty.
 bool counter_lookup_value(const CounterSeries& series, double time, double& out_timestamp, double& out_value);
 
+// A segment produced by sub-pixel merging of counter points.
+// When multiple points map to the same pixel column, they are merged into a
+// single segment with the min/max range and the last value for continuity.
+struct MergedCounterSegment {
+    float x;
+    double min_val;
+    double max_val;
+    double last_val;
+    int point_count;  // 1 = single point, >1 = merged bucket
+};
+
+// Merge counter points that fall on the same pixel column.
+// view_start/view_end define the visible time range.
+// track_x/track_w define the pixel mapping.
+// Includes one point before view_start and one past view_end for continuity.
+std::vector<MergedCounterSegment> merge_counter_points(const std::vector<std::pair<double, double>>& points,
+                                                       double view_start, double view_end, float track_x,
+                                                       float track_w);
+
 class CounterTrackRenderer {
 public:
     // Renders all counter tracks for a given process below the thread tracks.

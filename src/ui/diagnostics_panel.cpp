@@ -1,35 +1,10 @@
 #include "diagnostics_panel.h"
 #include "tracing.h"
 #include "format_time.h"
+#include "platform/memory.h"
 #include "imgui.h"
 #include <cstdio>
 #include <cstdlib>
-
-#if defined(__linux__)
-#include <unistd.h>
-#include <cstdio>
-static size_t get_rss_bytes() {
-    FILE* f = fopen("/proc/self/statm", "r");
-    if (!f) return 0;
-    long pages = 0;
-    long dummy = 0;
-    if (fscanf(f, "%ld %ld", &dummy, &pages) != 2) pages = 0;
-    fclose(f);
-    return (size_t)pages * (size_t)sysconf(_SC_PAGESIZE);
-}
-#elif defined(__APPLE__)
-#include <mach/mach.h>
-static size_t get_rss_bytes() {
-    mach_task_basic_info_data_t info;
-    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
-    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &count) != KERN_SUCCESS) return 0;
-    return info.resident_size;
-}
-#else
-static size_t get_rss_bytes() {
-    return 0;
-}
-#endif
 
 static void format_bytes(size_t bytes, char* buf, size_t buf_size) {
     if (bytes >= 1024ULL * 1024 * 1024)
@@ -46,13 +21,15 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
     TRACE_FUNCTION_CAT("ui");
     ImGui::Begin("Diagnostics");
 
-    // Update frame timing
+    // Update frame timing and memory
     auto now = std::chrono::steady_clock::now();
+    current_rss_mb_ = get_rss_bytes() / (1024.0f * 1024.0f);
     if (!first_frame_) {
         float dt = std::chrono::duration<float>(now - last_frame_).count();
         float fps = (dt > 0.0f) ? 1.0f / dt : 0.0f;
         fps_history_[history_idx_] = fps;
         frame_time_history_[history_idx_] = dt * 1000.0f;
+        memory_history_[history_idx_] = current_rss_mb_;
         history_idx_ = (history_idx_ + 1) % HISTORY_SIZE;
     }
     first_frame_ = false;
@@ -83,6 +60,16 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
         char rss_str[32];
         format_bytes(rss, rss_str, sizeof(rss_str));
         ImGui::Text("Process RSS: %s", rss_str);
+
+        // Memory sparkline
+        float max_mem = 0.0f;
+        for (int i = 0; i < HISTORY_SIZE; i++)
+            if (memory_history_[i] > max_mem) max_mem = memory_history_[i];
+        max_mem = max_mem > 0.0f ? max_mem * 1.2f : 100.0f;
+        char mem_overlay[32];
+        snprintf(mem_overlay, sizeof(mem_overlay), "%.0f MB", current_rss_mb_);
+        ImGui::PlotLines("##memory", memory_history_, HISTORY_SIZE, history_idx_, mem_overlay, 0.0f, max_mem,
+                         ImVec2(-1, 50));
 
         if (!model.events_.empty()) {
             ImGui::Separator();
