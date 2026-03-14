@@ -166,24 +166,28 @@ void App::update() {
         ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
 
-        // Split: right panel (25%) for details/filters, remainder for timeline+search
+        // Split: left panel (18%) for diagnostics, remainder for main content
         ImGuiID dock_main = dockspace_id;
-        ImGuiID dock_right = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.25f, nullptr, &dock_main);
+        ImGuiID dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.18f, nullptr, &dock_main);
 
-        // Split right panel: top for details, bottom for filters
-        ImGuiID dock_right_bottom = ImGui::DockBuilderSplitNode(dock_right, ImGuiDir_Down, 0.5f, nullptr, &dock_right);
+        // Split main: bottom (42%) for search/instances, top for timeline/details
+        ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.42f, nullptr, &dock_main);
 
-        // Split main: bottom (25%) for search, top for timeline
-        ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.25f, nullptr, &dock_main);
+        // Split top: right (35%) for details/filters, left for timeline/source
+        ImGuiID dock_right = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.35f, nullptr, &dock_main);
 
+        // Split bottom: right (37%) for instances, left for search/statistics
+        ImGuiID dock_bottom_right =
+            ImGui::DockBuilderSplitNode(dock_bottom, ImGuiDir_Right, 0.37f, nullptr, &dock_bottom);
+
+        ImGui::DockBuilderDockWindow("Diagnostics", dock_left);
         ImGui::DockBuilderDockWindow("Timeline", dock_main);
+        ImGui::DockBuilderDockWindow("Source", dock_main);
         ImGui::DockBuilderDockWindow("Details", dock_right);
-        ImGui::DockBuilderDockWindow("Filters", dock_right_bottom);
+        ImGui::DockBuilderDockWindow("Filters", dock_right);
         ImGui::DockBuilderDockWindow("Search", dock_bottom);
         ImGui::DockBuilderDockWindow("Statistics", dock_bottom);
-        ImGui::DockBuilderDockWindow("Instances", dock_right_bottom);
-        ImGui::DockBuilderDockWindow("Diagnostics", dock_right_bottom);
-        ImGui::DockBuilderDockWindow("Source", dock_bottom);
+        ImGui::DockBuilderDockWindow("Instances", dock_bottom_right);
 
         ImGui::DockBuilderFinish(dockspace_id);
     } else {
