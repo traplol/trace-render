@@ -15,6 +15,7 @@ void FilterPanel::render(const TraceModel& model, ViewState& view) {
                     view.hidden_pids.erase(proc.pid);
                 else
                     view.hidden_pids.insert(proc.pid);
+                view.filter_generation++;
             }
             ImGui::SameLine();
 
@@ -26,6 +27,7 @@ void FilterPanel::render(const TraceModel& model, ViewState& view) {
                             view.hidden_tids.erase(thread.tid);
                         else
                             view.hidden_tids.insert(thread.tid);
+                        view.filter_generation++;
                     }
                     ImGui::SameLine();
                     ImGui::Text("%s (%u events)", thread.name.c_str(), (unsigned)thread.event_indices.size());
@@ -39,10 +41,12 @@ void FilterPanel::render(const TraceModel& model, ViewState& view) {
     if (ImGui::CollapsingHeader("Categories", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (ImGui::Button("All")) {
             view.hidden_cats.clear();
+            view.filter_generation++;
         }
         ImGui::SameLine();
         if (ImGui::Button("None")) {
             for (uint32_t c : model.categories_) view.hidden_cats.insert(c);
+            view.filter_generation++;
         }
 
         for (uint32_t cat_idx : model.categories_) {
@@ -53,6 +57,7 @@ void FilterPanel::render(const TraceModel& model, ViewState& view) {
                     view.hidden_cats.erase(cat_idx);
                 else
                     view.hidden_cats.insert(cat_idx);
+                view.filter_generation++;
             }
         }
     }

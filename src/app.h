@@ -14,6 +14,7 @@
 #include "ui/instance_panel.h"
 #include "ui/diagnostics_panel.h"
 #include "ui/source_panel.h"
+#include "ui/flamegraph_panel.h"
 #include "model/query_db.h"
 #include <string>
 #include <vector>
@@ -45,6 +46,7 @@ private:
     InstancePanel instances_;
     DiagnosticsPanel diagnostics_;
     SourcePanel source_;
+    FlameGraphPanel flamegraph_;
     QueryDb query_db_;
 
     bool has_trace_ = false;

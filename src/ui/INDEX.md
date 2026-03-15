@@ -10,6 +10,7 @@ float time_to_x(double ts, float timeline_left, float timeline_width) const;
 double x_to_time(float x, float timeline_left, float timeline_width) const;
 void zoom_to_fit(double min_ts, double max_ts);
 void navigate_to_event(int32_t ev_idx, const TraceEvent& ev, double pad_factor = 0.5, double min_pad_us = 100.0);
+uint32_t filter_generation;  // bumped on any hidden_pids/tids/cats change
 ```
 
 ## timeline_view.h / timeline_view.cpp — main timeline: ruler, tracks, event boxes, zoom/pan, range selection
@@ -62,6 +63,14 @@ std::string remap_source_path(const std::string& trace_path, const std::string& 
 void render(const TraceModel&, ViewState&);
 nlohmann::json save_settings() const;
 void load_settings(const nlohmann::json&);
+```
+
+## flamegraph_panel.h / flamegraph_panel.cpp — aggregated flame graph: merges call stacks by (name, category), click-to-zoom, icicle toggle
+```
+void render(const TraceModel&, ViewState&);
+void rebuild(const TraceModel&, const ViewState&);  // exposed for testing
+const std::vector<FlameNode>& nodes() const;        // exposed for testing
+size_t root() const;                                // exposed for testing
 ```
 
 ## counter_track.h / counter_track.cpp — renders counter series as step-function graphs; sub-pixel merging + hover hit-test
