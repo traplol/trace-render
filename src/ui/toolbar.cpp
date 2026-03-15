@@ -36,8 +36,7 @@ void Toolbar::render(const TraceModel& model, ViewState& view, float rss_mb) {
         ImGui::EndMainMenuBar();
     }
 
-    // Ctrl+O shortcut
-    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_O)) {
+    if (view.key_bindings().is_pressed(Action::OpenFile)) {
         platform::open_file_dialog(window_);
     }
 }

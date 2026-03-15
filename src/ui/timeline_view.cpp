@@ -549,32 +549,33 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         double range = view.view_end_ts() - view.view_start_ts();
         double pan_amount = range * 0.1;
 
-        if (ImGui::IsKeyPressed(ImGuiKey_A) || ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
+        const auto& keys = view.key_bindings();
+        if (keys.is_pressed(Action::PanLeft)) {
             view.set_view_range(view.view_start_ts() - pan_amount, view.view_end_ts() - pan_amount);
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_D) || ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
+        if (keys.is_pressed(Action::PanRight)) {
             view.set_view_range(view.view_start_ts() + pan_amount, view.view_end_ts() + pan_amount);
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
+        if (keys.is_pressed(Action::ScrollUp)) {
             scroll_y_ -= view.track_height() * 3.0f;
             scroll_y_ = std::max(0.0f, scroll_y_);
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
+        if (keys.is_pressed(Action::ScrollDown)) {
             scroll_y_ += view.track_height() * 3.0f;
             float max_scroll = std::max(0.0f, total_content_height_ - canvas_size.y + view.ruler_height());
             scroll_y_ = std::min(scroll_y_, max_scroll);
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_W)) {
+        if (keys.is_pressed(Action::ZoomIn)) {
             double center = (view.view_start_ts() + view.view_end_ts()) / 2.0;
             double half = range * 0.4;
             view.set_view_range(center - half, center + half);
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_S)) {
+        if (keys.is_pressed(Action::ZoomOut)) {
             double center = (view.view_start_ts() + view.view_end_ts()) / 2.0;
             double half = range * 0.625;
             view.set_view_range(center - half, center + half);
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_F)) {
+        if (keys.is_pressed(Action::FitSelection)) {
             if (view.has_range_selection()) {
                 view.zoom_to_fit(view.range_start_ts(), view.range_end_ts());
             } else if (view.selected_event_idx() >= 0) {
@@ -583,14 +584,14 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
                 view.zoom_to_fit(model.min_ts(), model.max_ts());
             }
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        if (keys.is_pressed(Action::ClearSelection)) {
             if (view.has_range_selection()) {
                 view.clear_range_selection();
             } else {
                 view.set_selected_event_idx(-1);
             }
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_G)) {
+        if (keys.is_pressed(Action::GoToTime)) {
             show_goto_ = true;
             goto_buf_[0] = '\0';
         }

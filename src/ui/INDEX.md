@@ -24,6 +24,9 @@ const std::string& search_query() const; void set_search_query(const std::string
 const std::vector<uint32_t>& search_results() const; void set_search_results(std::vector<uint32_t>);
 void add_search_result(uint32_t); void clear_search_results();
 int32_t search_current() const; void set_search_current(int32_t);
+// Layout defaults
+static constexpr float kDefaultTrackHeight, kDefaultTrackPadding, kDefaultCounterTrackHeight;
+static constexpr float kDefaultLabelWidth, kDefaultRulerHeight, kDefaultProcHeaderHeight, kDefaultScrollbarScale;
 // Layout
 float track_height() const; void set_track_height(float);
 float track_padding() const; void set_track_padding(float);
@@ -32,9 +35,12 @@ float label_width() const; void set_label_width(float);
 float ruler_height() const; void set_ruler_height(float);
 float proc_header_height() const; void set_proc_header_height(float);
 float scrollbar_scale() const; void set_scrollbar_scale(float);
+void reset_layout_defaults();
 // Selection border color
 const std::array<float, 4>& sel_border_color() const; void set_sel_border_color(const std::array<float, 4>&);
 ImU32 sel_border_color_u32() const;
+// Key bindings
+KeyBindings& key_bindings(); const KeyBindings& key_bindings() const;
 // Misc
 bool show_flows() const; void set_show_flows(bool);
 bool time_unit_ns() const; void set_time_unit_ns(bool);
@@ -93,8 +99,10 @@ DiagStats stats;  // fields: visible_slices, drawn_slices, merged_slices, merge_
 bool extract_source_location(const TraceModel&, const TraceEvent&, std::string& file, int& line);
 std::string remap_source_path(const std::string& trace_path, const std::string& strip_prefix, const std::string& local_base);
 void render(const TraceModel&, ViewState&);
+void render_settings();
 nlohmann::json save_settings() const;
 void load_settings(const nlohmann::json&);
+void reset_settings();
 ```
 
 ## counter_track.h / counter_track.cpp — renders counter series as step-function graphs; sub-pixel merging + hover hit-test
@@ -126,6 +134,19 @@ void clear_settings_request();
 ```
 RangeStats compute_range_stats(const TraceModel&, double start_ts, double end_ts);
 double RangeEventSummary::avg_dur() const;
+```
+
+## key_bindings.h / key_bindings.cpp — configurable keyboard shortcuts with settings UI and persistence
+```
+enum class Action : int { PanLeft, PanRight, ScrollUp, ScrollDown, ZoomIn, ZoomOut, FitSelection, ClearSelection, GoToTime, OpenFile, Search, OpenSettings, RunQuery, Count };
+KeyBindings();
+bool is_pressed(Action action) const;
+ImGuiKeyChord primary(Action action) const;
+ImGuiKeyChord alt(Action action) const;
+void reset_defaults();
+void render_settings();
+nlohmann::json save() const;
+void load(const nlohmann::json&);
 ```
 
 ## format_time.h — time display helpers (always use instead of inline formatting)

@@ -20,9 +20,12 @@ std::string remap_source_path(const std::string& trace_path, const std::string& 
 class SourcePanel {
 public:
     void render(const TraceModel& model, ViewState& view);
+    void render_settings();
 
     nlohmann::json save_settings() const;
     void load_settings(const nlohmann::json& j);
+
+    void reset_settings();
 
 private:
     // Path remapping: strip this prefix from trace paths, replace with local base

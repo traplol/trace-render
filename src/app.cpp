@@ -205,8 +205,7 @@ void App::update() {
         show_settings_ = true;
         toolbar_.clear_settings_request();
     }
-    // Ctrl+, shortcut
-    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Comma)) {
+    if (view_.key_bindings().is_pressed(Action::OpenSettings)) {
         show_settings_ = true;
     }
     if (show_settings_) {
@@ -311,82 +310,175 @@ void App::render_settings_modal() {
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(800, 0), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(ImVec2(800, 500), ImGuiCond_Appearing);
 
-    if (ImGui::BeginPopupModal("Settings", &show_settings_, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::SeparatorText("Display");
+    if (ImGui::BeginPopupModal("Settings", &show_settings_)) {
+        const char* tab_labels[] = {"General", "Timeline", "Rendering", "Source", "Keyboard"};
+        constexpr int kTabCount = 5;
+        constexpr float kSidebarWidth = 140.0f;
+        const float footer_height = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
 
-        float font_scale = ImGui::GetIO().FontGlobalScale;
-        if (ImGui::SliderFloat("Font Scale", &font_scale, 0.5f, 6.0f, "%.1f")) {
-            ImGui::GetIO().FontGlobalScale = font_scale;
+        // --- Sidebar ---
+        ImGui::BeginChild("settings_sidebar", ImVec2(kSidebarWidth, -footer_height), ImGuiChildFlags_Borders);
+        for (int i = 0; i < kTabCount; i++) {
+            if (ImGui::Selectable(tab_labels[i], settings_tab_ == i)) {
+                settings_tab_ = i;
+            }
         }
+        ImGui::EndChild();
 
-        ImGui::SeparatorText("Timeline Layout");
+        ImGui::SameLine();
 
-        {
-            float v = view_.track_height();
-            if (ImGui::SliderFloat("Track Height", &v, 20.0f, 200.0f, "%.0f px")) view_.set_track_height(v);
-            v = view_.track_padding();
-            if (ImGui::SliderFloat("Track Padding", &v, 0.0f, 30.0f, "%.0f px")) view_.set_track_padding(v);
-            v = view_.counter_track_height();
-            if (ImGui::SliderFloat("Counter Track Height", &v, 60.0f, 400.0f, "%.0f px"))
-                view_.set_counter_track_height(v);
-            v = view_.label_width();
-            if (ImGui::SliderFloat("Label Gutter Width", &v, 100.0f, 1200.0f, "%.0f px")) view_.set_label_width(v);
-            v = view_.ruler_height();
-            if (ImGui::SliderFloat("Ruler Height", &v, 15.0f, 120.0f, "%.0f px")) view_.set_ruler_height(v);
-            v = view_.proc_header_height();
-            if (ImGui::SliderFloat("Process Header Height", &v, 10.0f, 80.0f, "%.0f px"))
-                view_.set_proc_header_height(v);
-            v = view_.scrollbar_scale();
-            if (ImGui::SliderFloat("Scrollbar Scale", &v, 0.5f, 5.0f, "%.1f")) view_.set_scrollbar_scale(v);
-        }
+        // --- Content ---
+        ImGui::BeginChild("settings_content", ImVec2(0, -footer_height));
 
-        ImGui::SeparatorText("Rendering");
+        switch (settings_tab_) {
+            case 0: {  // General
+                ImGui::SeparatorText("Display");
 
-        {
-            bool show = view_.show_flows();
-            if (ImGui::Checkbox("Show Flow Arrows", &show)) view_.set_show_flows(show);
-        }
-        {
-            auto color = view_.sel_border_color();
-            if (ImGui::ColorEdit4("Selection Border Color", color.data(),
-                                  ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
-                view_.set_sel_border_color(color);
-        }
+                float font_scale = ImGui::GetIO().FontGlobalScale;
+                if (ImGui::SliderFloat("Font Scale", &font_scale, 0.5f, 6.0f, "%.1f")) {
+                    ImGui::GetIO().FontGlobalScale = font_scale;
+                }
 
-        if (platform::supports_vsync()) {
-            if (ImGui::Checkbox("VSync", &vsync_)) {
-                SDL_GL_SetSwapInterval(vsync_ ? 1 : 0);
+                ImGui::SeparatorText("Theme");
+
+                if (ImGui::RadioButton("Dark", dark_theme_)) {
+                    dark_theme_ = true;
+                    ImGui::StyleColorsDark();
+                }
+                ImGui::SameLine();
+                if (ImGui::RadioButton("Light", !dark_theme_)) {
+                    dark_theme_ = false;
+                    ImGui::StyleColorsLight();
+                }
+
+                if (platform::supports_vsync()) {
+                    ImGui::SeparatorText("Performance");
+                    if (ImGui::Checkbox("VSync", &vsync_)) {
+                        SDL_GL_SetSwapInterval(vsync_ ? 1 : 0);
+                    }
+                }
+
+                ImGui::SeparatorText("Parser");
+
+                {
+                    bool ns = view_.time_unit_ns();
+                    if (ImGui::Checkbox("Interpret timestamps as nanoseconds", &ns)) view_.set_time_unit_ns(ns);
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(reload file to apply)");
+
+                ImGui::Spacing();
+                ImGui::Spacing();
+                if (ImGui::Button("Reset to Defaults")) {
+                    ImGui::GetIO().FontGlobalScale = 1.0f;
+                    dark_theme_ = true;
+                    ImGui::StyleColorsDark();
+                    vsync_ = true;
+                    SDL_GL_SetSwapInterval(1);
+                    view_.set_time_unit_ns(false);
+                }
+                break;
+            }
+            case 1: {  // Timeline
+                ImGui::SeparatorText("Layout");
+
+                constexpr auto clamp = ImGuiSliderFlags_AlwaysClamp;
+                float v = view_.track_height();
+                if (ImGui::DragFloat("Track Height", &v, 1.0f, 20.0f, 200.0f, "%.0f px", clamp))
+                    view_.set_track_height(v);
+                v = view_.track_padding();
+                if (ImGui::DragFloat("Track Padding", &v, 1.0f, 0.0f, 30.0f, "%.0f px", clamp))
+                    view_.set_track_padding(v);
+                v = view_.counter_track_height();
+                if (ImGui::DragFloat("Counter Track Height", &v, 1.0f, 60.0f, 400.0f, "%.0f px", clamp))
+                    view_.set_counter_track_height(v);
+                v = view_.label_width();
+                if (ImGui::DragFloat("Label Gutter Width", &v, 1.0f, 100.0f, 1200.0f, "%.0f px", clamp))
+                    view_.set_label_width(v);
+                v = view_.ruler_height();
+                if (ImGui::DragFloat("Ruler Height", &v, 1.0f, 15.0f, 120.0f, "%.0f px", clamp))
+                    view_.set_ruler_height(v);
+                v = view_.proc_header_height();
+                if (ImGui::DragFloat("Process Header Height", &v, 1.0f, 10.0f, 80.0f, "%.0f px", clamp))
+                    view_.set_proc_header_height(v);
+                v = view_.scrollbar_scale();
+                if (ImGui::DragFloat("Scrollbar Scale", &v, 0.05f, 0.5f, 5.0f, "%.1f", clamp))
+                    view_.set_scrollbar_scale(v);
+
+                ImGui::Spacing();
+                ImGui::Spacing();
+                if (ImGui::Button("Reset to Defaults")) {
+                    view_.reset_layout_defaults();
+                }
+                break;
+            }
+            case 2: {  // Rendering
+                {
+                    bool show = view_.show_flows();
+                    if (ImGui::Checkbox("Show Flow Arrows", &show)) view_.set_show_flows(show);
+                }
+                {
+                    auto color = view_.sel_border_color();
+                    if (ImGui::ColorEdit4("Selection Border Color", color.data(),
+                                          ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
+                        view_.set_sel_border_color(color);
+                }
+
+                ImGui::Spacing();
+                ImGui::Spacing();
+                if (ImGui::Button("Reset to Defaults")) {
+                    view_.set_show_flows(true);
+                    view_.set_sel_border_color({0.0f, 0.0f, 0.0f, 1.0f});
+                }
+                break;
+            }
+            case 3: {  // Source
+                source_.render_settings();
+
+                ImGui::Spacing();
+                ImGui::Spacing();
+                if (ImGui::Button("Reset to Defaults")) {
+                    source_.reset_settings();
+                }
+                break;
+            }
+            case 4: {  // Keyboard
+                view_.key_bindings().render_settings();
+
+                ImGui::Spacing();
+                ImGui::Spacing();
+                if (ImGui::Button("Reset to Defaults")) {
+                    view_.key_bindings().reset_defaults();
+                }
+                break;
             }
         }
 
-        ImGui::SeparatorText("Parser");
+        ImGui::EndChild();
 
-        {
-            bool ns = view_.time_unit_ns();
-            if (ImGui::Checkbox("Interpret timestamps as nanoseconds", &ns)) view_.set_time_unit_ns(ns);
-        }
-        ImGui::SameLine();
-        ImGui::TextDisabled("(reload file to apply)");
-
-        ImGui::SeparatorText("Theme");
-
-        if (ImGui::RadioButton("Dark", dark_theme_)) {
-            dark_theme_ = true;
-            ImGui::StyleColorsDark();
-        }
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Light", !dark_theme_)) {
-            dark_theme_ = false;
-            ImGui::StyleColorsLight();
-        }
-
-        ImGui::Spacing();
+        // --- Footer ---
         ImGui::Separator();
         ImGui::Spacing();
 
-        if (ImGui::Button("Close", ImVec2(200, 0))) {
+        if (ImGui::Button("Reset All", ImVec2(120, 0))) {
+            ImGui::GetIO().FontGlobalScale = 1.0f;
+            dark_theme_ = true;
+            ImGui::StyleColorsDark();
+            vsync_ = true;
+            SDL_GL_SetSwapInterval(1);
+            view_.set_time_unit_ns(false);
+            view_.reset_layout_defaults();
+            view_.set_show_flows(true);
+            view_.set_sel_border_color({0.0f, 0.0f, 0.0f, 1.0f});
+            source_.reset_settings();
+            view_.key_bindings().reset_defaults();
+        }
+
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 120);
+
+        if (ImGui::Button("Close", ImVec2(120, 0))) {
             save_settings();
             show_settings_ = false;
             ImGui::CloseCurrentPopup();
@@ -420,6 +512,7 @@ void App::save_settings() {
     j["vsync"] = vsync_;
     j["query_tabs"] = stats_.save_tabs();
     j["source_panel"] = source_.save_settings();
+    j["key_bindings"] = view_.key_bindings().save();
 
     std::ofstream f(path);
     if (f.is_open()) {
@@ -467,6 +560,9 @@ void App::load_settings() {
         }
         if (j.contains("source_panel")) {
             source_.load_settings(j["source_panel"]);
+        }
+        if (j.contains("key_bindings")) {
+            view_.key_bindings().load(j["key_bindings"]);
         }
     } catch (...) {
         // Ignore malformed settings file

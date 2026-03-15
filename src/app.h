@@ -51,6 +51,7 @@ private:
     std::string status_message_;
     bool first_layout_ = true;
     bool show_settings_ = false;
+    int settings_tab_ = 0;
     bool dark_theme_ = true;
     bool vsync_ = true;
     SDL_Window* window_ = nullptr;
