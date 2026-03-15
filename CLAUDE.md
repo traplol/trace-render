@@ -48,3 +48,15 @@ Use `format_time()` from `src/ui/format_time.h` whenever displaying time values 
   - `build.sh` — formats code then builds, prints BUILD OK/BUILD FAILED
   - `run_tests.sh` — builds and runs tests, prints PASS/FAIL
   - `format.sh` — runs clang-format on src/ and tests/
+
+## Source index files
+
+Each source directory contains an `INDEX.md` with a one-line directory description, a one-line description per file, and all public function signatures (one per line).
+
+- `src/INDEX.md`
+- `src/model/INDEX.md`
+- `src/parser/INDEX.md`
+- `src/platform/INDEX.md`
+- `src/ui/INDEX.md`
+
+**When modifying a source file, update the corresponding `INDEX.md`** — add, remove, or update signatures to match. Keep descriptions to one sentence.
