@@ -13,17 +13,13 @@ void InstancePanel::select_function_by_name(const std::string& name, const Trace
     instances_.clear();
     instance_cursor_ = -1;
 
-    for (uint32_t i = 0; i < (uint32_t)model.events_.size(); i++) {
-        const auto& ev = model.events_[i];
-        if (ev.is_end_event || ev.ph == Phase::Metadata || ev.ph == Phase::Counter) continue;
-        if (ev.dur <= 0) continue;
-        if (model.get_string(ev.name_idx) == name) {
-            instances_.push_back(i);
-        }
-    }
+    auto it = model.string_map_.find(name);
+    if (it == model.string_map_.end()) return;
 
-    std::sort(instances_.begin(), instances_.end(),
-              [&](uint32_t a, uint32_t b) { return model.events_[a].ts < model.events_[b].ts; });
+    auto ev_it = model.name_to_events_.find(it->second);
+    if (ev_it == model.name_to_events_.end()) return;
+
+    instances_ = ev_it->second;  // already sorted by timestamp
 }
 
 void InstancePanel::navigate_to_instance(int32_t idx, const TraceModel& model, ViewState& view) {
