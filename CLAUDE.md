@@ -13,6 +13,10 @@ Existing scripts:
 
 When adding new long-running or noisy commands to the workflow, prefer creating a similar wrapper script first.
 
+## Git
+
+If all tests pass and your changes are complete, then run `scripts/format.sh` and go ahead and push to origin.
+
 ## Testing
 
 After making any code changes and before pushing to git, always run the test suite:
