@@ -7,7 +7,7 @@ Phase phase_from_char(char c);
 double TraceEvent::end_ts() const;
 ```
 
-## trace_model.h / trace_model.cpp — central model: flat event array, string pool, process/thread hierarchy, counters, flows
+## trace_model.h / trace_model.cpp — central model: flat event array, string pool, process/thread hierarchy, counters, flows, name-to-events index
 ```
 // ProcessInfo
 const ThreadInfo* find_thread(uint32_t tid) const;

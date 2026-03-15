@@ -80,6 +80,10 @@ public:
     // Pre-computed unique category indices, sorted alphabetically by name (built in build_index)
     std::vector<uint32_t> categories_;
 
+    // Pre-computed name_idx -> sorted event indices (built in build_index)
+    // Only includes renderable events (not end events, metadata, counters) with dur > 0.
+    std::unordered_map<uint32_t, std::vector<uint32_t>> name_to_events_;
+
     uint32_t intern_string(const std::string& s) {
         auto it = string_map_.find(s);
         if (it != string_map_.end()) return it->second;
@@ -147,6 +151,7 @@ public:
         counter_series_.clear();
         flow_groups_.clear();
         categories_.clear();
+        name_to_events_.clear();
         min_ts_ = 1e18;
         max_ts_ = -1e18;
     }

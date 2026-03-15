@@ -13,17 +13,13 @@ void InstancePanel::select_function_by_name(const std::string& name, const Trace
     instances_.clear();
     instance_cursor_ = -1;
 
-    for (uint32_t i = 0; i < (uint32_t)model.events_.size(); i++) {
-        const auto& ev = model.events_[i];
-        if (ev.is_end_event || ev.ph == Phase::Metadata || ev.ph == Phase::Counter) continue;
-        if (ev.dur <= 0) continue;
-        if (model.get_string(ev.name_idx) == name) {
-            instances_.push_back(i);
-        }
-    }
+    auto it = model.string_map_.find(name);
+    if (it == model.string_map_.end()) return;
 
-    std::sort(instances_.begin(), instances_.end(),
-              [&](uint32_t a, uint32_t b) { return model.events_[a].ts < model.events_[b].ts; });
+    auto ev_it = model.name_to_events_.find(it->second);
+    if (ev_it == model.name_to_events_.end()) return;
+
+    instances_ = ev_it->second;  // already sorted by timestamp
 }
 
 void InstancePanel::navigate_to_instance(int32_t idx, const TraceModel& model, ViewState& view) {
@@ -44,19 +40,22 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
     }
 
     // Track external selection changes
-    if (view.selected_event_idx != last_selected_event_ && view.selected_event_idx >= 0) {
-        last_selected_event_ = view.selected_event_idx;
-        const auto& ev = model.events_[view.selected_event_idx];
-        if (!ev.is_end_event && ev.ph != Phase::Metadata && ev.ph != Phase::Counter) {
-            const std::string& name = model.get_string(ev.name_idx);
-            if (selected_name_ != name) {
-                select_function_by_name(name, model);
-                instances_dirty_ = true;
+    {
+        TRACE_SCOPE_CAT("TrackSelection", "ui");
+        if (view.selected_event_idx != last_selected_event_ && view.selected_event_idx >= 0) {
+            last_selected_event_ = view.selected_event_idx;
+            const auto& ev = model.events_[view.selected_event_idx];
+            if (!ev.is_end_event && ev.ph != Phase::Metadata && ev.ph != Phase::Counter) {
+                const std::string& name = model.get_string(ev.name_idx);
+                if (selected_name_ != name) {
+                    select_function_by_name(name, model);
+                    instances_dirty_ = true;
+                }
+                scroll_to_cursor_ = true;
             }
-            scroll_to_cursor_ = true;
+        } else if (view.selected_event_idx < 0 && last_selected_event_ >= 0) {
+            last_selected_event_ = -1;
         }
-    } else if (view.selected_event_idx < 0 && last_selected_event_ >= 0) {
-        last_selected_event_ = -1;
     }
 
     if (selected_name_.empty() || instances_.empty()) {
@@ -89,47 +88,51 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
         ImGui::TableSetupColumn("Thread", ImGuiTableColumnFlags_None, 0.0f, 3);
         ImGui::TableHeadersRow();
 
-        if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
-            if (instances_dirty_) {
-                sort_specs->SpecsDirty = true;
-                instances_dirty_ = false;
-            }
-            if (sort_specs->SpecsDirty) {
-                sort_specs->SpecsDirty = false;
-                if (sort_specs->SpecsCount > 0) {
-                    const auto& spec = sort_specs->Specs[0];
-                    bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
-                    std::sort(instances_.begin(), instances_.end(), [&](uint32_t a_idx, uint32_t b_idx) {
-                        const auto& a = model.events_[a_idx];
-                        const auto& b = model.events_[b_idx];
-                        int cmp = 0;
-                        switch (spec.ColumnUserID) {
-                            case 1:
-                                cmp = sort_utils::three_way_cmp(a.ts, b.ts);
-                                break;
-                            case 2:
-                                cmp = sort_utils::three_way_cmp(a.dur, b.dur);
-                                break;
-                            case 3:
-                                cmp = sort_utils::three_way_cmp(a.tid, b.tid);
-                                break;
-                        }
-                        return asc ? (cmp < 0) : (cmp > 0);
-                    });
+        {
+            TRACE_SCOPE_CAT("SortInstances", "ui");
+            if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
+                if (instances_dirty_) {
+                    sort_specs->SpecsDirty = true;
+                    instances_dirty_ = false;
                 }
-                // Re-find cursor after sort
-                if (view.selected_event_idx >= 0) {
-                    instance_cursor_ = -1;
-                    for (int i = 0; i < (int)instances_.size(); i++) {
-                        if (instances_[i] == (uint32_t)view.selected_event_idx) {
-                            instance_cursor_ = i;
-                            break;
+                if (sort_specs->SpecsDirty) {
+                    sort_specs->SpecsDirty = false;
+                    if (sort_specs->SpecsCount > 0) {
+                        const auto& spec = sort_specs->Specs[0];
+                        bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
+                        std::sort(instances_.begin(), instances_.end(), [&](uint32_t a_idx, uint32_t b_idx) {
+                            const auto& a = model.events_[a_idx];
+                            const auto& b = model.events_[b_idx];
+                            int cmp = 0;
+                            switch (spec.ColumnUserID) {
+                                case 1:
+                                    cmp = sort_utils::three_way_cmp(a.ts, b.ts);
+                                    break;
+                                case 2:
+                                    cmp = sort_utils::three_way_cmp(a.dur, b.dur);
+                                    break;
+                                case 3:
+                                    cmp = sort_utils::three_way_cmp(a.tid, b.tid);
+                                    break;
+                            }
+                            return asc ? (cmp < 0) : (cmp > 0);
+                        });
+                    }
+                    // Re-find cursor after sort
+                    if (view.selected_event_idx >= 0) {
+                        instance_cursor_ = -1;
+                        for (int i = 0; i < (int)instances_.size(); i++) {
+                            if (instances_[i] == (uint32_t)view.selected_event_idx) {
+                                instance_cursor_ = i;
+                                break;
+                            }
                         }
                     }
                 }
             }
         }
 
+        TRACE_SCOPE_CAT("DrawRows", "ui");
         char buf[64];
         ImGuiListClipper clipper;
         clipper.Begin((int)instances_.size());

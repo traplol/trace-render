@@ -168,21 +168,31 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
         });
     }
 
-    // Compute global time range and collect unique categories
+    // Compute global time range, collect unique categories, and build name-to-events index
     {
         TRACE_SCOPE_CAT("ComputeTimeRangeAndCategories", "model");
         categories_.clear();
+        name_to_events_.clear();
         std::unordered_set<uint32_t> cat_set;
-        for (const auto& ev : events_) {
+        for (uint32_t i = 0; i < (uint32_t)events_.size(); i++) {
+            const auto& ev = events_[i];
             if (ev.ph == Phase::Metadata || ev.is_end_event) continue;
             if (ev.ts < min_ts_) min_ts_ = ev.ts;
             double end = ev.dur > 0 ? ev.end_ts() : ev.ts;
             if (end > max_ts_) max_ts_ = end;
             cat_set.insert(ev.cat_idx);
+            if (ev.ph != Phase::Counter && ev.dur > 0) {
+                name_to_events_[ev.name_idx].push_back(i);
+            }
         }
         categories_.assign(cat_set.begin(), cat_set.end());
         std::sort(categories_.begin(), categories_.end(),
                   [this](uint32_t a, uint32_t b) { return strings_[a] < strings_[b]; });
+        // Sort each name's event list by timestamp
+        for (auto& [name_idx, indices] : name_to_events_) {
+            std::sort(indices.begin(), indices.end(),
+                      [this](uint32_t a, uint32_t b) { return events_[a].ts < events_[b].ts; });
+        }
     }
 
     // Compute counter series min/max
