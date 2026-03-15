@@ -20,8 +20,9 @@ const std::unordered_set<uint32_t>& hidden_tids() const; void hide_tid(uint32_t)
 const std::unordered_set<uint32_t>& hidden_cats() const; void hide_cat(uint32_t); void show_cat(uint32_t);
 void clear_hidden_pids(); void clear_hidden_tids(); void clear_hidden_cats();
 // Search
-const std::string& search_query() const; void set_search_query(const std::string&);
-const std::vector<uint32_t>& search_results() const; std::vector<uint32_t>& mutable_search_results();
+const std::string& search_query() const; void set_search_query(const std::string&); void clear_search_query();
+const std::vector<uint32_t>& search_results() const; void set_search_results(std::vector<uint32_t>);
+void add_search_result(uint32_t); void clear_search_results();
 int32_t search_current() const; void set_search_current(int32_t);
 // Layout
 float track_height() const; void set_track_height(float);
@@ -32,7 +33,7 @@ float ruler_height() const; void set_ruler_height(float);
 float proc_header_height() const; void set_proc_header_height(float);
 float scrollbar_scale() const; void set_scrollbar_scale(float);
 // Selection border color
-const float* sel_border_color() const; void set_sel_border_color(const float[4]); float* mutable_sel_border_color();
+const std::array<float, 4>& sel_border_color() const; void set_sel_border_color(const std::array<float, 4>&);
 ImU32 sel_border_color_u32() const;
 // Misc
 bool show_flows() const; void set_show_flows(bool);

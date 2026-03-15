@@ -1,6 +1,7 @@
 #pragma once
 #include "model/trace_event.h"
 #include "imgui.h"
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -61,8 +62,11 @@ public:
     // --- Search ---
     const std::string& search_query() const { return search_query_; }
     void set_search_query(const std::string& q) { search_query_ = q; }
+    void clear_search_query() { search_query_.clear(); }
     const std::vector<uint32_t>& search_results() const { return search_results_; }
-    std::vector<uint32_t>& mutable_search_results() { return search_results_; }
+    void set_search_results(std::vector<uint32_t> results) { search_results_ = std::move(results); }
+    void add_search_result(uint32_t idx) { search_results_.push_back(idx); }
+    void clear_search_results() { search_results_.clear(); }
     int32_t search_current() const { return search_current_; }
     void set_search_current(int32_t idx) { search_current_ = idx; }
 
@@ -83,11 +87,8 @@ public:
     void set_scrollbar_scale(float s) { scrollbar_scale_ = s; }
 
     // --- Selection border color ---
-    const float* sel_border_color() const { return sel_border_color_; }
-    void set_sel_border_color(const float color[4]) {
-        for (int i = 0; i < 4; i++) sel_border_color_[i] = color[i];
-    }
-    float* mutable_sel_border_color() { return sel_border_color_; }
+    const std::array<float, 4>& sel_border_color() const { return sel_border_color_; }
+    void set_sel_border_color(const std::array<float, 4>& color) { sel_border_color_ = color; }
     ImU32 sel_border_color_u32() const {
         return IM_COL32((int)(sel_border_color_[0] * 255), (int)(sel_border_color_[1] * 255),
                         (int)(sel_border_color_[2] * 255), (int)(sel_border_color_[3] * 255));
@@ -145,7 +146,7 @@ private:
     float ruler_height_ = 37.0f;
     float proc_header_height_ = 36.0f;
     float scrollbar_scale_ = 1.3f;
-    float sel_border_color_[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    std::array<float, 4> sel_border_color_ = {0.0f, 0.0f, 0.0f, 1.0f};
     bool show_flows_ = true;
     bool time_unit_ns_ = false;
 };

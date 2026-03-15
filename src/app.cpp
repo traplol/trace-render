@@ -51,8 +51,8 @@ void App::finish_load() {
         view_.clear_hidden_pids();
         view_.clear_hidden_tids();
         view_.clear_hidden_cats();
-        view_.set_search_query("");
-        view_.mutable_search_results().clear();
+        view_.clear_search_query();
+        view_.clear_search_results();
         view_.set_search_current(-1);
         if (model_.min_ts() < model_.max_ts()) {
             view_.zoom_to_fit(model_.min_ts(), model_.max_ts());
@@ -348,8 +348,12 @@ void App::render_settings_modal() {
             bool show = view_.show_flows();
             if (ImGui::Checkbox("Show Flow Arrows", &show)) view_.set_show_flows(show);
         }
-        ImGui::ColorEdit4("Selection Border Color", view_.mutable_sel_border_color(),
-                          ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+        {
+            auto color = view_.sel_border_color();
+            if (ImGui::ColorEdit4("Selection Border Color", color.data(),
+                                  ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
+                view_.set_sel_border_color(color);
+        }
 
         if (platform::supports_vsync()) {
             if (ImGui::Checkbox("VSync", &vsync_)) {
@@ -446,7 +450,7 @@ void App::load_settings() {
         if (j.contains("scrollbar_scale")) view_.set_scrollbar_scale(j["scrollbar_scale"].get<float>());
         if (j.contains("sel_border_color")) {
             auto& arr = j["sel_border_color"];
-            float col[4];
+            std::array<float, 4> col;
             for (int i = 0; i < 4; i++) col[i] = arr[i].get<float>();
             view_.set_sel_border_color(col);
         }

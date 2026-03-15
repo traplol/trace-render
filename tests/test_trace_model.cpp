@@ -45,9 +45,24 @@ TEST_F(TraceModelTest, FindProcessReturnsNullIfMissing) {
 
 TEST_F(TraceModelTest, ClearResetsEverything) {
     model.intern_string("foo");
-    model.get_or_create_process(1);
-    model.add_event({});
+    auto& proc = model.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    TraceEvent ev;
+    ev.ph = Phase::Complete;
+    ev.name_idx = model.intern_string("task");
+    ev.ts = 100.0;
+    ev.dur = 50.0;
+    ev.pid = 1;
+    ev.tid = 1;
+    model.add_event(ev);
+    thread.event_indices.push_back(0);
     model.add_args("{}");
+    model.build_index();
+
+    // Verify non-empty before clear
+    EXPECT_FALSE(model.name_to_events().empty());
+    EXPECT_LT(model.min_ts(), model.max_ts());
 
     model.clear();
 
@@ -58,6 +73,8 @@ TEST_F(TraceModelTest, ClearResetsEverything) {
     EXPECT_TRUE(model.processes().empty());
     EXPECT_TRUE(model.counter_series().empty());
     EXPECT_TRUE(model.flow_groups().empty());
+    EXPECT_TRUE(model.name_to_events().empty());
+    EXPECT_TRUE(model.categories().empty());
     EXPECT_DOUBLE_EQ(model.min_ts(), 1e18);
     EXPECT_DOUBLE_EQ(model.max_ts(), -1e18);
 }
@@ -223,6 +240,108 @@ TEST_F(TraceModelTest, BuildIndexCounterSeriesMinMax) {
 
     EXPECT_DOUBLE_EQ(model.counter_series()[0].min_val, 30.0);
     EXPECT_DOUBLE_EQ(model.counter_series()[0].max_val, 80.0);
+}
+
+TEST_F(TraceModelTest, NameToEventsIndexBasic) {
+    model.intern_string("");  // idx 0
+    auto& proc = model.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    uint32_t name_a = model.intern_string("alpha");
+    uint32_t name_b = model.intern_string("beta");
+
+    // Event 0: alpha, ts=200, dur=50
+    TraceEvent ev0;
+    ev0.ph = Phase::Complete;
+    ev0.name_idx = name_a;
+    ev0.ts = 200.0;
+    ev0.dur = 50.0;
+    ev0.pid = 1;
+    ev0.tid = 1;
+    model.add_event(ev0);
+    thread.event_indices.push_back(0);
+
+    // Event 1: beta, ts=100, dur=30
+    TraceEvent ev1;
+    ev1.ph = Phase::Complete;
+    ev1.name_idx = name_b;
+    ev1.ts = 100.0;
+    ev1.dur = 30.0;
+    ev1.pid = 1;
+    ev1.tid = 1;
+    model.add_event(ev1);
+    thread.event_indices.push_back(1);
+
+    // Event 2: alpha, ts=50, dur=10
+    TraceEvent ev2;
+    ev2.ph = Phase::Complete;
+    ev2.name_idx = name_a;
+    ev2.ts = 50.0;
+    ev2.dur = 10.0;
+    ev2.pid = 1;
+    ev2.tid = 1;
+    model.add_event(ev2);
+    thread.event_indices.push_back(2);
+
+    model.build_index();
+
+    const auto& nte = model.name_to_events();
+
+    // alpha should have 2 entries, beta 1
+    ASSERT_EQ(nte.count(name_a), 1u);
+    ASSERT_EQ(nte.count(name_b), 1u);
+    EXPECT_EQ(nte.at(name_a).size(), 2u);
+    EXPECT_EQ(nte.at(name_b).size(), 1u);
+
+    // alpha entries should be sorted by timestamp (event 2 first, then event 0)
+    EXPECT_EQ(nte.at(name_a)[0], 2u);
+    EXPECT_EQ(nte.at(name_a)[1], 0u);
+
+    EXPECT_EQ(nte.at(name_b)[0], 1u);
+}
+
+TEST_F(TraceModelTest, NameToEventsExcludesZeroDuration) {
+    model.intern_string("");  // idx 0
+    auto& proc = model.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    uint32_t name_idx = model.intern_string("instant");
+
+    // Instant event (dur=0)
+    TraceEvent ev;
+    ev.ph = Phase::Instant;
+    ev.name_idx = name_idx;
+    ev.ts = 100.0;
+    ev.dur = 0.0;
+    ev.pid = 1;
+    ev.tid = 1;
+    model.add_event(ev);
+    thread.event_indices.push_back(0);
+
+    model.build_index();
+
+    // Zero-duration events should not appear in name_to_events
+    EXPECT_EQ(model.name_to_events().count(name_idx), 0u);
+}
+
+TEST_F(TraceModelTest, NameToEventsExcludesCounterPhase) {
+    model.intern_string("");  // idx 0
+
+    uint32_t name_idx = model.intern_string("mem_counter");
+
+    TraceEvent ev;
+    ev.ph = Phase::Counter;
+    ev.name_idx = name_idx;
+    ev.ts = 100.0;
+    ev.dur = 50.0;
+    ev.pid = 1;
+    ev.tid = 1;
+    model.add_event(ev);
+
+    model.build_index();
+
+    // Counter events should not appear in name_to_events
+    EXPECT_EQ(model.name_to_events().count(name_idx), 0u);
 }
 
 // --- Helper to build a nested call stack model ---

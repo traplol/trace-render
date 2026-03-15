@@ -28,7 +28,7 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
     if (needs_search_) {
         needs_search_ = false;
         view.set_search_query(search_buf_);
-        view.mutable_search_results().clear();
+        view.clear_search_results();
         view.set_search_current(-1);
 
         if (!view.search_query().empty()) {
@@ -39,7 +39,7 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
                 const std::string& cat = model.get_string(ev.cat_idx);
                 if (contains_case_insensitive(name, view.search_query()) ||
                     contains_case_insensitive(cat, view.search_query())) {
-                    view.mutable_search_results().push_back(i);
+                    view.add_search_result(i);
                 }
             }
         }
