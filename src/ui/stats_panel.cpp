@@ -355,7 +355,7 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
         }
         ImGui::TextDisabled("%s", status);
     } else {
-        bool run = ImGui::Button("Run (Ctrl+Enter)") || (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Enter));
+        bool run = ImGui::Button("Run (Ctrl+Enter)") || view.key_bindings().is_pressed(Action::RunQuery);
         if (run && !db.is_query_running()) {
             db.execute_async(tab.query_buf);
             tab.query_running = true;

@@ -51,6 +51,7 @@ private:
     std::string status_message_;
     bool first_layout_ = true;
     bool show_settings_ = false;
+    int settings_tab_ = 0;
     bool dark_theme_ = true;
     bool vsync_ = true;
     SDL_Window* window_ = nullptr;
@@ -58,6 +59,8 @@ private:
     void finish_load();
     void render_loading_overlay();
     void render_settings_modal();
+    void reset_general_defaults();
+    void reset_all_defaults();
     void load_settings();
     void save_settings();
 };

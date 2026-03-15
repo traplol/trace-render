@@ -1,5 +1,6 @@
 #pragma once
 #include "model/trace_event.h"
+#include "ui/key_bindings.h"
 #include "imgui.h"
 #include <array>
 #include <cstdint>
@@ -70,6 +71,15 @@ public:
     int32_t search_current() const { return search_current_; }
     void set_search_current(int32_t idx) { search_current_ = idx; }
 
+    // --- Layout defaults ---
+    static constexpr float kDefaultTrackHeight = 54.0f;
+    static constexpr float kDefaultTrackPadding = 8.0f;
+    static constexpr float kDefaultCounterTrackHeight = 175.0f;
+    static constexpr float kDefaultLabelWidth = 221.0f;
+    static constexpr float kDefaultRulerHeight = 37.0f;
+    static constexpr float kDefaultProcHeaderHeight = 36.0f;
+    static constexpr float kDefaultScrollbarScale = 1.3f;
+
     // --- Layout ---
     float track_height() const { return track_height_; }
     void set_track_height(float h) { track_height_ = h; }
@@ -86,6 +96,25 @@ public:
     float scrollbar_scale() const { return scrollbar_scale_; }
     void set_scrollbar_scale(float s) { scrollbar_scale_ = s; }
 
+    void reset_layout_defaults() {
+        track_height_ = kDefaultTrackHeight;
+        track_padding_ = kDefaultTrackPadding;
+        counter_track_height_ = kDefaultCounterTrackHeight;
+        label_width_ = kDefaultLabelWidth;
+        ruler_height_ = kDefaultRulerHeight;
+        proc_header_height_ = kDefaultProcHeaderHeight;
+        scrollbar_scale_ = kDefaultScrollbarScale;
+    }
+
+    // --- Rendering defaults ---
+    static constexpr bool kDefaultShowFlows = true;
+    static constexpr std::array<float, 4> kDefaultSelBorderColor = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    void reset_rendering_defaults() {
+        show_flows_ = kDefaultShowFlows;
+        sel_border_color_ = kDefaultSelBorderColor;
+    }
+
     // --- Selection border color ---
     const std::array<float, 4>& sel_border_color() const { return sel_border_color_; }
     void set_sel_border_color(const std::array<float, 4>& color) { sel_border_color_ = color; }
@@ -93,6 +122,10 @@ public:
         return IM_COL32((int)(sel_border_color_[0] * 255), (int)(sel_border_color_[1] * 255),
                         (int)(sel_border_color_[2] * 255), (int)(sel_border_color_[3] * 255));
     }
+
+    // --- Key bindings ---
+    KeyBindings& key_bindings() { return key_bindings_; }
+    const KeyBindings& key_bindings() const { return key_bindings_; }
 
     // --- Misc ---
     bool show_flows() const { return show_flows_; }
@@ -139,14 +172,15 @@ private:
     std::string search_query_;
     std::vector<uint32_t> search_results_;
     int32_t search_current_ = -1;
-    float track_height_ = 54.0f;
-    float track_padding_ = 8.0f;
-    float counter_track_height_ = 175.0f;
-    float label_width_ = 221.0f;
-    float ruler_height_ = 37.0f;
-    float proc_header_height_ = 36.0f;
-    float scrollbar_scale_ = 1.3f;
-    std::array<float, 4> sel_border_color_ = {0.0f, 0.0f, 0.0f, 1.0f};
-    bool show_flows_ = true;
+    float track_height_ = kDefaultTrackHeight;
+    float track_padding_ = kDefaultTrackPadding;
+    float counter_track_height_ = kDefaultCounterTrackHeight;
+    float label_width_ = kDefaultLabelWidth;
+    float ruler_height_ = kDefaultRulerHeight;
+    float proc_header_height_ = kDefaultProcHeaderHeight;
+    float scrollbar_scale_ = kDefaultScrollbarScale;
+    std::array<float, 4> sel_border_color_ = kDefaultSelBorderColor;
+    bool show_flows_ = kDefaultShowFlows;
     bool time_unit_ns_ = false;
+    KeyBindings key_bindings_;
 };

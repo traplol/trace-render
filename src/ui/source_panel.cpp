@@ -111,6 +111,36 @@ void SourcePanel::load_settings(const json& j) {
     }
 }
 
+void SourcePanel::reset_settings() {
+    strip_prefix_[0] = '\0';
+    local_base_[0] = '\0';
+    path_settings_changed_ = true;
+}
+
+void SourcePanel::render_settings() {
+    ImGui::TextWrapped("Remap source paths from the trace to your local filesystem.");
+    ImGui::Spacing();
+
+    float label_w = ImGui::CalcTextSize("Strip prefix ").x;
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Strip prefix");
+    ImGui::SameLine(label_w);
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::InputTextWithHint("##strip_setting", "e.g. c:\\jenkins\\prod\\rel-123", strip_prefix_,
+                                 sizeof(strip_prefix_))) {
+        path_settings_changed_ = true;
+    }
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Local base");
+    ImGui::SameLine(label_w);
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::InputTextWithHint("##base_setting", "e.g. /mnt/c/dev/repo", local_base_, sizeof(local_base_))) {
+        path_settings_changed_ = true;
+    }
+}
+
 void SourcePanel::load_file(const std::string& path) {
     TRACE_FUNCTION_CAT("io");
     cached_lines_.clear();

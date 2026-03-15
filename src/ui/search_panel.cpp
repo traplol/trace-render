@@ -11,8 +11,7 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
     TRACE_SCOPE_CAT("Search", "ui");
     ImGui::Begin("Search");
 
-    // Focus on Ctrl+F
-    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_F)) {
+    if (view.key_bindings().is_pressed(Action::Search)) {
         ImGui::SetKeyboardFocusHere();
     }
 
