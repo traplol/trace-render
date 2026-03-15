@@ -34,10 +34,13 @@ struct ViewState {
         range_end_ts = 0.0;
     }
 
-    // Filtering
+    // Filtering.
+    // IMPORTANT: bump filter_generation after ANY mutation of hidden_pids/tids/cats.
+    // Panels (e.g. FlameGraphPanel) use it to detect stale caches.
     std::unordered_set<uint32_t> hidden_pids;
     std::unordered_set<uint32_t> hidden_tids;
     std::unordered_set<uint32_t> hidden_cats;
+    uint32_t filter_generation = 0;
 
     // Search
     std::string search_query;
