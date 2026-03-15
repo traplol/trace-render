@@ -52,12 +52,11 @@ struct SaxHandler : json::json_sax_t {
             return;
         }
 
-        uint32_t ev_idx = (uint32_t)model.events_.size();
+        uint32_t ev_idx = (uint32_t)model.events().size();
 
         // Store args if present
         if (!current_args_json.empty()) {
-            current_event.args_idx = (uint32_t)model.args_.size();
-            model.args_.push_back(std::move(current_args_json));
+            current_event.args_idx = model.add_args(std::move(current_args_json));
             current_args_json.clear();
         }
 
@@ -70,21 +69,8 @@ struct SaxHandler : json::json_sax_t {
                 if (counter_values.size() > 1) {
                     series_name += "." + arg_key;
                 }
-                // Find or create counter series
-                CounterSeries* cs = nullptr;
-                for (auto& s : model.counter_series_) {
-                    if (s.pid == current_event.pid && s.name == series_name) {
-                        cs = &s;
-                        break;
-                    }
-                }
-                if (!cs) {
-                    model.counter_series_.push_back({});
-                    cs = &model.counter_series_.back();
-                    cs->pid = current_event.pid;
-                    cs->name = series_name;
-                }
-                cs->points.push_back({current_event.ts, val});
+                auto& cs = model.find_or_create_counter_series(current_event.pid, series_name);
+                cs.points.push_back({current_event.ts, val});
             }
             counter_values.clear();
         }
@@ -92,10 +78,10 @@ struct SaxHandler : json::json_sax_t {
         // Handle flow events
         if (current_event.ph == Phase::FlowStart || current_event.ph == Phase::FlowStep ||
             current_event.ph == Phase::FlowEnd) {
-            model.flow_groups_[current_event.id].push_back(ev_idx);
+            model.add_flow_event(current_event.id, ev_idx);
         }
 
-        model.events_.push_back(current_event);
+        model.add_event(current_event);
 
         // Add to thread (skip counter events - they render as separate tracks)
         if (current_event.ph != Phase::Counter) {
@@ -116,7 +102,7 @@ struct SaxHandler : json::json_sax_t {
             // Extract name from args
             if (current_event.args_idx != UINT32_MAX || !current_args_json.empty()) {
                 const std::string& args_str =
-                    current_args_json.empty() ? model.args_[current_event.args_idx] : current_args_json;
+                    current_args_json.empty() ? model.args()[current_event.args_idx] : current_args_json;
                 try {
                     auto args = json::parse(args_str);
                     if (args.contains("name")) {
@@ -434,14 +420,14 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
     TRACE_SCOPE_CAT("Parse", "io");
     std::ifstream file(filepath, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
-        error_message = "Could not open file: " + filepath;
+        error_message_ = "Could not open file: " + filepath;
         return false;
     }
 
     size_t file_size = file.tellg();
     file.seekg(0, std::ios::beg);
 
-    if (on_progress) on_progress("Reading file", 0.0f);
+    if (on_progress_) on_progress_("Reading file", 0.0f);
 
     // Read file in chunks to report progress
     std::string content(file_size, '\0');
@@ -453,8 +439,8 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
             size_t to_read = std::min(CHUNK, file_size - read_so_far);
             file.read(&content[read_so_far], to_read);
             read_so_far += to_read;
-            if (on_progress) {
-                on_progress("Reading file", (float)read_so_far / (float)file_size);
+            if (on_progress_) {
+                on_progress_("Reading file", (float)read_so_far / (float)file_size);
             }
         }
         file.close();
@@ -464,10 +450,10 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
     // Intern empty string at index 0
     model.intern_string("");
 
-    if (on_progress) on_progress("Parsing JSON", 0.0f);
+    if (on_progress_) on_progress_("Parsing JSON", 0.0f);
 
-    SaxHandler handler(model, on_progress);
-    handler.time_divisor = time_unit_ns ? 1000.0 : 1.0;
+    SaxHandler handler(model, on_progress_);
+    handler.time_divisor = time_unit_ns_ ? 1000.0 : 1.0;
     handler.file_size = file_size;
     // Rough estimate: ~100 bytes per event in JSON
     handler.estimated_events = file_size / 100;
@@ -483,15 +469,15 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
     content.shrink_to_fit();
 
     if (!result) {
-        error_message = "JSON parse error";
+        error_message_ = "JSON parse error";
         return false;
     }
 
-    if (on_progress) on_progress("Building index", 0.0f);
-    model.build_index(on_progress ? [this](float p) { on_progress("Building index", p); }
-                                  : std::function<void(float)>{});
+    if (on_progress_) on_progress_("Building index", 0.0f);
+    model.build_index(on_progress_ ? [this](float p) { on_progress_("Building index", p); }
+                                   : std::function<void(float)>{});
 
-    if (on_progress) on_progress("Done", 1.0f);
+    if (on_progress_) on_progress_("Done", 1.0f);
 
     return true;
 }
@@ -502,10 +488,10 @@ bool TraceParser::parse_buffer(const char* data, size_t size, TraceModel& model)
     model.clear();
     model.intern_string("");
 
-    if (on_progress) on_progress("Parsing JSON", 0.0f);
+    if (on_progress_) on_progress_("Parsing JSON", 0.0f);
 
-    SaxHandler handler(model, on_progress);
-    handler.time_divisor = time_unit_ns ? 1000.0 : 1.0;
+    SaxHandler handler(model, on_progress_);
+    handler.time_divisor = time_unit_ns_ ? 1000.0 : 1.0;
     handler.file_size = size;
     handler.estimated_events = size / 100;
 
@@ -513,15 +499,15 @@ bool TraceParser::parse_buffer(const char* data, size_t size, TraceModel& model)
     bool result = json::sax_parse(sv, &handler);
 
     if (!result) {
-        error_message = "JSON parse error";
+        error_message_ = "JSON parse error";
         return false;
     }
 
-    if (on_progress) on_progress("Building index", 0.0f);
-    model.build_index(on_progress ? [this](float p) { on_progress("Building index", p); }
-                                  : std::function<void(float)>{});
+    if (on_progress_) on_progress_("Building index", 0.0f);
+    model.build_index(on_progress_ ? [this](float p) { on_progress_("Building index", p); }
+                                   : std::function<void(float)>{});
 
-    if (on_progress) on_progress("Done", 1.0f);
+    if (on_progress_) on_progress_("Done", 1.0f);
 
     return true;
 }

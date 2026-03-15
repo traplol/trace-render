@@ -27,47 +27,47 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
 
     if (needs_search_) {
         needs_search_ = false;
-        view.search_query = search_buf_;
-        view.search_results.clear();
-        view.search_current = -1;
+        view.set_search_query(search_buf_);
+        view.clear_search_results();
+        view.set_search_current(-1);
 
-        if (!view.search_query.empty()) {
-            for (uint32_t i = 0; i < model.events_.size(); i++) {
-                const auto& ev = model.events_[i];
+        if (!view.search_query().empty()) {
+            for (uint32_t i = 0; i < model.events().size(); i++) {
+                const auto& ev = model.events()[i];
                 if (ev.is_end_event || ev.ph == Phase::Metadata) continue;
                 const std::string& name = model.get_string(ev.name_idx);
                 const std::string& cat = model.get_string(ev.cat_idx);
-                if (contains_case_insensitive(name, view.search_query) ||
-                    contains_case_insensitive(cat, view.search_query)) {
-                    view.search_results.push_back(i);
+                if (contains_case_insensitive(name, view.search_query()) ||
+                    contains_case_insensitive(cat, view.search_query())) {
+                    view.add_search_result(i);
                 }
             }
         }
-        sorted_results_ = view.search_results;
+        sorted_results_ = view.search_results();
         needs_sort_ = true;
     }
 
-    ImGui::Text("%zu results", view.search_results.size());
+    ImGui::Text("%zu results", view.search_results().size());
 
     // Navigation
     bool navigate = false;
-    if (!view.search_results.empty()) {
+    if (!view.search_results().empty()) {
         ImGui::SameLine();
-        if (ImGui::Button("<") && view.search_current > 0) {
-            view.search_current--;
+        if (ImGui::Button("<") && view.search_current() > 0) {
+            view.set_search_current(view.search_current() - 1);
             navigate = true;
         }
         ImGui::SameLine();
         if (ImGui::Button(">")) {
-            view.search_current++;
-            if (view.search_current >= (int32_t)view.search_results.size())
-                view.search_current = (int32_t)view.search_results.size() - 1;
+            view.set_search_current(view.search_current() + 1);
+            if (view.search_current() >= (int32_t)view.search_results().size())
+                view.set_search_current((int32_t)view.search_results().size() - 1);
             navigate = true;
         }
 
-        if (navigate && view.search_current >= 0 && view.search_current < (int32_t)view.search_results.size()) {
-            uint32_t ev_idx = view.search_results[view.search_current];
-            view.navigate_to_event(ev_idx, model.events_[ev_idx], 2.0, 1000.0);
+        if (navigate && view.search_current() >= 0 && view.search_current() < (int32_t)view.search_results().size()) {
+            uint32_t ev_idx = view.search_results()[view.search_current()];
+            view.navigate_to_event(ev_idx, model.events()[ev_idx], 2.0, 1000.0);
         }
     }
 
@@ -97,8 +97,8 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
                     bool ascending = (spec.SortDirection == ImGuiSortDirection_Ascending);
 
                     std::sort(sorted_results_.begin(), sorted_results_.end(), [&](uint32_t a_idx, uint32_t b_idx) {
-                        const auto& a = model.events_[a_idx];
-                        const auto& b = model.events_[b_idx];
+                        const auto& a = model.events()[a_idx];
+                        const auto& b = model.events()[b_idx];
                         int cmp = 0;
                         switch (spec.ColumnUserID) {
                             case 0:  // Time
@@ -125,7 +125,7 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
         while (clipper.Step()) {
             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
                 uint32_t ev_idx = sorted_results_[i];
-                const auto& ev = model.events_[ev_idx];
+                const auto& ev = model.events()[ev_idx];
                 const std::string& name = model.get_string(ev.name_idx);
 
                 char time_buf[64];
@@ -139,10 +139,10 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
                 // Make entire row selectable
                 char id_buf[32];
                 snprintf(id_buf, sizeof(id_buf), "##r%d", i);
-                bool selected = (view.selected_event_idx == (int32_t)ev_idx);
+                bool selected = (view.selected_event_idx() == (int32_t)ev_idx);
                 if (ImGui::Selectable(id_buf, selected,
                                       ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
-                    view.navigate_to_event(ev_idx, model.events_[ev_idx], 2.0, 1000.0);
+                    view.navigate_to_event(ev_idx, model.events()[ev_idx], 2.0, 1000.0);
                 }
                 ImGui::SameLine();
                 ImGui::TextUnformatted(time_buf);

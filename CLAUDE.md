@@ -40,6 +40,10 @@ Derived data (e.g. unique categories, self times, depth, parent indices) should 
 
 Use `format_time()` from `src/ui/format_time.h` whenever displaying time values in the UI. Do not write inline time formatting or create local `format_time` variants. The function takes microseconds and auto-selects the appropriate unit (ns/us/ms/s). For ruler tick labels, use `format_ruler_time()` from the same header.
 
+## Encapsulation
+
+Classes use private fields with getter/setter accessor methods. POD structs (e.g. `TraceEvent`, `ThreadInfo`, `ProcessInfo`, `CounterSeries`, `DiagStats`) may use public fields directly. As soon as a POD needs a method (validation, invariant enforcement, derived computation), convert it to the accessor pattern with private fields. Prefer domain-specific mutation methods (e.g. `add_search_result()`, `navigate_to_event()`) over exposing raw mutable references.
+
 ## Project Structure
 
 - `src/` — application source code

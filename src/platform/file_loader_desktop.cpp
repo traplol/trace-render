@@ -20,7 +20,7 @@ struct FileLoader::Impl {
     TraceModel model;
 
     void setup_progress(TraceParser& parser) {
-        parser.on_progress = [this](const char* ph, float p) {
+        parser.set_on_progress([this](const char* ph, float p) {
             {
                 std::lock_guard<std::mutex> lock(phase_mutex);
                 phase_str = ph;
@@ -38,7 +38,7 @@ struct FileLoader::Impl {
                 global = 0.80f + p * 0.20f;
             }
             progress.store(global, std::memory_order_relaxed);
-        };
+        });
     }
 
     void finish_parse(bool ok, TraceParser& parser, TraceModel& new_model, QueryDb* query_db) {
@@ -59,7 +59,7 @@ struct FileLoader::Impl {
             success_ = true;
         } else {
             success_ = false;
-            error_ = parser.error_message;
+            error_ = parser.error_message();
         }
         finished.store(true, std::memory_order_release);
     }
@@ -89,7 +89,7 @@ void FileLoader::load_file(const std::string& path, bool time_ns, QueryDb* query
 
         TraceParser parser;
         impl_->setup_progress(parser);
-        parser.time_unit_ns = time_ns;
+        parser.set_time_unit_ns(time_ns);
 
         TraceModel new_model;
         bool ok = parser.parse(path, new_model);
@@ -113,7 +113,7 @@ void FileLoader::load_buffer(std::vector<char> data, const std::string& filename
 
         TraceParser parser;
         impl_->setup_progress(parser);
-        parser.time_unit_ns = time_ns;
+        parser.set_time_unit_ns(time_ns);
 
         TraceModel new_model;
         bool ok = parser.parse_buffer(data.data(), data.size(), new_model);

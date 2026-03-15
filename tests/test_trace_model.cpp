@@ -29,14 +29,14 @@ TEST_F(TraceModelTest, GetOrCreateProcessCreatesOnce) {
     auto& p2 = model.get_or_create_process(42);
     EXPECT_EQ(&p1, &p2);
     EXPECT_EQ(p2.name, "MyProcess");
-    EXPECT_EQ(model.processes_.size(), 1u);
+    EXPECT_EQ(model.processes().size(), 1u);
 }
 
 TEST_F(TraceModelTest, GetOrCreateProcessMultiple) {
     model.get_or_create_process(1);
     model.get_or_create_process(2);
     model.get_or_create_process(3);
-    EXPECT_EQ(model.processes_.size(), 3u);
+    EXPECT_EQ(model.processes().size(), 3u);
 }
 
 TEST_F(TraceModelTest, FindProcessReturnsNullIfMissing) {
@@ -45,23 +45,38 @@ TEST_F(TraceModelTest, FindProcessReturnsNullIfMissing) {
 
 TEST_F(TraceModelTest, ClearResetsEverything) {
     model.intern_string("foo");
-    model.get_or_create_process(1);
-    model.events_.push_back({});
-    model.args_.push_back("{}");
-    model.min_ts_ = 0;
-    model.max_ts_ = 100;
+    auto& proc = model.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    TraceEvent ev;
+    ev.ph = Phase::Complete;
+    ev.name_idx = model.intern_string("task");
+    ev.ts = 100.0;
+    ev.dur = 50.0;
+    ev.pid = 1;
+    ev.tid = 1;
+    model.add_event(ev);
+    thread.event_indices.push_back(0);
+    model.add_args("{}");
+    model.build_index();
+
+    // Verify non-empty before clear
+    EXPECT_FALSE(model.name_to_events().empty());
+    EXPECT_LT(model.min_ts(), model.max_ts());
 
     model.clear();
 
-    EXPECT_TRUE(model.events_.empty());
-    EXPECT_TRUE(model.strings_.empty());
-    EXPECT_TRUE(model.string_map_.empty());
-    EXPECT_TRUE(model.args_.empty());
-    EXPECT_TRUE(model.processes_.empty());
-    EXPECT_TRUE(model.counter_series_.empty());
-    EXPECT_TRUE(model.flow_groups_.empty());
-    EXPECT_DOUBLE_EQ(model.min_ts_, 1e18);
-    EXPECT_DOUBLE_EQ(model.max_ts_, -1e18);
+    EXPECT_TRUE(model.events().empty());
+    EXPECT_TRUE(model.strings().empty());
+    EXPECT_TRUE(model.string_map().empty());
+    EXPECT_TRUE(model.args().empty());
+    EXPECT_TRUE(model.processes().empty());
+    EXPECT_TRUE(model.counter_series().empty());
+    EXPECT_TRUE(model.flow_groups().empty());
+    EXPECT_TRUE(model.name_to_events().empty());
+    EXPECT_TRUE(model.categories().empty());
+    EXPECT_DOUBLE_EQ(model.min_ts(), 1e18);
+    EXPECT_DOUBLE_EQ(model.max_ts(), -1e18);
 }
 
 TEST_F(TraceModelTest, BuildIndexMatchesBEPairs) {
@@ -75,7 +90,7 @@ TEST_F(TraceModelTest, BuildIndexMatchesBEPairs) {
     b_ev.ts = 100.0;
     b_ev.pid = 1;
     b_ev.tid = 1;
-    model.events_.push_back(b_ev);
+    model.add_event(b_ev);
     thread.event_indices.push_back(0);
 
     // Add E event at ts=200
@@ -85,14 +100,14 @@ TEST_F(TraceModelTest, BuildIndexMatchesBEPairs) {
     e_ev.ts = 200.0;
     e_ev.pid = 1;
     e_ev.tid = 1;
-    model.events_.push_back(e_ev);
+    model.add_event(e_ev);
     thread.event_indices.push_back(1);
 
     model.build_index();
 
     // B event should have dur=100, E event should be marked
-    EXPECT_DOUBLE_EQ(model.events_[0].dur, 100.0);
-    EXPECT_TRUE(model.events_[1].is_end_event);
+    EXPECT_DOUBLE_EQ(model.events()[0].dur, 100.0);
+    EXPECT_TRUE(model.events()[1].is_end_event);
 
     // Only the B event should remain in thread indices
     EXPECT_EQ(thread.event_indices.size(), 1u);
@@ -110,7 +125,7 @@ TEST_F(TraceModelTest, BuildIndexComputesDepth) {
     outer.dur = 200.0;
     outer.pid = 1;
     outer.tid = 1;
-    model.events_.push_back(outer);
+    model.add_event(outer);
     thread.event_indices.push_back(0);
 
     // Inner event: ts=120, dur=50
@@ -120,13 +135,13 @@ TEST_F(TraceModelTest, BuildIndexComputesDepth) {
     inner.dur = 50.0;
     inner.pid = 1;
     inner.tid = 1;
-    model.events_.push_back(inner);
+    model.add_event(inner);
     thread.event_indices.push_back(1);
 
     model.build_index();
 
-    EXPECT_EQ(model.events_[0].depth, 0);
-    EXPECT_EQ(model.events_[1].depth, 1);
+    EXPECT_EQ(model.events()[0].depth, 0);
+    EXPECT_EQ(model.events()[1].depth, 1);
     EXPECT_EQ(thread.max_depth, 1);
 }
 
@@ -140,7 +155,7 @@ TEST_F(TraceModelTest, BuildIndexComputesTimeRange) {
     ev1.dur = 100.0;
     ev1.pid = 1;
     ev1.tid = 1;
-    model.events_.push_back(ev1);
+    model.add_event(ev1);
     thread.event_indices.push_back(0);
 
     TraceEvent ev2;
@@ -149,13 +164,13 @@ TEST_F(TraceModelTest, BuildIndexComputesTimeRange) {
     ev2.dur = 200.0;
     ev2.pid = 1;
     ev2.tid = 1;
-    model.events_.push_back(ev2);
+    model.add_event(ev2);
     thread.event_indices.push_back(1);
 
     model.build_index();
 
-    EXPECT_DOUBLE_EQ(model.min_ts_, 500.0);
-    EXPECT_DOUBLE_EQ(model.max_ts_, 1200.0);
+    EXPECT_DOUBLE_EQ(model.min_ts(), 500.0);
+    EXPECT_DOUBLE_EQ(model.max_ts(), 1200.0);
 }
 
 TEST_F(TraceModelTest, BuildIndexDeduplicatesSameNameAndTimestamp) {
@@ -172,7 +187,7 @@ TEST_F(TraceModelTest, BuildIndexDeduplicatesSameNameAndTimestamp) {
     ev1.dur = 50.0;
     ev1.pid = 1;
     ev1.tid = 1;
-    model.events_.push_back(ev1);
+    model.add_event(ev1);
     thread.event_indices.push_back(0);
 
     TraceEvent ev2;
@@ -182,7 +197,7 @@ TEST_F(TraceModelTest, BuildIndexDeduplicatesSameNameAndTimestamp) {
     ev2.dur = 80.0;  // longer
     ev2.pid = 1;
     ev2.tid = 1;
-    model.events_.push_back(ev2);
+    model.add_event(ev2);
     thread.event_indices.push_back(1);
 
     // Third event with different timestamp (should not be deduped)
@@ -193,7 +208,7 @@ TEST_F(TraceModelTest, BuildIndexDeduplicatesSameNameAndTimestamp) {
     ev3.dur = 20.0;
     ev3.pid = 1;
     ev3.tid = 1;
-    model.events_.push_back(ev3);
+    model.add_event(ev3);
     thread.event_indices.push_back(2);
 
     model.build_index();
@@ -201,8 +216,8 @@ TEST_F(TraceModelTest, BuildIndexDeduplicatesSameNameAndTimestamp) {
     // Should have 2 events: the longer duplicate and the distinct one
     EXPECT_EQ(thread.event_indices.size(), 2u);
     // First should be the longer-duration duplicate (index 1, dur=80)
-    EXPECT_DOUBLE_EQ(model.events_[thread.event_indices[0]].dur, 80.0);
-    EXPECT_DOUBLE_EQ(model.events_[thread.event_indices[1]].ts, 300.0);
+    EXPECT_DOUBLE_EQ(model.events()[thread.event_indices[0]].dur, 80.0);
+    EXPECT_DOUBLE_EQ(model.events()[thread.event_indices[1]].ts, 300.0);
 }
 
 TEST_F(TraceModelTest, BuildIndexSortsProcessesAndThreads) {
@@ -213,21 +228,120 @@ TEST_F(TraceModelTest, BuildIndexSortsProcessesAndThreads) {
 
     model.build_index();
 
-    EXPECT_EQ(model.processes_[0].pid, 1u);
-    EXPECT_EQ(model.processes_[1].pid, 2u);
+    EXPECT_EQ(model.processes()[0].pid, 1u);
+    EXPECT_EQ(model.processes()[1].pid, 2u);
 }
 
 TEST_F(TraceModelTest, BuildIndexCounterSeriesMinMax) {
-    CounterSeries cs;
-    cs.pid = 1;
-    cs.name = "Memory";
+    auto& cs = model.find_or_create_counter_series(1, "Memory");
     cs.points = {{100.0, 50.0}, {200.0, 30.0}, {300.0, 80.0}};
-    model.counter_series_.push_back(cs);
 
     model.build_index();
 
-    EXPECT_DOUBLE_EQ(model.counter_series_[0].min_val, 30.0);
-    EXPECT_DOUBLE_EQ(model.counter_series_[0].max_val, 80.0);
+    EXPECT_DOUBLE_EQ(model.counter_series()[0].min_val, 30.0);
+    EXPECT_DOUBLE_EQ(model.counter_series()[0].max_val, 80.0);
+}
+
+TEST_F(TraceModelTest, NameToEventsIndexBasic) {
+    model.intern_string("");  // idx 0
+    auto& proc = model.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    uint32_t name_a = model.intern_string("alpha");
+    uint32_t name_b = model.intern_string("beta");
+
+    // Event 0: alpha, ts=200, dur=50
+    TraceEvent ev0;
+    ev0.ph = Phase::Complete;
+    ev0.name_idx = name_a;
+    ev0.ts = 200.0;
+    ev0.dur = 50.0;
+    ev0.pid = 1;
+    ev0.tid = 1;
+    model.add_event(ev0);
+    thread.event_indices.push_back(0);
+
+    // Event 1: beta, ts=100, dur=30
+    TraceEvent ev1;
+    ev1.ph = Phase::Complete;
+    ev1.name_idx = name_b;
+    ev1.ts = 100.0;
+    ev1.dur = 30.0;
+    ev1.pid = 1;
+    ev1.tid = 1;
+    model.add_event(ev1);
+    thread.event_indices.push_back(1);
+
+    // Event 2: alpha, ts=50, dur=10
+    TraceEvent ev2;
+    ev2.ph = Phase::Complete;
+    ev2.name_idx = name_a;
+    ev2.ts = 50.0;
+    ev2.dur = 10.0;
+    ev2.pid = 1;
+    ev2.tid = 1;
+    model.add_event(ev2);
+    thread.event_indices.push_back(2);
+
+    model.build_index();
+
+    const auto& nte = model.name_to_events();
+
+    // alpha should have 2 entries, beta 1
+    ASSERT_EQ(nte.count(name_a), 1u);
+    ASSERT_EQ(nte.count(name_b), 1u);
+    EXPECT_EQ(nte.at(name_a).size(), 2u);
+    EXPECT_EQ(nte.at(name_b).size(), 1u);
+
+    // alpha entries should be sorted by timestamp (event 2 first, then event 0)
+    EXPECT_EQ(nte.at(name_a)[0], 2u);
+    EXPECT_EQ(nte.at(name_a)[1], 0u);
+
+    EXPECT_EQ(nte.at(name_b)[0], 1u);
+}
+
+TEST_F(TraceModelTest, NameToEventsExcludesZeroDuration) {
+    model.intern_string("");  // idx 0
+    auto& proc = model.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    uint32_t name_idx = model.intern_string("instant");
+
+    // Instant event (dur=0)
+    TraceEvent ev;
+    ev.ph = Phase::Instant;
+    ev.name_idx = name_idx;
+    ev.ts = 100.0;
+    ev.dur = 0.0;
+    ev.pid = 1;
+    ev.tid = 1;
+    model.add_event(ev);
+    thread.event_indices.push_back(0);
+
+    model.build_index();
+
+    // Zero-duration events should not appear in name_to_events
+    EXPECT_EQ(model.name_to_events().count(name_idx), 0u);
+}
+
+TEST_F(TraceModelTest, NameToEventsExcludesCounterPhase) {
+    model.intern_string("");  // idx 0
+
+    uint32_t name_idx = model.intern_string("mem_counter");
+
+    TraceEvent ev;
+    ev.ph = Phase::Counter;
+    ev.name_idx = name_idx;
+    ev.ts = 100.0;
+    ev.dur = 50.0;
+    ev.pid = 1;
+    ev.tid = 1;
+    model.add_event(ev);
+
+    model.build_index();
+
+    // Counter events should not appear in name_to_events
+    EXPECT_EQ(model.name_to_events().count(name_idx), 0u);
 }
 
 // --- Helper to build a nested call stack model ---
@@ -247,7 +361,7 @@ static TraceModel make_nested_model() {
     root.dur = 500.0;
     root.pid = 1;
     root.tid = 1;
-    m.events_.push_back(root);
+    m.add_event(root);
     thread.event_indices.push_back(0);
 
     // Event 1: mid, ts=150, dur=300
@@ -258,7 +372,7 @@ static TraceModel make_nested_model() {
     mid.dur = 300.0;
     mid.pid = 1;
     mid.tid = 1;
-    m.events_.push_back(mid);
+    m.add_event(mid);
     thread.event_indices.push_back(1);
 
     // Event 2: leaf, ts=200, dur=100
@@ -269,7 +383,7 @@ static TraceModel make_nested_model() {
     leaf.dur = 100.0;
     leaf.pid = 1;
     leaf.tid = 1;
-    m.events_.push_back(leaf);
+    m.add_event(leaf);
     thread.event_indices.push_back(2);
 
     m.build_index();
@@ -299,24 +413,24 @@ TEST(CallStack, BuildCallStackFromLeaf) {
     auto stack = model.build_call_stack(2);
     ASSERT_EQ(stack.size(), 3u);
     // Root first, leaf last
-    EXPECT_EQ(model.get_string(model.events_[stack[0]].name_idx), "root");
-    EXPECT_EQ(model.get_string(model.events_[stack[1]].name_idx), "mid");
-    EXPECT_EQ(model.get_string(model.events_[stack[2]].name_idx), "leaf");
+    EXPECT_EQ(model.get_string(model.events()[stack[0]].name_idx), "root");
+    EXPECT_EQ(model.get_string(model.events()[stack[1]].name_idx), "mid");
+    EXPECT_EQ(model.get_string(model.events()[stack[2]].name_idx), "leaf");
 }
 
 TEST(CallStack, BuildCallStackFromMid) {
     auto model = make_nested_model();
     auto stack = model.build_call_stack(1);
     ASSERT_EQ(stack.size(), 2u);
-    EXPECT_EQ(model.get_string(model.events_[stack[0]].name_idx), "root");
-    EXPECT_EQ(model.get_string(model.events_[stack[1]].name_idx), "mid");
+    EXPECT_EQ(model.get_string(model.events()[stack[0]].name_idx), "root");
+    EXPECT_EQ(model.get_string(model.events()[stack[1]].name_idx), "mid");
 }
 
 TEST(CallStack, BuildCallStackFromRoot) {
     auto model = make_nested_model();
     auto stack = model.build_call_stack(0);
     ASSERT_EQ(stack.size(), 1u);
-    EXPECT_EQ(model.get_string(model.events_[stack[0]].name_idx), "root");
+    EXPECT_EQ(model.get_string(model.events()[stack[0]].name_idx), "root");
 }
 
 TEST(CallStack, ComputeSelfTimeLeaf) {
@@ -344,19 +458,19 @@ TEST(CallStack, ComputeSelfTimeOutOfBounds) {
 
 TEST(CallStack, ParentIdxPrecomputedCorrectly) {
     auto model = make_nested_model();
-    EXPECT_EQ(model.events_[0].parent_idx, -1);  // root has no parent
-    EXPECT_EQ(model.events_[1].parent_idx, 0);   // mid -> root
-    EXPECT_EQ(model.events_[2].parent_idx, 1);   // leaf -> mid
+    EXPECT_EQ(model.events()[0].parent_idx, -1);  // root has no parent
+    EXPECT_EQ(model.events()[1].parent_idx, 0);   // mid -> root
+    EXPECT_EQ(model.events()[2].parent_idx, 1);   // leaf -> mid
 }
 
 TEST(CallStack, SelfTimePrecomputedCorrectly) {
     auto model = make_nested_model();
     // root: dur=500, child mid=300, self=200
-    EXPECT_DOUBLE_EQ(model.events_[0].self_time, 200.0);
+    EXPECT_DOUBLE_EQ(model.events()[0].self_time, 200.0);
     // mid: dur=300, child leaf=100, self=200
-    EXPECT_DOUBLE_EQ(model.events_[1].self_time, 200.0);
+    EXPECT_DOUBLE_EQ(model.events()[1].self_time, 200.0);
     // leaf: dur=100, no children, self=100
-    EXPECT_DOUBLE_EQ(model.events_[2].self_time, 100.0);
+    EXPECT_DOUBLE_EQ(model.events()[2].self_time, 100.0);
 }
 
 TEST(CallStack, SelfTimeMultipleChildren) {
@@ -373,7 +487,7 @@ TEST(CallStack, SelfTimeMultipleChildren) {
     parent.dur = 1000.0;
     parent.pid = 1;
     parent.tid = 1;
-    m.events_.push_back(parent);
+    m.add_event(parent);
     thread.event_indices.push_back(0);
 
     // Child A: ts=100, dur=200
@@ -384,7 +498,7 @@ TEST(CallStack, SelfTimeMultipleChildren) {
     childA.dur = 200.0;
     childA.pid = 1;
     childA.tid = 1;
-    m.events_.push_back(childA);
+    m.add_event(childA);
     thread.event_indices.push_back(1);
 
     // Child B: ts=500, dur=300
@@ -395,15 +509,15 @@ TEST(CallStack, SelfTimeMultipleChildren) {
     childB.dur = 300.0;
     childB.pid = 1;
     childB.tid = 1;
-    m.events_.push_back(childB);
+    m.add_event(childB);
     thread.event_indices.push_back(2);
 
     m.build_index();
 
     // parent self = 1000 - 200 - 300 = 500
-    EXPECT_DOUBLE_EQ(m.events_[0].self_time, 500.0);
-    EXPECT_EQ(m.events_[1].parent_idx, 0);
-    EXPECT_EQ(m.events_[2].parent_idx, 0);
+    EXPECT_DOUBLE_EQ(m.events()[0].self_time, 500.0);
+    EXPECT_EQ(m.events()[1].parent_idx, 0);
+    EXPECT_EQ(m.events()[2].parent_idx, 0);
 }
 
 // --- Same-timestamp parent/child ---
@@ -423,7 +537,7 @@ static TraceModel make_same_ts_model() {
     parent.dur = 50.0;
     parent.pid = 1;
     parent.tid = 1;
-    m.events_.push_back(parent);
+    m.add_event(parent);
     thread.event_indices.push_back(0);
 
     // Child starts at exact same timestamp, shorter duration
@@ -434,7 +548,7 @@ static TraceModel make_same_ts_model() {
     child.dur = 20.0;
     child.pid = 1;
     child.tid = 1;
-    m.events_.push_back(child);
+    m.add_event(child);
     thread.event_indices.push_back(1);
 
     m.build_index();
@@ -444,8 +558,8 @@ static TraceModel make_same_ts_model() {
 TEST(SameTimestamp, DepthAssignment) {
     auto model = make_same_ts_model();
     // Parent (longer dur) should be depth 0, child (shorter dur) depth 1
-    EXPECT_EQ(model.events_[0].depth, 0);
-    EXPECT_EQ(model.events_[1].depth, 1);
+    EXPECT_EQ(model.events()[0].depth, 0);
+    EXPECT_EQ(model.events()[1].depth, 1);
 }
 
 TEST(SameTimestamp, FindParent) {
@@ -458,8 +572,8 @@ TEST(SameTimestamp, CallStack) {
     auto model = make_same_ts_model();
     auto stack = model.build_call_stack(1);
     ASSERT_EQ(stack.size(), 2u);
-    EXPECT_EQ(model.get_string(model.events_[stack[0]].name_idx), "parent");
-    EXPECT_EQ(model.get_string(model.events_[stack[1]].name_idx), "child");
+    EXPECT_EQ(model.get_string(model.events()[stack[0]].name_idx), "parent");
+    EXPECT_EQ(model.get_string(model.events()[stack[1]].name_idx), "child");
 }
 
 TEST(SameTimestamp, SelfTime) {
@@ -485,7 +599,7 @@ TEST(SameTimestamp, ThreeLevelsSameTimestamp) {
     gp.dur = 100.0;
     gp.pid = 1;
     gp.tid = 1;
-    m.events_.push_back(gp);
+    m.add_event(gp);
     thread.event_indices.push_back(0);
 
     // Parent: ts=100, dur=60
@@ -496,7 +610,7 @@ TEST(SameTimestamp, ThreeLevelsSameTimestamp) {
     parent.dur = 60.0;
     parent.pid = 1;
     parent.tid = 1;
-    m.events_.push_back(parent);
+    m.add_event(parent);
     thread.event_indices.push_back(1);
 
     // Child: ts=100, dur=10
@@ -507,18 +621,18 @@ TEST(SameTimestamp, ThreeLevelsSameTimestamp) {
     child.dur = 10.0;
     child.pid = 1;
     child.tid = 1;
-    m.events_.push_back(child);
+    m.add_event(child);
     thread.event_indices.push_back(2);
 
     m.build_index();
 
-    EXPECT_EQ(m.events_[0].depth, 0);
-    EXPECT_EQ(m.events_[1].depth, 1);
-    EXPECT_EQ(m.events_[2].depth, 2);
+    EXPECT_EQ(m.events()[0].depth, 0);
+    EXPECT_EQ(m.events()[1].depth, 1);
+    EXPECT_EQ(m.events()[2].depth, 2);
 
     auto stack = m.build_call_stack(2);
     ASSERT_EQ(stack.size(), 3u);
-    EXPECT_EQ(m.get_string(m.events_[stack[0]].name_idx), "grandparent");
-    EXPECT_EQ(m.get_string(m.events_[stack[1]].name_idx), "parent");
-    EXPECT_EQ(m.get_string(m.events_[stack[2]].name_idx), "child");
+    EXPECT_EQ(m.get_string(m.events()[stack[0]].name_idx), "grandparent");
+    EXPECT_EQ(m.get_string(m.events()[stack[1]].name_idx), "parent");
+    EXPECT_EQ(m.get_string(m.events()[stack[2]].name_idx), "child");
 }

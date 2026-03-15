@@ -12,18 +12,19 @@ float CounterTrackRenderer::render(ImDrawList* dl, ImVec2 area_min, float y_offs
 
     layouts_.clear();
 
-    for (const auto& series : model.counter_series_) {
+    for (const auto& series : model.counter_series()) {
         if (series.pid != pid) continue;
         if (series.points.empty()) continue;
 
-        float track_h = view.counter_track_height;
-        ImVec2 track_min(area_min.x + view.label_width, y_offset + total_height);
+        float track_h = view.counter_track_height();
+        ImVec2 track_min(area_min.x + view.label_width(), y_offset + total_height);
         ImVec2 track_max(area_min.x + width, y_offset + total_height + track_h);
 
         // Label
-        dl->AddRectFilled(ImVec2(area_min.x, track_min.y), ImVec2(area_min.x + view.label_width, track_max.y),
+        dl->AddRectFilled(ImVec2(area_min.x, track_min.y), ImVec2(area_min.x + view.label_width(), track_max.y),
                           IM_COL32(35, 35, 40, 255));
-        dl->PushClipRect(ImVec2(area_min.x, track_min.y), ImVec2(area_min.x + view.label_width - 5, track_max.y), true);
+        dl->PushClipRect(ImVec2(area_min.x, track_min.y), ImVec2(area_min.x + view.label_width() - 5, track_max.y),
+                         true);
         dl->AddText(ImVec2(area_min.x + 10, track_min.y + 2), IM_COL32(160, 180, 200, 255), series.name.c_str());
         dl->PopClipRect();
 
@@ -35,7 +36,7 @@ float CounterTrackRenderer::render(ImDrawList* dl, ImVec2 area_min, float y_offs
         render_series(dl, track_min, track_max, series, view, color);
         layouts_.push_back({&series, track_min, track_max});
 
-        total_height += track_h + view.track_padding;
+        total_height += track_h + view.track_padding();
         color_idx++;
     }
 
@@ -116,7 +117,7 @@ void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec
     };
 
     ImU32 fill_color = (color & 0x00FFFFFF) | 0x70000000;
-    auto segments = merge_counter_points(series.points, view.view_start_ts, view.view_end_ts, track_min.x, track_w);
+    auto segments = merge_counter_points(series.points, view.view_start_ts(), view.view_end_ts(), track_min.x, track_w);
 
     float prev_x = 0.0f;
     float prev_y = 0.0f;

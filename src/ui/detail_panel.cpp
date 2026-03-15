@@ -117,21 +117,21 @@ void DetailPanel::render_range_selection(const TraceModel& model, ViewState& vie
 
     // Defer expensive stats computation while actively drag-selecting;
     // only compute once the drag finishes.
-    if (!view.range_selecting &&
-        (cached_range_start_ != view.range_start_ts || cached_range_end_ != view.range_end_ts)) {
+    if (!view.range_selecting() &&
+        (cached_range_start_ != view.range_start_ts() || cached_range_end_ != view.range_end_ts())) {
         TRACE_SCOPE_CAT("ComputeRangeStats", "ui");
-        cached_range_start_ = view.range_start_ts;
-        cached_range_end_ = view.range_end_ts;
-        range_stats_ = compute_range_stats(model, view.range_start_ts, view.range_end_ts);
+        cached_range_start_ = view.range_start_ts();
+        cached_range_end_ = view.range_end_ts();
+        range_stats_ = compute_range_stats(model, view.range_start_ts(), view.range_end_ts());
     }
 
     // Always show the live range duration (cheap to compute)
     char time_buf[64];
-    double duration = view.range_end_ts - view.range_start_ts;
+    double duration = view.range_end_ts() - view.range_start_ts();
     format_time(duration, time_buf, sizeof(time_buf));
     ImGui::Text("Range Duration: %s", time_buf);
 
-    if (view.range_selecting) {
+    if (view.range_selecting()) {
         ImGui::TextDisabled("Selecting...");
         return;
     }
@@ -139,7 +139,7 @@ void DetailPanel::render_range_selection(const TraceModel& model, ViewState& vie
     ImGui::Text("Events in range: %u", range_stats_.total_events);
 
     if (ImGui::SmallButton("Zoom to Range")) {
-        view.zoom_to_fit(view.range_start_ts, view.range_end_ts);
+        view.zoom_to_fit(view.range_start_ts(), view.range_end_ts());
     }
     ImGui::SameLine();
     if (ImGui::SmallButton("Clear")) {
@@ -178,7 +178,7 @@ void DetailPanel::render_range_selection(const TraceModel& model, ViewState& vie
                 snprintf(id_buf, sizeof(id_buf), "##rs%d", i);
                 if (ImGui::Selectable(id_buf, false,
                                       ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
-                    view.navigate_to_event(s.longest_idx, model.events_[s.longest_idx]);
+                    view.navigate_to_event(s.longest_idx, model.events()[s.longest_idx]);
                 }
                 ImGui::SameLine();
                 ImGui::TextUnformatted(model.get_string(s.name_idx).c_str());
@@ -211,25 +211,25 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
     TRACE_SCOPE_CAT("Details", "ui");
     ImGui::Begin("Details");
 
-    if (view.has_range_selection) {
+    if (view.has_range_selection()) {
         if (ImGui::CollapsingHeader("Range Selection", ImGuiTreeNodeFlags_DefaultOpen)) {
             render_range_selection(model, view);
         }
         ImGui::Spacing();
     }
 
-    if (view.selected_event_idx < 0 || view.selected_event_idx >= (int32_t)model.events_.size()) {
+    if (view.selected_event_idx() < 0 || view.selected_event_idx() >= (int32_t)model.events().size()) {
         ImGui::TextDisabled("Click a slice in the timeline to see details.");
         ImGui::End();
         return;
     }
 
-    const auto& ev = model.events_[view.selected_event_idx];
+    const auto& ev = model.events()[view.selected_event_idx()];
 
     // Eagerly rebuild children cache so self/child time are available for duration display
     if (ev.dur > 0) {
-        if (cached_event_idx_ != view.selected_event_idx || cached_descendants_flag_ != include_all_descendants_) {
-            cached_event_idx_ = view.selected_event_idx;
+        if (cached_event_idx_ != view.selected_event_idx() || cached_descendants_flag_ != include_all_descendants_) {
+            cached_event_idx_ = view.selected_event_idx();
             cached_descendants_flag_ = include_all_descendants_;
             rebuild_children(model, ev);
             children_dirty_ = true;
@@ -296,11 +296,11 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
     // Parent button
     if (ev.depth > 0) {
-        int32_t parent_idx = model.find_parent_event(view.selected_event_idx);
+        int32_t parent_idx = model.find_parent_event(view.selected_event_idx());
         if (parent_idx >= 0) {
             ImGui::SameLine();
             if (ImGui::SmallButton("Parent")) {
-                view.navigate_to_event(parent_idx, model.events_[parent_idx]);
+                view.navigate_to_event(parent_idx, model.events()[parent_idx]);
             }
         }
     }
@@ -310,10 +310,10 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
     // --- Tab bar for Call Stack / Children / Arguments ---
     if (ImGui::BeginTabBar("##DetailTabs")) {
         // Call Stack tab — rebuild cache if selected event changed
-        if (cached_stack_event_idx_ != view.selected_event_idx) {
+        if (cached_stack_event_idx_ != view.selected_event_idx()) {
             TRACE_SCOPE_CAT("RebuildCallStack", "ui");
-            cached_stack_event_idx_ = view.selected_event_idx;
-            cached_call_stack_ = model.build_call_stack(view.selected_event_idx);
+            cached_stack_event_idx_ = view.selected_event_idx();
+            cached_call_stack_ = model.build_call_stack(view.selected_event_idx());
 
             // Collect all descendants of the selected event
             cached_stack_children_.clear();
@@ -322,7 +322,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
             if (ev.dur > 0) {
                 if (const auto* thread = model.find_thread(ev.pid, ev.tid)) {
                     for (uint32_t idx : thread->event_indices) {
-                        const auto& child = model.events_[idx];
+                        const auto& child = model.events()[idx];
                         if (child.ts >= ev.end_ts()) break;
                         if (child.depth > ev.depth && child.ts >= ev.ts && child.end_ts() <= ev.end_ts() &&
                             child.dur > 0) {
@@ -345,8 +345,8 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
             // Render ancestors and selected event
             for (int i = 0; i < (int)stack.size(); i++) {
                 uint32_t idx = stack[i];
-                const auto& frame = model.events_[idx];
-                bool is_selected = (idx == (uint32_t)view.selected_event_idx);
+                const auto& frame = model.events()[idx];
+                bool is_selected = (idx == (uint32_t)view.selected_event_idx());
 
                 char self_buf[64];
                 double self = model.compute_self_time(idx);
@@ -396,7 +396,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 {
                     int collapsed_depth = INT_MAX;
                     for (uint32_t idx : cached_stack_children_) {
-                        const auto& frame = model.events_[idx];
+                        const auto& frame = model.events()[idx];
                         if ((int)frame.depth <= collapsed_depth) collapsed_depth = INT_MAX;
                         if ((int)frame.depth > collapsed_depth) continue;
                         visible.push_back(idx);
@@ -416,7 +416,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 while (clipper.Step()) {
                     for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
                         uint32_t idx = visible[i];
-                        const auto& frame = model.events_[idx];
+                        const auto& frame = model.events()[idx];
 
                         bool has_children = stack_has_children_.count(idx) > 0;
                         bool is_collapsed = stack_collapsed_.count(idx) > 0;
@@ -482,7 +482,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 std::unordered_map<int, float> last_y_at_depth;
 
                 for (int i = 0; i < (int)visible.size(); i++) {
-                    const auto& frame = model.events_[visible[i]];
+                    const auto& frame = model.events()[visible[i]];
                     int vis_depth = (int)frame.depth + depth_offset;
                     int parent_depth = vis_depth - 1;
                     float row_y = list_start_y + row_height * (i + 0.4f);
@@ -513,11 +513,11 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
         // Children tab
         {
             // Re-check children cache in case Parent button changed selection
-            const auto& current_ev = model.events_[view.selected_event_idx];
+            const auto& current_ev = model.events()[view.selected_event_idx()];
             if (current_ev.dur > 0) {
-                if (cached_event_idx_ != view.selected_event_idx ||
+                if (cached_event_idx_ != view.selected_event_idx() ||
                     cached_descendants_flag_ != include_all_descendants_) {
-                    cached_event_idx_ = view.selected_event_idx;
+                    cached_event_idx_ = view.selected_event_idx();
                     cached_descendants_flag_ = include_all_descendants_;
                     rebuild_children(model, current_ev);
                     children_dirty_ = true;
@@ -566,17 +566,17 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
         // Arguments tab
         {
-            bool has_args = (ev.args_idx != UINT32_MAX && ev.args_idx < model.args_.size());
+            bool has_args = (ev.args_idx != UINT32_MAX && ev.args_idx < model.args().size());
             char args_label[32];
             snprintf(args_label, sizeof(args_label), "Arguments###Args");
             if (ImGui::BeginTabItem(args_label)) {
                 if (has_args) {
                     try {
-                        auto args = nlohmann::json::parse(model.args_[ev.args_idx]);
+                        auto args = nlohmann::json::parse(model.args()[ev.args_idx]);
                         render_json_value(args);
                     } catch (...) {
                         ImGui::TextDisabled("(could not parse args)");
-                        ImGui::TextWrapped("%s", model.args_[ev.args_idx].c_str());
+                        ImGui::TextWrapped("%s", model.args()[ev.args_idx].c_str());
                     }
                 } else {
                     ImGui::TextDisabled("No arguments.");
@@ -667,7 +667,7 @@ void DetailPanel::render_aggregated_table(const TraceModel& model, ViewState& vi
                 snprintf(id_buf, sizeof(id_buf), "##ag%d", i);
                 if (ImGui::Selectable(id_buf, false,
                                       ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
-                    view.navigate_to_event(ag.longest_idx, model.events_[ag.longest_idx]);
+                    view.navigate_to_event(ag.longest_idx, model.events()[ag.longest_idx]);
                 }
                 ImGui::SameLine();
                 ImGui::TextUnformatted(model.get_string(ag.name_idx).c_str());
@@ -760,10 +760,10 @@ void DetailPanel::render_children_table(const TraceModel& model, ViewState& view
                 ImGui::TableNextColumn();
                 char id_buf[32];
                 snprintf(id_buf, sizeof(id_buf), "##c%d", i);
-                bool is_selected = (view.selected_event_idx == (int32_t)c.event_idx);
+                bool is_selected = (view.selected_event_idx() == (int32_t)c.event_idx);
                 if (ImGui::Selectable(id_buf, is_selected,
                                       ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
-                    view.navigate_to_event(c.event_idx, model.events_[c.event_idx]);
+                    view.navigate_to_event(c.event_idx, model.events()[c.event_idx]);
                 }
                 ImGui::SameLine();
                 ImGui::TextUnformatted(model.get_string(c.name_idx).c_str());
@@ -790,7 +790,7 @@ void DetailPanel::rebuild_children(const TraceModel& model, const TraceEvent& ev
 
     if (const auto* thread = model.find_thread(ev.pid, ev.tid)) {
         for (uint32_t idx : thread->event_indices) {
-            const auto& child = model.events_[idx];
+            const auto& child = model.events()[idx];
             if (child.depth <= ev.depth) {
                 if (child.ts > ev.end_ts()) break;
                 continue;
@@ -834,7 +834,7 @@ void DetailPanel::rebuild_aggregated(const TraceModel& model, double parent_dur)
             ag.total_dur += c.dur;
             if (c.dur < ag.min_dur) ag.min_dur = c.dur;
             if (c.dur > ag.max_dur) ag.max_dur = c.dur;
-            if (c.dur > model.events_[ag.longest_idx].dur) {
+            if (c.dur > model.events()[ag.longest_idx].dur) {
                 ag.longest_idx = c.event_idx;
             }
         }

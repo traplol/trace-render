@@ -1,93 +1,152 @@
 #pragma once
 #include "model/trace_event.h"
 #include "imgui.h"
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
 #include <unordered_set>
 
-struct ViewState {
-    // Viewport in trace time (microseconds)
-    double view_start_ts = 0.0;
-    double view_end_ts = 1000.0;
+class ViewState {
+public:
+    // --- Viewport ---
+    double view_start_ts() const { return view_start_ts_; }
+    double view_end_ts() const { return view_end_ts_; }
+    void set_view_start_ts(double ts) { view_start_ts_ = ts; }
+    void set_view_end_ts(double ts) { view_end_ts_ = ts; }
+    void set_view_range(double start, double end) {
+        view_start_ts_ = start;
+        view_end_ts_ = end;
+    }
 
-    // Selection
-    int32_t selected_event_idx = -1;
-    int32_t pending_scroll_event_idx = -1;  // set by navigate_to_event, consumed by TimelineView
+    // --- Selection ---
+    int32_t selected_event_idx() const { return selected_event_idx_; }
+    void set_selected_event_idx(int32_t idx) { selected_event_idx_ = idx; }
+    int32_t pending_scroll_event_idx() const { return pending_scroll_event_idx_; }
+    void set_pending_scroll_event_idx(int32_t idx) { pending_scroll_event_idx_ = idx; }
 
-    // Range selection (drag on ruler)
-    bool has_range_selection = false;
-    bool range_selecting = false;  // true while actively drag-selecting
-    double range_start_ts = 0.0;
-    double range_end_ts = 0.0;
+    // --- Range selection ---
+    bool has_range_selection() const { return has_range_selection_; }
+    bool range_selecting() const { return range_selecting_; }
+    void set_range_selecting(bool v) { range_selecting_ = v; }
+    double range_start_ts() const { return range_start_ts_; }
+    double range_end_ts() const { return range_end_ts_; }
 
     void set_range_selection(double start, double end) {
-        has_range_selection = true;
-        range_start_ts = std::min(start, end);
-        range_end_ts = std::max(start, end);
+        has_range_selection_ = true;
+        range_start_ts_ = std::min(start, end);
+        range_end_ts_ = std::max(start, end);
     }
 
     void clear_range_selection() {
-        has_range_selection = false;
-        range_selecting = false;
-        range_start_ts = 0.0;
-        range_end_ts = 0.0;
+        has_range_selection_ = false;
+        range_selecting_ = false;
+        range_start_ts_ = 0.0;
+        range_end_ts_ = 0.0;
     }
 
-    // Filtering
-    std::unordered_set<uint32_t> hidden_pids;
-    std::unordered_set<uint32_t> hidden_tids;
-    std::unordered_set<uint32_t> hidden_cats;
+    // --- Filtering ---
+    const std::unordered_set<uint32_t>& hidden_pids() const { return hidden_pids_; }
+    const std::unordered_set<uint32_t>& hidden_tids() const { return hidden_tids_; }
+    const std::unordered_set<uint32_t>& hidden_cats() const { return hidden_cats_; }
+    void hide_pid(uint32_t pid) { hidden_pids_.insert(pid); }
+    void show_pid(uint32_t pid) { hidden_pids_.erase(pid); }
+    void hide_tid(uint32_t tid) { hidden_tids_.insert(tid); }
+    void show_tid(uint32_t tid) { hidden_tids_.erase(tid); }
+    void hide_cat(uint32_t cat) { hidden_cats_.insert(cat); }
+    void show_cat(uint32_t cat) { hidden_cats_.erase(cat); }
+    void clear_hidden_pids() { hidden_pids_.clear(); }
+    void clear_hidden_tids() { hidden_tids_.clear(); }
+    void clear_hidden_cats() { hidden_cats_.clear(); }
 
-    // Search
-    std::string search_query;
-    std::vector<uint32_t> search_results;
-    int32_t search_current = -1;
+    // --- Search ---
+    const std::string& search_query() const { return search_query_; }
+    void set_search_query(const std::string& q) { search_query_ = q; }
+    void clear_search_query() { search_query_.clear(); }
+    const std::vector<uint32_t>& search_results() const { return search_results_; }
+    void set_search_results(std::vector<uint32_t> results) { search_results_ = std::move(results); }
+    void add_search_result(uint32_t idx) { search_results_.push_back(idx); }
+    void clear_search_results() { search_results_.clear(); }
+    int32_t search_current() const { return search_current_; }
+    void set_search_current(int32_t idx) { search_current_ = idx; }
 
-    // Layout
-    float track_height = 54.0f;
-    float track_padding = 8.0f;
-    float counter_track_height = 175.0f;
-    float label_width = 221.0f;
-    float ruler_height = 37.0f;
-    float proc_header_height = 36.0f;
-    float scrollbar_scale = 1.3f;
+    // --- Layout ---
+    float track_height() const { return track_height_; }
+    void set_track_height(float h) { track_height_ = h; }
+    float track_padding() const { return track_padding_; }
+    void set_track_padding(float p) { track_padding_ = p; }
+    float counter_track_height() const { return counter_track_height_; }
+    void set_counter_track_height(float h) { counter_track_height_ = h; }
+    float label_width() const { return label_width_; }
+    void set_label_width(float w) { label_width_ = w; }
+    float ruler_height() const { return ruler_height_; }
+    void set_ruler_height(float h) { ruler_height_ = h; }
+    float proc_header_height() const { return proc_header_height_; }
+    void set_proc_header_height(float h) { proc_header_height_ = h; }
+    float scrollbar_scale() const { return scrollbar_scale_; }
+    void set_scrollbar_scale(float s) { scrollbar_scale_ = s; }
 
-    // Selection border color (RGBA)
-    float sel_border_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    // --- Selection border color ---
+    const std::array<float, 4>& sel_border_color() const { return sel_border_color_; }
+    void set_sel_border_color(const std::array<float, 4>& color) { sel_border_color_ = color; }
     ImU32 sel_border_color_u32() const {
-        return IM_COL32((int)(sel_border_color[0] * 255), (int)(sel_border_color[1] * 255),
-                        (int)(sel_border_color[2] * 255), (int)(sel_border_color[3] * 255));
+        return IM_COL32((int)(sel_border_color_[0] * 255), (int)(sel_border_color_[1] * 255),
+                        (int)(sel_border_color_[2] * 255), (int)(sel_border_color_[3] * 255));
     }
 
-    // Show flow arrows
-    bool show_flows = true;
+    // --- Misc ---
+    bool show_flows() const { return show_flows_; }
+    void set_show_flows(bool v) { show_flows_ = v; }
+    bool time_unit_ns() const { return time_unit_ns_; }
+    void set_time_unit_ns(bool v) { time_unit_ns_ = v; }
 
-    // Time unit: false = microseconds (default Chrome), true = nanoseconds
-    bool time_unit_ns = false;
-
+    // --- Coordinate conversion ---
     float time_to_x(double ts, float timeline_left, float timeline_width) const {
-        return timeline_left + (float)((ts - view_start_ts) / (view_end_ts - view_start_ts)) * timeline_width;
+        return timeline_left + (float)((ts - view_start_ts_) / (view_end_ts_ - view_start_ts_)) * timeline_width;
     }
 
     double x_to_time(float x, float timeline_left, float timeline_width) const {
-        return view_start_ts + (double)(x - timeline_left) / timeline_width * (view_end_ts - view_start_ts);
+        return view_start_ts_ + (double)(x - timeline_left) / timeline_width * (view_end_ts_ - view_start_ts_);
     }
 
     void zoom_to_fit(double min_ts, double max_ts) {
         double padding = (max_ts - min_ts) * 0.02;
-        view_start_ts = min_ts - padding;
-        view_end_ts = max_ts + padding;
+        view_start_ts_ = min_ts - padding;
+        view_end_ts_ = max_ts + padding;
     }
 
     // Select an event and zoom the viewport to show it.
-    // pad_factor controls how much surrounding context is shown (0.5 = tight, 2.0 = wide).
-    // min_pad_us is the minimum padding in microseconds (prevents over-zoom on tiny events).
     void navigate_to_event(int32_t ev_idx, const TraceEvent& ev, double pad_factor = 0.5, double min_pad_us = 100.0) {
-        selected_event_idx = ev_idx;
-        pending_scroll_event_idx = ev_idx;
+        selected_event_idx_ = ev_idx;
+        pending_scroll_event_idx_ = ev_idx;
         double pad = std::max(ev.dur * pad_factor, min_pad_us);
-        view_start_ts = ev.ts - pad;
-        view_end_ts = ev.end_ts() + pad;
+        view_start_ts_ = ev.ts - pad;
+        view_end_ts_ = ev.end_ts() + pad;
     }
+
+private:
+    double view_start_ts_ = 0.0;
+    double view_end_ts_ = 1000.0;
+    int32_t selected_event_idx_ = -1;
+    int32_t pending_scroll_event_idx_ = -1;
+    bool has_range_selection_ = false;
+    bool range_selecting_ = false;
+    double range_start_ts_ = 0.0;
+    double range_end_ts_ = 0.0;
+    std::unordered_set<uint32_t> hidden_pids_;
+    std::unordered_set<uint32_t> hidden_tids_;
+    std::unordered_set<uint32_t> hidden_cats_;
+    std::string search_query_;
+    std::vector<uint32_t> search_results_;
+    int32_t search_current_ = -1;
+    float track_height_ = 54.0f;
+    float track_padding_ = 8.0f;
+    float counter_track_height_ = 175.0f;
+    float label_width_ = 221.0f;
+    float ruler_height_ = 37.0f;
+    float proc_header_height_ = 36.0f;
+    float scrollbar_scale_ = 1.3f;
+    std::array<float, 4> sel_border_color_ = {0.0f, 0.0f, 0.0f, 1.0f};
+    bool show_flows_ = true;
+    bool time_unit_ns_ = false;
 };

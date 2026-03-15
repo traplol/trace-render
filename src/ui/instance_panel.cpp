@@ -13,11 +13,11 @@ void InstancePanel::select_function_by_name(const std::string& name, const Trace
     instances_.clear();
     instance_cursor_ = -1;
 
-    auto it = model.string_map_.find(name);
-    if (it == model.string_map_.end()) return;
+    auto it = model.string_map().find(name);
+    if (it == model.string_map().end()) return;
 
-    auto ev_it = model.name_to_events_.find(it->second);
-    if (ev_it == model.name_to_events_.end()) return;
+    auto ev_it = model.name_to_events().find(it->second);
+    if (ev_it == model.name_to_events().end()) return;
 
     instances_ = ev_it->second;  // already sorted by timestamp
 }
@@ -26,14 +26,14 @@ void InstancePanel::navigate_to_instance(int32_t idx, const TraceModel& model, V
     if (idx < 0 || idx >= (int32_t)instances_.size()) return;
     instance_cursor_ = idx;
     uint32_t ev_idx = instances_[idx];
-    view.navigate_to_event(ev_idx, model.events_[ev_idx]);
+    view.navigate_to_event(ev_idx, model.events()[ev_idx]);
 }
 
 void InstancePanel::render(const TraceModel& model, ViewState& view) {
     TRACE_SCOPE_CAT("Instances", "ui");
     ImGui::Begin("Instances");
 
-    if (model.events_.empty()) {
+    if (model.events().empty()) {
         ImGui::TextDisabled("No trace loaded.");
         ImGui::End();
         return;
@@ -42,9 +42,9 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
     // Track external selection changes
     {
         TRACE_SCOPE_CAT("TrackSelection", "ui");
-        if (view.selected_event_idx != last_selected_event_ && view.selected_event_idx >= 0) {
-            last_selected_event_ = view.selected_event_idx;
-            const auto& ev = model.events_[view.selected_event_idx];
+        if (view.selected_event_idx() != last_selected_event_ && view.selected_event_idx() >= 0) {
+            last_selected_event_ = view.selected_event_idx();
+            const auto& ev = model.events()[view.selected_event_idx()];
             if (!ev.is_end_event && ev.ph != Phase::Metadata && ev.ph != Phase::Counter) {
                 const std::string& name = model.get_string(ev.name_idx);
                 if (selected_name_ != name) {
@@ -53,7 +53,7 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                 }
                 scroll_to_cursor_ = true;
             }
-        } else if (view.selected_event_idx < 0 && last_selected_event_ >= 0) {
+        } else if (view.selected_event_idx() < 0 && last_selected_event_ >= 0) {
             last_selected_event_ = -1;
         }
     }
@@ -101,8 +101,8 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                         const auto& spec = sort_specs->Specs[0];
                         bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
                         std::sort(instances_.begin(), instances_.end(), [&](uint32_t a_idx, uint32_t b_idx) {
-                            const auto& a = model.events_[a_idx];
-                            const auto& b = model.events_[b_idx];
+                            const auto& a = model.events()[a_idx];
+                            const auto& b = model.events()[b_idx];
                             int cmp = 0;
                             switch (spec.ColumnUserID) {
                                 case 1:
@@ -119,10 +119,10 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                         });
                     }
                     // Re-find cursor after sort
-                    if (view.selected_event_idx >= 0) {
+                    if (view.selected_event_idx() >= 0) {
                         instance_cursor_ = -1;
                         for (int i = 0; i < (int)instances_.size(); i++) {
-                            if (instances_[i] == (uint32_t)view.selected_event_idx) {
+                            if (instances_[i] == (uint32_t)view.selected_event_idx()) {
                                 instance_cursor_ = i;
                                 break;
                             }
@@ -142,7 +142,7 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
         while (clipper.Step()) {
             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
                 uint32_t ev_idx = instances_[i];
-                const auto& ev = model.events_[ev_idx];
+                const auto& ev = model.events()[ev_idx];
 
                 ImGui::TableNextRow();
 

@@ -8,13 +8,13 @@ RangeStats compute_range_stats(const TraceModel& model, double start_ts, double 
 
     std::unordered_map<uint32_t, size_t> name_to_idx;
 
-    for (const auto& proc : model.processes_) {
+    for (const auto& proc : model.processes()) {
         for (const auto& thread : proc.threads) {
             std::vector<uint32_t> candidates;
             model.query_visible(thread, start_ts, end_ts, candidates);
 
             for (uint32_t idx : candidates) {
-                const auto& ev = model.events_[idx];
+                const auto& ev = model.events()[idx];
                 if (ev.is_end_event) continue;
                 if (ev.dur <= 0) continue;
 
@@ -37,7 +37,7 @@ RangeStats compute_range_stats(const TraceModel& model, double start_ts, double 
                     if (contribution < s.min_dur) s.min_dur = contribution;
                     if (contribution > s.max_dur) s.max_dur = contribution;
                     // Track longest by actual event duration, not clamped contribution
-                    if (ev.dur > model.events_[s.longest_idx].dur) {
+                    if (ev.dur > model.events()[s.longest_idx].dur) {
                         s.longest_idx = idx;
                     }
                 }

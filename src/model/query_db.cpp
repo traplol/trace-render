@@ -82,9 +82,9 @@ void QueryDb::load(const TraceModel& model, std::function<void(float)> on_progre
         sqlite3_stmt* stmt = nullptr;
         sqlite3_prepare_v2(db_, "INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?)", -1, &stmt, nullptr);
 
-        uint32_t event_count = (uint32_t)model.events_.size();
+        uint32_t event_count = (uint32_t)model.events().size();
         for (uint32_t i = 0; i < event_count; i++) {
-            const auto& ev = model.events_[i];
+            const auto& ev = model.events()[i];
             if (ev.is_end_event) continue;
 
             const auto& name = model.get_string(ev.name_idx);
@@ -119,7 +119,7 @@ void QueryDb::load(const TraceModel& model, std::function<void(float)> on_progre
         sqlite3_stmt* stmt = nullptr;
         sqlite3_prepare_v2(db_, "INSERT INTO processes VALUES (?,?)", -1, &stmt, nullptr);
 
-        for (const auto& proc : model.processes_) {
+        for (const auto& proc : model.processes()) {
             sqlite3_bind_int(stmt, 1, proc.pid);
             sqlite3_bind_text(stmt, 2, proc.name.c_str(), -1, SQLITE_TRANSIENT);
             sqlite3_step(stmt);
@@ -129,7 +129,7 @@ void QueryDb::load(const TraceModel& model, std::function<void(float)> on_progre
 
         sqlite3_prepare_v2(db_, "INSERT INTO threads VALUES (?,?,?)", -1, &stmt, nullptr);
 
-        for (const auto& proc : model.processes_) {
+        for (const auto& proc : model.processes()) {
             for (const auto& thread : proc.threads) {
                 sqlite3_bind_int(stmt, 1, thread.tid);
                 sqlite3_bind_int(stmt, 2, proc.pid);
@@ -147,7 +147,7 @@ void QueryDb::load(const TraceModel& model, std::function<void(float)> on_progre
         sqlite3_stmt* stmt = nullptr;
         sqlite3_prepare_v2(db_, "INSERT INTO counters VALUES (?,?,?,?)", -1, &stmt, nullptr);
 
-        for (const auto& cs : model.counter_series_) {
+        for (const auto& cs : model.counter_series()) {
             for (const auto& pt : cs.points) {
                 sqlite3_bind_int(stmt, 1, cs.pid);
                 sqlite3_bind_text(stmt, 2, cs.name.c_str(), -1, SQLITE_TRANSIENT);
