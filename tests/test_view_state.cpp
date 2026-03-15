@@ -5,16 +5,16 @@
 
 TEST(ViewState, DefaultValues) {
     ViewState vs;
-    EXPECT_DOUBLE_EQ(vs.view_start_ts, 0.0);
-    EXPECT_DOUBLE_EQ(vs.view_end_ts, 1000.0);
-    EXPECT_EQ(vs.selected_event_idx, -1);
-    EXPECT_TRUE(vs.show_flows);
+    EXPECT_DOUBLE_EQ(vs.view_start_ts(), 0.0);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts(), 1000.0);
+    EXPECT_EQ(vs.selected_event_idx(), -1);
+    EXPECT_TRUE(vs.show_flows());
 }
 
 TEST(ViewState, TimeToX) {
     ViewState vs;
-    vs.view_start_ts = 0.0;
-    vs.view_end_ts = 1000.0;
+    vs.set_view_start_ts(0.0);
+    vs.set_view_end_ts(1000.0);
 
     // Midpoint of viewport should map to midpoint of pixel range
     float x = vs.time_to_x(500.0, 0.0f, 800.0f);
@@ -31,8 +31,8 @@ TEST(ViewState, TimeToX) {
 
 TEST(ViewState, TimeToXWithOffset) {
     ViewState vs;
-    vs.view_start_ts = 0.0;
-    vs.view_end_ts = 1000.0;
+    vs.set_view_start_ts(0.0);
+    vs.set_view_end_ts(1000.0);
 
     float x = vs.time_to_x(500.0, 200.0f, 800.0f);
     EXPECT_FLOAT_EQ(x, 600.0f);  // 200 + 400
@@ -40,8 +40,8 @@ TEST(ViewState, TimeToXWithOffset) {
 
 TEST(ViewState, XToTime) {
     ViewState vs;
-    vs.view_start_ts = 0.0;
-    vs.view_end_ts = 1000.0;
+    vs.set_view_start_ts(0.0);
+    vs.set_view_end_ts(1000.0);
 
     double t = vs.x_to_time(400.0f, 0.0f, 800.0f);
     EXPECT_DOUBLE_EQ(t, 500.0);
@@ -49,8 +49,8 @@ TEST(ViewState, XToTime) {
 
 TEST(ViewState, TimeToXRoundTrip) {
     ViewState vs;
-    vs.view_start_ts = 12345.0;
-    vs.view_end_ts = 67890.0;
+    vs.set_view_start_ts(12345.0);
+    vs.set_view_end_ts(67890.0);
 
     double original_time = 40000.0;
     float x = vs.time_to_x(original_time, 100.0f, 1000.0f);
@@ -66,8 +66,8 @@ TEST(ViewState, ZoomToFit) {
     // Should add 2% padding on each side
     double range = 500.0 - 100.0;
     double padding = range * 0.02;
-    EXPECT_DOUBLE_EQ(vs.view_start_ts, 100.0 - padding);
-    EXPECT_DOUBLE_EQ(vs.view_end_ts, 500.0 + padding);
+    EXPECT_DOUBLE_EQ(vs.view_start_ts(), 100.0 - padding);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts(), 500.0 + padding);
 }
 
 TEST(ViewState, NavigateToEvent) {
@@ -78,11 +78,11 @@ TEST(ViewState, NavigateToEvent) {
 
     vs.navigate_to_event(42, ev);
 
-    EXPECT_EQ(vs.selected_event_idx, 42);
-    EXPECT_EQ(vs.pending_scroll_event_idx, 42);
+    EXPECT_EQ(vs.selected_event_idx(), 42);
+    EXPECT_EQ(vs.pending_scroll_event_idx(), 42);
     // pad = max(200 * 0.5, 100) = 100
-    EXPECT_DOUBLE_EQ(vs.view_start_ts, 1000.0 - 100.0);
-    EXPECT_DOUBLE_EQ(vs.view_end_ts, 1200.0 + 100.0);
+    EXPECT_DOUBLE_EQ(vs.view_start_ts(), 1000.0 - 100.0);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts(), 1200.0 + 100.0);
 }
 
 TEST(ViewState, NavigateToEventCustomPadding) {
@@ -93,10 +93,10 @@ TEST(ViewState, NavigateToEventCustomPadding) {
 
     vs.navigate_to_event(7, ev, 2.0, 1000.0);
 
-    EXPECT_EQ(vs.selected_event_idx, 7);
+    EXPECT_EQ(vs.selected_event_idx(), 7);
     // pad = max(100 * 2.0, 1000) = 1000
-    EXPECT_DOUBLE_EQ(vs.view_start_ts, 5000.0 - 1000.0);
-    EXPECT_DOUBLE_EQ(vs.view_end_ts, 5100.0 + 1000.0);
+    EXPECT_DOUBLE_EQ(vs.view_start_ts(), 5000.0 - 1000.0);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts(), 5100.0 + 1000.0);
 }
 
 TEST(ViewState, NavigateToEventMinPadPreventsOverZoom) {
@@ -108,26 +108,26 @@ TEST(ViewState, NavigateToEventMinPadPreventsOverZoom) {
     vs.navigate_to_event(3, ev);
 
     // pad = max(0 * 0.5, 100) = 100 (min_pad prevents zero-width viewport)
-    EXPECT_DOUBLE_EQ(vs.view_start_ts, 400.0);
-    EXPECT_DOUBLE_EQ(vs.view_end_ts, 600.0);
+    EXPECT_DOUBLE_EQ(vs.view_start_ts(), 400.0);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts(), 600.0);
 }
 
 // --- Range Selection ---
 
 TEST(ViewState, RangeSelectionDefaults) {
     ViewState vs;
-    EXPECT_FALSE(vs.has_range_selection);
-    EXPECT_DOUBLE_EQ(vs.range_start_ts, 0.0);
-    EXPECT_DOUBLE_EQ(vs.range_end_ts, 0.0);
+    EXPECT_FALSE(vs.has_range_selection());
+    EXPECT_DOUBLE_EQ(vs.range_start_ts(), 0.0);
+    EXPECT_DOUBLE_EQ(vs.range_end_ts(), 0.0);
 }
 
 TEST(ViewState, SetRangeSelection) {
     ViewState vs;
     vs.set_range_selection(100.0, 500.0);
 
-    EXPECT_TRUE(vs.has_range_selection);
-    EXPECT_DOUBLE_EQ(vs.range_start_ts, 100.0);
-    EXPECT_DOUBLE_EQ(vs.range_end_ts, 500.0);
+    EXPECT_TRUE(vs.has_range_selection());
+    EXPECT_DOUBLE_EQ(vs.range_start_ts(), 100.0);
+    EXPECT_DOUBLE_EQ(vs.range_end_ts(), 500.0);
 }
 
 TEST(ViewState, SetRangeSelectionNormalizesOrder) {
@@ -135,9 +135,9 @@ TEST(ViewState, SetRangeSelectionNormalizesOrder) {
     // Drag right-to-left: end < start
     vs.set_range_selection(500.0, 100.0);
 
-    EXPECT_TRUE(vs.has_range_selection);
-    EXPECT_DOUBLE_EQ(vs.range_start_ts, 100.0);
-    EXPECT_DOUBLE_EQ(vs.range_end_ts, 500.0);
+    EXPECT_TRUE(vs.has_range_selection());
+    EXPECT_DOUBLE_EQ(vs.range_start_ts(), 100.0);
+    EXPECT_DOUBLE_EQ(vs.range_end_ts(), 500.0);
 }
 
 TEST(ViewState, ClearRangeSelection) {
@@ -145,9 +145,9 @@ TEST(ViewState, ClearRangeSelection) {
     vs.set_range_selection(100.0, 500.0);
     vs.clear_range_selection();
 
-    EXPECT_FALSE(vs.has_range_selection);
-    EXPECT_DOUBLE_EQ(vs.range_start_ts, 0.0);
-    EXPECT_DOUBLE_EQ(vs.range_end_ts, 0.0);
+    EXPECT_FALSE(vs.has_range_selection());
+    EXPECT_DOUBLE_EQ(vs.range_start_ts(), 0.0);
+    EXPECT_DOUBLE_EQ(vs.range_end_ts(), 0.0);
 }
 
 // --- Range Stats ---
@@ -170,7 +170,7 @@ static TraceModel make_range_test_model() {
     e0.name_idx = name_a;
     e0.cat_idx = cat;
     e0.ph = Phase::Complete;
-    model.events_.push_back(e0);
+    model.add_event(e0);
     thread.event_indices.push_back(0);
 
     // FuncB: 200-400 (dur=200)
@@ -182,7 +182,7 @@ static TraceModel make_range_test_model() {
     e1.name_idx = name_b;
     e1.cat_idx = cat;
     e1.ph = Phase::Complete;
-    model.events_.push_back(e1);
+    model.add_event(e1);
     thread.event_indices.push_back(1);
 
     // FuncA: 500-600 (dur=100)
@@ -194,11 +194,9 @@ static TraceModel make_range_test_model() {
     e2.name_idx = name_a;
     e2.cat_idx = cat;
     e2.ph = Phase::Complete;
-    model.events_.push_back(e2);
+    model.add_event(e2);
     thread.event_indices.push_back(2);
 
-    model.min_ts_ = 100.0;
-    model.max_ts_ = 600.0;
     model.build_index();
     return model;
 }
@@ -268,5 +266,5 @@ TEST(RangeStats, LongestIdxTracksByActualDuration) {
     EXPECT_EQ(model.get_string(func_a->name_idx), "FuncA");
     // Event 0 has dur=200, event 2 has dur=100 — longest_idx should be event 0
     EXPECT_EQ(func_a->longest_idx, 0u);
-    EXPECT_DOUBLE_EQ(model.events_[func_a->longest_idx].dur, 200.0);
+    EXPECT_DOUBLE_EQ(model.events()[func_a->longest_idx].dur, 200.0);
 }

@@ -15,7 +15,7 @@ struct FileLoader::Impl {
     TraceModel model;
 
     void setup_progress(TraceParser& parser) {
-        parser.on_progress = [this](const char* ph, float p) {
+        parser.set_on_progress([this](const char* ph, float p) {
             phase_str = ph;
             phase_progress_ = p;
 
@@ -30,7 +30,7 @@ struct FileLoader::Impl {
                 global = 0.80f + p * 0.20f;
             }
             progress_ = global;
-        };
+        });
     }
 };
 
@@ -50,7 +50,7 @@ void FileLoader::load_file(const std::string& path, bool time_ns, QueryDb* query
     impl_->error_.clear();
 
     TraceParser parser;
-    parser.time_unit_ns = time_ns;
+    parser.set_time_unit_ns(time_ns);
     impl_->setup_progress(parser);
 
     TRACE_SCOPE_CAT("OpenFile", "io");
@@ -71,7 +71,7 @@ void FileLoader::load_file(const std::string& path, bool time_ns, QueryDb* query
         impl_->success_ = true;
     } else {
         impl_->success_ = false;
-        impl_->error_ = parser.error_message;
+        impl_->error_ = parser.error_message();
     }
     impl_->finished = true;
 }
@@ -87,7 +87,7 @@ void FileLoader::load_buffer(std::vector<char> data, const std::string& filename
     impl_->error_.clear();
 
     TraceParser parser;
-    parser.time_unit_ns = time_ns;
+    parser.set_time_unit_ns(time_ns);
     impl_->setup_progress(parser);
 
     TRACE_SCOPE_CAT("OpenBuffer", "io");
@@ -108,7 +108,7 @@ void FileLoader::load_buffer(std::vector<char> data, const std::string& filename
         impl_->success_ = true;
     } else {
         impl_->success_ = false;
-        impl_->error_ = parser.error_message;
+        impl_->error_ = parser.error_message();
     }
     impl_->finished = true;
 }

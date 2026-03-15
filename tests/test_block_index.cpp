@@ -20,7 +20,7 @@ protected:
 
 TEST_F(BlockIndexTest, EmptyIndex) {
     index.build(indices, events);
-    EXPECT_TRUE(index.blocks.empty());
+    EXPECT_TRUE(index.blocks().empty());
 
     std::vector<uint32_t> result;
     index.query(0.0, 1000.0, indices, events, result);
@@ -31,9 +31,9 @@ TEST_F(BlockIndexTest, SingleEvent) {
     add_event(100.0, 50.0);
     index.build(indices, events);
 
-    ASSERT_EQ(index.blocks.size(), 1u);
-    EXPECT_DOUBLE_EQ(index.blocks[0].min_ts, 100.0);
-    EXPECT_DOUBLE_EQ(index.blocks[0].max_end_ts, 150.0);
+    ASSERT_EQ(index.blocks().size(), 1u);
+    EXPECT_DOUBLE_EQ(index.blocks()[0].min_ts, 100.0);
+    EXPECT_DOUBLE_EQ(index.blocks()[0].max_end_ts, 150.0);
 
     std::vector<uint32_t> result;
     index.query(0.0, 200.0, indices, events, result);
@@ -77,9 +77,9 @@ TEST_F(BlockIndexTest, MultipleBlocks) {
     }
     index.build(indices, events);
 
-    EXPECT_EQ(index.blocks.size(), 2u);
-    EXPECT_EQ(index.blocks[0].count, 256u);
-    EXPECT_EQ(index.blocks[1].count, 44u);
+    EXPECT_EQ(index.blocks().size(), 2u);
+    EXPECT_EQ(index.blocks()[0].count, 256u);
+    EXPECT_EQ(index.blocks()[1].count, 44u);
 
     // Query a small range that only hits the second block
     std::vector<uint32_t> result;
@@ -115,14 +115,14 @@ TEST_F(BlockIndexTest, LongEventSpanningLaterBlocks) {
     }
 
     index.build(indices, events);
-    ASSERT_EQ(index.blocks.size(), 2u);
+    ASSERT_EQ(index.blocks().size(), 2u);
 
     // Block 0's max_end_ts should be 5000 (from the long event)
-    EXPECT_DOUBLE_EQ(index.blocks[0].max_end_ts, 5000.0);
+    EXPECT_DOUBLE_EQ(index.blocks()[0].max_end_ts, 5000.0);
 
     // Block 1's max_end_ts should be propagated up to at least 5000
     // (monotonic guarantee for binary search correctness)
-    EXPECT_GE(index.blocks[1].max_end_ts, index.blocks[0].max_end_ts);
+    EXPECT_GE(index.blocks()[1].max_end_ts, index.blocks()[0].max_end_ts);
 
     // Query a range that only the long event covers — must not be missed
     std::vector<uint32_t> result;

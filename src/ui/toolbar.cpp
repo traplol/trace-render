@@ -19,11 +19,14 @@ void Toolbar::render(const TraceModel& model, ViewState& view, float rss_mb) {
         }
         if (ImGui::BeginMenu("View")) {
             if (ImGui::MenuItem("Zoom to Fit", "F")) {
-                if (model.min_ts_ < model.max_ts_) {
-                    view.zoom_to_fit(model.min_ts_, model.max_ts_);
+                if (model.min_ts() < model.max_ts()) {
+                    view.zoom_to_fit(model.min_ts(), model.max_ts());
                 }
             }
-            ImGui::MenuItem("Show Flow Arrows", nullptr, &view.show_flows);
+            {
+                bool show = view.show_flows();
+                if (ImGui::MenuItem("Show Flow Arrows", nullptr, &show)) view.set_show_flows(show);
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Settings...", "Ctrl+,")) {
                 settings_requested_ = true;

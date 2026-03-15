@@ -71,57 +71,57 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
         ImGui::PlotLines("##memory", memory_history_, HISTORY_SIZE, history_idx_, mem_overlay, 0.0f, max_mem,
                          ImVec2(-1, 50));
 
-        if (!model.events_.empty()) {
+        if (!model.events().empty()) {
             ImGui::Separator();
             ImGui::TextDisabled("Trace Data");
 
-            size_t events_bytes = model.events_.size() * sizeof(TraceEvent);
+            size_t events_bytes = model.events().size() * sizeof(TraceEvent);
             char ev_str[32];
             format_bytes(events_bytes, ev_str, sizeof(ev_str));
-            ImGui::Text("Events: %s (%zu events)", ev_str, model.events_.size());
+            ImGui::Text("Events: %s (%zu events)", ev_str, model.events().size());
 
             size_t strings_bytes = 0;
-            for (const auto& s : model.strings_) strings_bytes += s.capacity();
+            for (const auto& s : model.strings()) strings_bytes += s.capacity();
             char str_str[32];
             format_bytes(strings_bytes, str_str, sizeof(str_str));
-            ImGui::Text("String pool: %s (%zu strings)", str_str, model.strings_.size());
+            ImGui::Text("String pool: %s (%zu strings)", str_str, model.strings().size());
 
             size_t args_bytes = 0;
-            for (const auto& a : model.args_) args_bytes += a.capacity();
+            for (const auto& a : model.args()) args_bytes += a.capacity();
             char args_str[32];
             format_bytes(args_bytes, args_str, sizeof(args_str));
-            ImGui::Text("Args pool: %s (%zu entries)", args_str, model.args_.size());
+            ImGui::Text("Args pool: %s (%zu entries)", args_str, model.args().size());
 
             size_t counter_points = 0;
-            for (const auto& cs : model.counter_series_) counter_points += cs.points.size();
-            ImGui::Text("Counter series: %zu (%zu points)", model.counter_series_.size(), counter_points);
+            for (const auto& cs : model.counter_series()) counter_points += cs.points.size();
+            ImGui::Text("Counter series: %zu (%zu points)", model.counter_series().size(), counter_points);
 
-            ImGui::Text("Flow groups: %zu", model.flow_groups_.size());
+            ImGui::Text("Flow groups: %zu", model.flow_groups().size());
         }
     }
 
     // Trace overview
-    if (!model.events_.empty() && ImGui::CollapsingHeader("Trace Overview", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Text("Processes: %zu", model.processes_.size());
+    if (!model.events().empty() && ImGui::CollapsingHeader("Trace Overview", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Processes: %zu", model.processes().size());
         int total_threads = 0;
-        for (const auto& proc : model.processes_) total_threads += (int)proc.threads.size();
+        for (const auto& proc : model.processes()) total_threads += (int)proc.threads.size();
         ImGui::Text("Threads: %d", total_threads);
-        ImGui::Text("Total events: %zu", model.events_.size());
+        ImGui::Text("Total events: %zu", model.events().size());
 
         char dur_buf[64];
-        double trace_dur = model.max_ts_ - model.min_ts_;
+        double trace_dur = model.max_ts() - model.min_ts();
         format_time(trace_dur, dur_buf, sizeof(dur_buf));
         ImGui::Text("Trace duration: %s", dur_buf);
     }
 
     // Viewport / render stats
-    if (!model.events_.empty() && ImGui::CollapsingHeader("Render Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
-        double view_dur = view.view_end_ts - view.view_start_ts;
+    if (!model.events().empty() && ImGui::CollapsingHeader("Render Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+        double view_dur = view.view_end_ts() - view.view_start_ts();
         char vd_buf[64];
         format_time(view_dur, vd_buf, sizeof(vd_buf));
         ImGui::Text("Viewport span: %s", vd_buf);
 
-        double total_dur = model.max_ts_ - model.min_ts_;
+        double total_dur = model.max_ts() - model.min_ts();
         if (total_dur > 0.0) {
             ImGui::Text("Zoom level: %.1fx", total_dur / view_dur);
         }

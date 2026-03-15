@@ -5,7 +5,9 @@ Chrome JSON trace format parser (SAX streaming, no full DOM).
 ```
 bool parse(const std::string& filepath, TraceModel& model);
 bool parse_buffer(const char* data, size_t size, TraceModel& model);
-std::function<void(const char* phase, float progress)> on_progress;
-std::string error_message;
-bool time_unit_ns = false;
+const std::function<void(const char*, float)>& on_progress() const;
+void set_on_progress(std::function<void(const char*, float)> cb);
+const std::string& error_message() const;
+bool time_unit_ns() const;
+void set_time_unit_ns(bool ns);
 ```

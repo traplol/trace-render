@@ -13,10 +13,10 @@ using json = nlohmann::json;
 
 // Try common field names for source file and line in event args
 bool extract_source_location(const TraceModel& model, const TraceEvent& ev, std::string& file, int& line) {
-    if (ev.args_idx == UINT32_MAX || ev.args_idx >= model.args_.size()) return false;
+    if (ev.args_idx == UINT32_MAX || ev.args_idx >= model.args().size()) return false;
 
     try {
-        auto args = json::parse(model.args_[ev.args_idx]);
+        auto args = json::parse(model.args()[ev.args_idx]);
 
         // Try common file field names
         static const char* file_keys[] = {"file", "src_file", "fileName", "source_file", "src", "filename"};
@@ -196,18 +196,18 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
 
     ImGui::Separator();
 
-    if (view.selected_event_idx < 0 || view.selected_event_idx >= (int32_t)model.events_.size()) {
+    if (view.selected_event_idx() < 0 || view.selected_event_idx() >= (int32_t)model.events().size()) {
         ImGui::TextDisabled("Select an event to view source code.");
         ImGui::End();
         return;
     }
 
-    bool selection_changed = (cached_event_idx_ != view.selected_event_idx);
+    bool selection_changed = (cached_event_idx_ != view.selected_event_idx());
 
     // Check if selection or path settings changed
     if (selection_changed) {
-        cached_event_idx_ = view.selected_event_idx;
-        const auto& ev = model.events_[view.selected_event_idx];
+        cached_event_idx_ = view.selected_event_idx();
+        const auto& ev = model.events()[view.selected_event_idx()];
 
         std::string file;
         int line = -1;

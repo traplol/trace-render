@@ -30,13 +30,13 @@ void App::shutdown() {
 
 void App::open_file(const std::string& path) {
     if (loader_.is_loading()) return;
-    loader_.load_file(path, view_.time_unit_ns, &query_db_);
+    loader_.load_file(path, view_.time_unit_ns(), &query_db_);
     status_message_ = "Loading: " + loader_.filename();
 }
 
 void App::open_buffer(std::vector<char> data, const std::string& filename) {
     if (loader_.is_loading()) return;
-    loader_.load_buffer(std::move(data), filename, view_.time_unit_ns, &query_db_);
+    loader_.load_buffer(std::move(data), filename, view_.time_unit_ns(), &query_db_);
     status_message_ = "Loading: " + loader_.filename();
 }
 
@@ -45,20 +45,20 @@ void App::finish_load() {
     if (loader_.success()) {
         model_ = loader_.take_model();
         has_trace_ = true;
-        view_.view_start_ts = 0.0;
-        view_.view_end_ts = 1000.0;
-        view_.selected_event_idx = -1;
-        view_.hidden_pids.clear();
-        view_.hidden_tids.clear();
-        view_.hidden_cats.clear();
-        view_.search_query.clear();
-        view_.search_results.clear();
-        view_.search_current = -1;
-        if (model_.min_ts_ < model_.max_ts_) {
-            view_.zoom_to_fit(model_.min_ts_, model_.max_ts_);
+        view_.set_view_start_ts(0.0);
+        view_.set_view_end_ts(1000.0);
+        view_.set_selected_event_idx(-1);
+        view_.clear_hidden_pids();
+        view_.clear_hidden_tids();
+        view_.clear_hidden_cats();
+        view_.set_search_query("");
+        view_.mutable_search_results().clear();
+        view_.set_search_current(-1);
+        if (model_.min_ts() < model_.max_ts()) {
+            view_.zoom_to_fit(model_.min_ts(), model_.max_ts());
         }
-        status_message_ = "Loaded: " + loader_.filename() + " (" + std::to_string(model_.events_.size()) + " events, " +
-                          std::to_string(model_.processes_.size()) + " processes)";
+        status_message_ = "Loaded: " + loader_.filename() + " (" + std::to_string(model_.events().size()) +
+                          " events, " + std::to_string(model_.processes().size()) + " processes)";
         query_db_.create_indexes_async();
     } else {
         status_message_ = "Error: " + loader_.error();
@@ -295,9 +295,9 @@ void App::update() {
             ImGui::SameLine();
             ImGui::ProgressBar(query_db_.indexing_progress(), ImVec2(150, 0));
         }
-        if (has_trace_ && !loader_.is_loading() && view_.selected_event_idx >= 0) {
+        if (has_trace_ && !loader_.is_loading() && view_.selected_event_idx() >= 0) {
             ImGui::SameLine(ImGui::GetWindowWidth() - 900);
-            const auto& ev = model_.events_[view_.selected_event_idx];
+            const auto& ev = model_.events()[view_.selected_event_idx()];
             ImGui::Text("Selected: %s", model_.get_string(ev.name_idx).c_str());
         }
         ImGui::End();
@@ -323,18 +323,32 @@ void App::render_settings_modal() {
 
         ImGui::SeparatorText("Timeline Layout");
 
-        ImGui::SliderFloat("Track Height", &view_.track_height, 20.0f, 200.0f, "%.0f px");
-        ImGui::SliderFloat("Track Padding", &view_.track_padding, 0.0f, 30.0f, "%.0f px");
-        ImGui::SliderFloat("Counter Track Height", &view_.counter_track_height, 60.0f, 400.0f, "%.0f px");
-        ImGui::SliderFloat("Label Gutter Width", &view_.label_width, 100.0f, 1200.0f, "%.0f px");
-        ImGui::SliderFloat("Ruler Height", &view_.ruler_height, 15.0f, 120.0f, "%.0f px");
-        ImGui::SliderFloat("Process Header Height", &view_.proc_header_height, 10.0f, 80.0f, "%.0f px");
-        ImGui::SliderFloat("Scrollbar Scale", &view_.scrollbar_scale, 0.5f, 5.0f, "%.1f");
+        {
+            float v = view_.track_height();
+            if (ImGui::SliderFloat("Track Height", &v, 20.0f, 200.0f, "%.0f px")) view_.set_track_height(v);
+            v = view_.track_padding();
+            if (ImGui::SliderFloat("Track Padding", &v, 0.0f, 30.0f, "%.0f px")) view_.set_track_padding(v);
+            v = view_.counter_track_height();
+            if (ImGui::SliderFloat("Counter Track Height", &v, 60.0f, 400.0f, "%.0f px"))
+                view_.set_counter_track_height(v);
+            v = view_.label_width();
+            if (ImGui::SliderFloat("Label Gutter Width", &v, 100.0f, 1200.0f, "%.0f px")) view_.set_label_width(v);
+            v = view_.ruler_height();
+            if (ImGui::SliderFloat("Ruler Height", &v, 15.0f, 120.0f, "%.0f px")) view_.set_ruler_height(v);
+            v = view_.proc_header_height();
+            if (ImGui::SliderFloat("Process Header Height", &v, 10.0f, 80.0f, "%.0f px"))
+                view_.set_proc_header_height(v);
+            v = view_.scrollbar_scale();
+            if (ImGui::SliderFloat("Scrollbar Scale", &v, 0.5f, 5.0f, "%.1f")) view_.set_scrollbar_scale(v);
+        }
 
         ImGui::SeparatorText("Rendering");
 
-        ImGui::Checkbox("Show Flow Arrows", &view_.show_flows);
-        ImGui::ColorEdit4("Selection Border Color", view_.sel_border_color,
+        {
+            bool show = view_.show_flows();
+            if (ImGui::Checkbox("Show Flow Arrows", &show)) view_.set_show_flows(show);
+        }
+        ImGui::ColorEdit4("Selection Border Color", view_.mutable_sel_border_color(),
                           ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 
         if (platform::supports_vsync()) {
@@ -345,7 +359,10 @@ void App::render_settings_modal() {
 
         ImGui::SeparatorText("Parser");
 
-        ImGui::Checkbox("Interpret timestamps as nanoseconds", &view_.time_unit_ns);
+        {
+            bool ns = view_.time_unit_ns();
+            if (ImGui::Checkbox("Interpret timestamps as nanoseconds", &ns)) view_.set_time_unit_ns(ns);
+        }
         ImGui::SameLine();
         ImGui::TextDisabled("(reload file to apply)");
 
@@ -384,17 +401,17 @@ void App::save_settings() {
 
     nlohmann::json j;
     j["font_scale"] = ImGui::GetIO().FontGlobalScale;
-    j["track_height"] = view_.track_height;
-    j["track_padding"] = view_.track_padding;
-    j["counter_track_height"] = view_.counter_track_height;
-    j["label_width"] = view_.label_width;
-    j["show_flows"] = view_.show_flows;
-    j["time_unit_ns"] = view_.time_unit_ns;
-    j["ruler_height"] = view_.ruler_height;
-    j["proc_header_height"] = view_.proc_header_height;
-    j["scrollbar_scale"] = view_.scrollbar_scale;
-    j["sel_border_color"] = {view_.sel_border_color[0], view_.sel_border_color[1], view_.sel_border_color[2],
-                             view_.sel_border_color[3]};
+    j["track_height"] = view_.track_height();
+    j["track_padding"] = view_.track_padding();
+    j["counter_track_height"] = view_.counter_track_height();
+    j["label_width"] = view_.label_width();
+    j["show_flows"] = view_.show_flows();
+    j["time_unit_ns"] = view_.time_unit_ns();
+    j["ruler_height"] = view_.ruler_height();
+    j["proc_header_height"] = view_.proc_header_height();
+    j["scrollbar_scale"] = view_.scrollbar_scale();
+    j["sel_border_color"] = {view_.sel_border_color()[0], view_.sel_border_color()[1], view_.sel_border_color()[2],
+                             view_.sel_border_color()[3]};
     j["dark_theme"] = dark_theme_;
     j["vsync"] = vsync_;
     j["query_tabs"] = stats_.save_tabs();
@@ -418,18 +435,20 @@ void App::load_settings() {
         nlohmann::json j = nlohmann::json::parse(f);
 
         if (j.contains("font_scale")) ImGui::GetIO().FontGlobalScale = j["font_scale"].get<float>();
-        if (j.contains("track_height")) view_.track_height = j["track_height"].get<float>();
-        if (j.contains("track_padding")) view_.track_padding = j["track_padding"].get<float>();
-        if (j.contains("counter_track_height")) view_.counter_track_height = j["counter_track_height"].get<float>();
-        if (j.contains("label_width")) view_.label_width = j["label_width"].get<float>();
-        if (j.contains("show_flows")) view_.show_flows = j["show_flows"].get<bool>();
-        if (j.contains("time_unit_ns")) view_.time_unit_ns = j["time_unit_ns"].get<bool>();
-        if (j.contains("ruler_height")) view_.ruler_height = j["ruler_height"].get<float>();
-        if (j.contains("proc_header_height")) view_.proc_header_height = j["proc_header_height"].get<float>();
-        if (j.contains("scrollbar_scale")) view_.scrollbar_scale = j["scrollbar_scale"].get<float>();
+        if (j.contains("track_height")) view_.set_track_height(j["track_height"].get<float>());
+        if (j.contains("track_padding")) view_.set_track_padding(j["track_padding"].get<float>());
+        if (j.contains("counter_track_height")) view_.set_counter_track_height(j["counter_track_height"].get<float>());
+        if (j.contains("label_width")) view_.set_label_width(j["label_width"].get<float>());
+        if (j.contains("show_flows")) view_.set_show_flows(j["show_flows"].get<bool>());
+        if (j.contains("time_unit_ns")) view_.set_time_unit_ns(j["time_unit_ns"].get<bool>());
+        if (j.contains("ruler_height")) view_.set_ruler_height(j["ruler_height"].get<float>());
+        if (j.contains("proc_header_height")) view_.set_proc_header_height(j["proc_header_height"].get<float>());
+        if (j.contains("scrollbar_scale")) view_.set_scrollbar_scale(j["scrollbar_scale"].get<float>());
         if (j.contains("sel_border_color")) {
             auto& arr = j["sel_border_color"];
-            for (int i = 0; i < 4; i++) view_.sel_border_color[i] = arr[i].get<float>();
+            float col[4];
+            for (int i = 0; i < 4; i++) col[i] = arr[i].get<float>();
+            view_.set_sel_border_color(col);
         }
         if (j.contains("dark_theme")) {
             dark_theme_ = j["dark_theme"].get<bool>();

@@ -6,7 +6,8 @@
 #include <cfloat>
 #include <functional>
 
-struct BlockIndex {
+class BlockIndex {
+public:
     static constexpr size_t BLOCK_SIZE = 256;
 
     struct Block {
@@ -18,10 +19,10 @@ struct BlockIndex {
         uint32_t depth_mask;  // bitmask of depths present (bits 0-31)
     };
 
-    std::vector<Block> blocks;
+    const std::vector<Block>& blocks() const { return blocks_; }
 
     void build(const std::vector<uint32_t>& event_indices, const std::vector<TraceEvent>& events) {
-        blocks.clear();
+        blocks_.clear();
         if (event_indices.empty()) return;
 
         for (size_t i = 0; i < event_indices.size(); i += BLOCK_SIZE) {
@@ -42,29 +43,29 @@ struct BlockIndex {
             }
             // Propagate max_end_ts monotonically for binary search correctness
             blk.max_end_ts = blk.local_max_end_ts;
-            if (!blocks.empty()) {
-                blk.max_end_ts = std::max(blk.max_end_ts, blocks.back().max_end_ts);
+            if (!blocks_.empty()) {
+                blk.max_end_ts = std::max(blk.max_end_ts, blocks_.back().max_end_ts);
             }
-            blocks.push_back(blk);
+            blocks_.push_back(blk);
         }
     }
 
     void query(double start_ts, double end_ts, const std::vector<uint32_t>& event_indices,
                const std::vector<TraceEvent>& events, std::vector<uint32_t>& out) const {
-        if (blocks.empty()) return;
+        if (blocks_.empty()) return;
 
         // Binary search: find first block whose max_end_ts >= start_ts
-        size_t lo = 0, hi = blocks.size();
+        size_t lo = 0, hi = blocks_.size();
         while (lo < hi) {
             size_t mid = lo + (hi - lo) / 2;
-            if (blocks[mid].max_end_ts < start_ts)
+            if (blocks_[mid].max_end_ts < start_ts)
                 lo = mid + 1;
             else
                 hi = mid;
         }
 
-        for (size_t bi = lo; bi < blocks.size(); bi++) {
-            const auto& blk = blocks[bi];
+        for (size_t bi = lo; bi < blocks_.size(); bi++) {
+            const auto& blk = blocks_[bi];
             if (blk.min_ts > end_ts) break;
             if (blk.max_end_ts < start_ts) continue;
 
@@ -81,14 +82,17 @@ struct BlockIndex {
 
     // Find first block index overlapping [start_ts, end_ts] via binary search
     size_t find_first_block(double start_ts) const {
-        size_t lo = 0, hi = blocks.size();
+        size_t lo = 0, hi = blocks_.size();
         while (lo < hi) {
             size_t mid = lo + (hi - lo) / 2;
-            if (blocks[mid].max_end_ts < start_ts)
+            if (blocks_[mid].max_end_ts < start_ts)
                 lo = mid + 1;
             else
                 hi = mid;
         }
         return lo;
     }
+
+private:
+    std::vector<Block> blocks_;
 };

@@ -1,11 +1,43 @@
 # src/ui/
 All ImGui panels and rendering components. Each panel has a `render(model, view)` method. Shared state flows through `ViewState`.
 
-## view_state.h — shared viewport + interaction state passed by ref to every render call
+## view_state.h — shared viewport + interaction state passed by ref to every render call (class with getters/setters)
 ```
+// Viewport
+double view_start_ts() const; void set_view_start_ts(double); double view_end_ts() const; void set_view_end_ts(double);
+void set_view_range(double start, double end);
+// Selection
+int32_t selected_event_idx() const; void set_selected_event_idx(int32_t);
+int32_t pending_scroll_event_idx() const; void set_pending_scroll_event_idx(int32_t);
+// Range selection
+bool has_range_selection() const; bool range_selecting() const; void set_range_selecting(bool);
+double range_start_ts() const; double range_end_ts() const;
 void set_range_selection(double start, double end);
 void clear_range_selection();
+// Filtering
+const std::unordered_set<uint32_t>& hidden_pids() const; void hide_pid(uint32_t); void show_pid(uint32_t);
+const std::unordered_set<uint32_t>& hidden_tids() const; void hide_tid(uint32_t); void show_tid(uint32_t);
+const std::unordered_set<uint32_t>& hidden_cats() const; void hide_cat(uint32_t); void show_cat(uint32_t);
+void clear_hidden_pids(); void clear_hidden_tids(); void clear_hidden_cats();
+// Search
+const std::string& search_query() const; void set_search_query(const std::string&);
+const std::vector<uint32_t>& search_results() const; std::vector<uint32_t>& mutable_search_results();
+int32_t search_current() const; void set_search_current(int32_t);
+// Layout
+float track_height() const; void set_track_height(float);
+float track_padding() const; void set_track_padding(float);
+float counter_track_height() const; void set_counter_track_height(float);
+float label_width() const; void set_label_width(float);
+float ruler_height() const; void set_ruler_height(float);
+float proc_header_height() const; void set_proc_header_height(float);
+float scrollbar_scale() const; void set_scrollbar_scale(float);
+// Selection border color
+const float* sel_border_color() const; void set_sel_border_color(const float[4]); float* mutable_sel_border_color();
 ImU32 sel_border_color_u32() const;
+// Misc
+bool show_flows() const; void set_show_flows(bool);
+bool time_unit_ns() const; void set_time_unit_ns(bool);
+// Coordinate conversion
 float time_to_x(double ts, float timeline_left, float timeline_width) const;
 double x_to_time(float x, float timeline_left, float timeline_width) const;
 void zoom_to_fit(double min_ts, double max_ts);

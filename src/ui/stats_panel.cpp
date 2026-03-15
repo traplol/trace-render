@@ -474,8 +474,8 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
                                 ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
                             // Find first event with this name and navigate to it
                             const std::string& name = row[name_col];
-                            for (uint32_t ei = 0; ei < (uint32_t)model.events_.size(); ei++) {
-                                const auto& ev = model.events_[ei];
+                            for (uint32_t ei = 0; ei < (uint32_t)model.events().size(); ei++) {
+                                const auto& ev = model.events()[ei];
                                 if (ev.is_end_event || ev.ph == Phase::Metadata || ev.ph == Phase::Counter) continue;
                                 if (ev.dur <= 0) continue;
                                 if (model.get_string(ev.name_idx) == name) {

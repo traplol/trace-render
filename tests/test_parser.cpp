@@ -28,7 +28,7 @@ TEST_F(ParserTest, ParsesObjectFormat) {
 
     // Should have at least one non-metadata event
     bool found = false;
-    for (const auto& ev : model.events_) {
+    for (const auto& ev : model.events()) {
         if (ev.ph == Phase::Complete) {
             found = true;
             EXPECT_DOUBLE_EQ(ev.ts, 100.0);
@@ -48,7 +48,7 @@ TEST_F(ParserTest, ParsesArrayFormat) {
     ])"));
 
     bool found = false;
-    for (const auto& ev : model.events_) {
+    for (const auto& ev : model.events()) {
         if (ev.ph == Phase::Complete) {
             found = true;
             EXPECT_EQ(model.get_string(ev.name_idx), "bar");
@@ -87,9 +87,9 @@ TEST_F(ParserTest, ParsesCounterEvents) {
         {"name": "Memory", "ph": "C", "ts": 200, "pid": 1, "tid": 0, "cat": "perf", "args": {"value": 55.0}}
     ]})"));
 
-    ASSERT_FALSE(model.counter_series_.empty());
-    EXPECT_EQ(model.counter_series_[0].name, "Memory");
-    EXPECT_EQ(model.counter_series_[0].points.size(), 2u);
+    ASSERT_FALSE(model.counter_series().empty());
+    EXPECT_EQ(model.counter_series()[0].name, "Memory");
+    EXPECT_EQ(model.counter_series()[0].points.size(), 2u);
 }
 
 TEST_F(ParserTest, ParsesFlowEvents) {
@@ -98,9 +98,9 @@ TEST_F(ParserTest, ParsesFlowEvents) {
         {"name": "flow_end", "ph": "f", "ts": 200, "pid": 2, "tid": 1, "id": 99, "cat": "c"}
     ]})"));
 
-    EXPECT_FALSE(model.flow_groups_.empty());
-    auto it = model.flow_groups_.find(99);
-    ASSERT_NE(it, model.flow_groups_.end());
+    EXPECT_FALSE(model.flow_groups().empty());
+    auto it = model.flow_groups().find(99);
+    ASSERT_NE(it, model.flow_groups().end());
     EXPECT_EQ(it->second.size(), 2u);
 }
 
@@ -112,7 +112,7 @@ TEST_F(ParserTest, ParsesBEPairs) {
 
     // After build_index, B event should have dur=150
     bool found = false;
-    for (const auto& ev : model.events_) {
+    for (const auto& ev : model.events()) {
         if (ev.ph == Phase::DurationBegin) {
             EXPECT_DOUBLE_EQ(ev.dur, 150.0);
             found = true;
@@ -128,23 +128,23 @@ TEST_F(ParserTest, ParsesArgsAsJson) {
     ]})"));
 
     bool found = false;
-    for (const auto& ev : model.events_) {
+    for (const auto& ev : model.events()) {
         if (ev.ph == Phase::Complete && ev.args_idx != UINT32_MAX) {
             found = true;
-            EXPECT_FALSE(model.args_[ev.args_idx].empty());
+            EXPECT_FALSE(model.args()[ev.args_idx].empty());
         }
     }
     EXPECT_TRUE(found);
 }
 
 TEST_F(ParserTest, ParsesTimestampsAsNanoseconds) {
-    parser.time_unit_ns = true;
+    parser.set_time_unit_ns(true);
     ASSERT_TRUE(parse_json(R"({"traceEvents": [
         {"name": "ev", "ph": "X", "ts": 5000, "dur": 2000, "pid": 1, "tid": 1, "cat": "c"}
     ]})"));
 
     bool found = false;
-    for (const auto& ev : model.events_) {
+    for (const auto& ev : model.events()) {
         if (ev.ph == Phase::Complete) {
             found = true;
             // 5000 ns = 5.0 us, 2000 ns = 2.0 us
@@ -161,7 +161,7 @@ TEST_F(ParserTest, ParsesTimestampsAsMicrosecondsByDefault) {
     ]})"));
 
     bool found = false;
-    for (const auto& ev : model.events_) {
+    for (const auto& ev : model.events()) {
         if (ev.ph == Phase::Complete) {
             found = true;
             EXPECT_DOUBLE_EQ(ev.ts, 5000.0);
@@ -173,7 +173,7 @@ TEST_F(ParserTest, ParsesTimestampsAsMicrosecondsByDefault) {
 
 TEST_F(ParserTest, InvalidFileReturnsError) {
     EXPECT_FALSE(parser.parse("/nonexistent/file.json", model));
-    EXPECT_FALSE(parser.error_message.empty());
+    EXPECT_FALSE(parser.error_message().empty());
 }
 
 TEST_F(ParserTest, ParsesTestTraceFile) {
@@ -189,14 +189,14 @@ TEST_F(ParserTest, ParsesTestTraceFile) {
     EXPECT_EQ(renderer->name, "Renderer");
 
     // Verify time range is reasonable
-    EXPECT_LT(model.min_ts_, model.max_ts_);
+    EXPECT_LT(model.min_ts(), model.max_ts());
 
     // Verify counter series parsed
-    EXPECT_FALSE(model.counter_series_.empty());
+    EXPECT_FALSE(model.counter_series().empty());
 
     // Verify flow events parsed
-    EXPECT_FALSE(model.flow_groups_.empty());
+    EXPECT_FALSE(model.flow_groups().empty());
 
     // Verify events exist
-    EXPECT_GT(model.events_.size(), 10u);
+    EXPECT_GT(model.events().size(), 10u);
 }

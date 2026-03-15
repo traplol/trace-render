@@ -54,35 +54,44 @@ struct CounterSeries {
 
 class TraceModel {
 public:
-    // All events
-    std::vector<TraceEvent> events_;
+    // --- Const accessors ---
+    const std::vector<TraceEvent>& events() const { return events_; }
+    const std::vector<std::string>& strings() const { return strings_; }
+    const std::unordered_map<std::string, uint32_t>& string_map() const { return string_map_; }
+    const std::vector<std::string>& args() const { return args_; }
+    const std::vector<ProcessInfo>& processes() const { return processes_; }
+    const std::vector<CounterSeries>& counter_series() const { return counter_series_; }
+    const std::unordered_map<uint64_t, std::vector<uint32_t>>& flow_groups() const { return flow_groups_; }
+    double min_ts() const { return min_ts_; }
+    double max_ts() const { return max_ts_; }
+    const std::vector<uint32_t>& categories() const { return categories_; }
+    const std::unordered_map<uint32_t, std::vector<uint32_t>>& name_to_events() const { return name_to_events_; }
 
-    // String pool
-    std::vector<std::string> strings_;
-    std::unordered_map<std::string, uint32_t> string_map_;
+    // --- Mutation methods for building the model ---
+    uint32_t add_event(const TraceEvent& ev) {
+        uint32_t idx = (uint32_t)events_.size();
+        events_.push_back(ev);
+        return idx;
+    }
 
-    // Args storage (serialized JSON)
-    std::vector<std::string> args_;
+    uint32_t add_args(std::string args_json) {
+        uint32_t idx = (uint32_t)args_.size();
+        args_.push_back(std::move(args_json));
+        return idx;
+    }
 
-    // Process/thread hierarchy
-    std::vector<ProcessInfo> processes_;
+    void add_flow_event(uint64_t id, uint32_t event_idx) { flow_groups_[id].push_back(event_idx); }
 
-    // Counter series keyed by "pid:name"
-    std::vector<CounterSeries> counter_series_;
-
-    // Flow events grouped by id
-    std::unordered_map<uint64_t, std::vector<uint32_t>> flow_groups_;
-
-    // Global time range
-    double min_ts_ = 1e18;
-    double max_ts_ = -1e18;
-
-    // Pre-computed unique category indices, sorted alphabetically by name (built in build_index)
-    std::vector<uint32_t> categories_;
-
-    // Pre-computed name_idx -> sorted event indices (built in build_index)
-    // Only includes renderable events (not end events, metadata, counters) with dur > 0.
-    std::unordered_map<uint32_t, std::vector<uint32_t>> name_to_events_;
+    CounterSeries& find_or_create_counter_series(uint32_t pid, const std::string& name) {
+        for (auto& s : counter_series_) {
+            if (s.pid == pid && s.name == name) return s;
+        }
+        counter_series_.push_back({});
+        auto& cs = counter_series_.back();
+        cs.pid = pid;
+        cs.name = name;
+        return cs;
+    }
 
     uint32_t intern_string(const std::string& s) {
         auto it = string_map_.find(s);
@@ -155,4 +164,17 @@ public:
         min_ts_ = 1e18;
         max_ts_ = -1e18;
     }
+
+private:
+    std::vector<TraceEvent> events_;
+    std::vector<std::string> strings_;
+    std::unordered_map<std::string, uint32_t> string_map_;
+    std::vector<std::string> args_;
+    std::vector<ProcessInfo> processes_;
+    std::vector<CounterSeries> counter_series_;
+    std::unordered_map<uint64_t, std::vector<uint32_t>> flow_groups_;
+    double min_ts_ = 1e18;
+    double max_ts_ = -1e18;
+    std::vector<uint32_t> categories_;
+    std::unordered_map<uint32_t, std::vector<uint32_t>> name_to_events_;
 };

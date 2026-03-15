@@ -5,25 +5,25 @@
 void FlowRenderer::render(ImDrawList* dl, const TraceModel& model, const ViewState& view, ImVec2 area_min,
                           ImVec2 area_max, float label_width) {
     TRACE_FUNCTION_CAT("timeline");
-    if (!view.show_flows || track_positions_.empty()) return;
+    if (!view.show_flows() || track_positions_.empty()) return;
 
     float track_left = area_min.x + label_width;
     float track_width = (area_max.x - area_min.x) - label_width;
     ImU32 flow_color = IM_COL32(255, 180, 50, 160);
 
-    float ruler_height = view.ruler_height;
+    float ruler_height = view.ruler_height();
     dl->PushClipRect(ImVec2(track_left, area_min.y + ruler_height), area_max, true);
 
-    for (const auto& [id, indices] : model.flow_groups_) {
+    for (const auto& [id, indices] : model.flow_groups()) {
         if (indices.size() < 2) continue;
 
         for (size_t i = 0; i + 1 < indices.size(); i++) {
-            const auto& ev1 = model.events_[indices[i]];
-            const auto& ev2 = model.events_[indices[i + 1]];
+            const auto& ev1 = model.events()[indices[i]];
+            const auto& ev2 = model.events()[indices[i + 1]];
 
             // Check if either endpoint is in the visible time range
-            if (ev1.ts > view.view_end_ts && ev2.ts > view.view_end_ts) continue;
-            if (ev1.end_ts() < view.view_start_ts && ev2.end_ts() < view.view_start_ts) continue;
+            if (ev1.ts > view.view_end_ts() && ev2.ts > view.view_end_ts()) continue;
+            if (ev1.end_ts() < view.view_start_ts() && ev2.end_ts() < view.view_start_ts()) continue;
 
             // Source: right edge of ev1
             float x1 = view.time_to_x(ev1.end_ts(), track_left, track_width);
@@ -35,8 +35,8 @@ void FlowRenderer::render(ImDrawList* dl, const TraceModel& model, const ViewSta
             auto it2 = track_positions_.find(make_key(ev2.pid, ev2.tid));
             if (it1 == track_positions_.end() || it2 == track_positions_.end()) continue;
 
-            float y1 = it1->second.y_start + ev1.depth * view.track_height + view.track_height / 2;
-            float y2 = it2->second.y_start + ev2.depth * view.track_height + view.track_height / 2;
+            float y1 = it1->second.y_start + ev1.depth * view.track_height() + view.track_height() / 2;
+            float y2 = it2->second.y_start + ev2.depth * view.track_height() + view.track_height() / 2;
 
             // Draw bezier arrow
             float dx = std::abs(x2 - x1);
