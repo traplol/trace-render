@@ -59,6 +59,8 @@ private:
     void finish_load();
     void render_loading_overlay();
     void render_settings_modal();
+    void reset_general_defaults();
+    void reset_all_defaults();
     void load_settings();
     void save_settings();
 };

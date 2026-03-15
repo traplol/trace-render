@@ -106,6 +106,15 @@ public:
         scrollbar_scale_ = kDefaultScrollbarScale;
     }
 
+    // --- Rendering defaults ---
+    static constexpr bool kDefaultShowFlows = true;
+    static constexpr std::array<float, 4> kDefaultSelBorderColor = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    void reset_rendering_defaults() {
+        show_flows_ = kDefaultShowFlows;
+        sel_border_color_ = kDefaultSelBorderColor;
+    }
+
     // --- Selection border color ---
     const std::array<float, 4>& sel_border_color() const { return sel_border_color_; }
     void set_sel_border_color(const std::array<float, 4>& color) { sel_border_color_ = color; }
@@ -170,8 +179,8 @@ private:
     float ruler_height_ = kDefaultRulerHeight;
     float proc_header_height_ = kDefaultProcHeaderHeight;
     float scrollbar_scale_ = kDefaultScrollbarScale;
-    std::array<float, 4> sel_border_color_ = {0.0f, 0.0f, 0.0f, 1.0f};
-    bool show_flows_ = true;
+    std::array<float, 4> sel_border_color_ = kDefaultSelBorderColor;
+    bool show_flows_ = kDefaultShowFlows;
     bool time_unit_ns_ = false;
     KeyBindings key_bindings_;
 };

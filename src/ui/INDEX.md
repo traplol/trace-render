@@ -36,6 +36,9 @@ float ruler_height() const; void set_ruler_height(float);
 float proc_header_height() const; void set_proc_header_height(float);
 float scrollbar_scale() const; void set_scrollbar_scale(float);
 void reset_layout_defaults();
+// Rendering defaults
+static constexpr bool kDefaultShowFlows; static constexpr std::array<float, 4> kDefaultSelBorderColor;
+void reset_rendering_defaults();
 // Selection border color
 const std::array<float, 4>& sel_border_color() const; void set_sel_border_color(const std::array<float, 4>&);
 ImU32 sel_border_color_u32() const;

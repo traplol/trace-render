@@ -73,10 +73,41 @@ std::string KeyBindings::key_chord_name(ImGuiKeyChord chord) {
     return result;
 }
 
+const char* KeyBindings::action_id(Action action) {
+    switch (action) {
+        case Action::PanLeft: return "pan_left";
+        case Action::PanRight: return "pan_right";
+        case Action::ScrollUp: return "scroll_up";
+        case Action::ScrollDown: return "scroll_down";
+        case Action::ZoomIn: return "zoom_in";
+        case Action::ZoomOut: return "zoom_out";
+        case Action::FitSelection: return "fit_selection";
+        case Action::ClearSelection: return "clear_selection";
+        case Action::GoToTime: return "go_to_time";
+        case Action::OpenFile: return "open_file";
+        case Action::Search: return "search";
+        case Action::OpenSettings: return "open_settings";
+        case Action::RunQuery: return "run_query";
+        default: return "unknown";
+    }
+}
+
 bool KeyBindings::is_modifier_key(ImGuiKey key) {
     return key == ImGuiKey_LeftCtrl || key == ImGuiKey_RightCtrl || key == ImGuiKey_LeftShift ||
            key == ImGuiKey_RightShift || key == ImGuiKey_LeftAlt || key == ImGuiKey_RightAlt ||
            key == ImGuiKey_LeftSuper || key == ImGuiKey_RightSuper;
+}
+
+void KeyBindings::clear_conflict(int action_idx, int slot, ImGuiKeyChord chord) {
+    if (chord == ImGuiKey_None) return;
+    for (int i = 0; i < kCount; i++) {
+        if (i == action_idx) continue;
+        if (bindings_[i].primary == chord) bindings_[i].primary = ImGuiKey_None;
+        if (bindings_[i].alt == chord) bindings_[i].alt = ImGuiKey_None;
+    }
+    // Also clear the other slot of the same action if it matches
+    if (slot == 0 && bindings_[action_idx].alt == chord) bindings_[action_idx].alt = ImGuiKey_None;
+    if (slot == 1 && bindings_[action_idx].primary == chord) bindings_[action_idx].primary = ImGuiKey_None;
 }
 
 void KeyBindings::render_settings() {
@@ -125,6 +156,7 @@ void KeyBindings::render_settings() {
                             if (io.KeyShift) chord |= ImGuiMod_Shift;
                             if (io.KeyAlt) chord |= ImGuiMod_Alt;
 
+                            clear_conflict(i, slot, chord);
                             if (slot == 0)
                                 bindings_[i].primary = chord;
                             else
@@ -148,18 +180,24 @@ void KeyBindings::render_settings() {
 }
 
 nlohmann::json KeyBindings::save() const {
-    nlohmann::json j = nlohmann::json::array();
+    nlohmann::json j = nlohmann::json::object();
     for (int i = 0; i < kCount; i++) {
-        j.push_back({{"primary", static_cast<int>(bindings_[i].primary)}, {"alt", static_cast<int>(bindings_[i].alt)}});
+        auto action = static_cast<Action>(i);
+        j[action_id(action)] = {{"primary", static_cast<int>(bindings_[i].primary)},
+                                 {"alt", static_cast<int>(bindings_[i].alt)}};
     }
     return j;
 }
 
 void KeyBindings::load(const nlohmann::json& j) {
-    if (!j.is_array()) return;
-    int count = std::min(static_cast<int>(j.size()), kCount);
-    for (int i = 0; i < count; i++) {
-        if (j[i].contains("primary")) bindings_[i].primary = static_cast<ImGuiKeyChord>(j[i]["primary"].get<int>());
-        if (j[i].contains("alt")) bindings_[i].alt = static_cast<ImGuiKeyChord>(j[i]["alt"].get<int>());
+    if (!j.is_object()) return;
+    for (int i = 0; i < kCount; i++) {
+        auto action = static_cast<Action>(i);
+        const char* id = action_id(action);
+        if (!j.contains(id)) continue;
+        const auto& entry = j[id];
+        if (entry.contains("primary"))
+            bindings_[i].primary = static_cast<ImGuiKeyChord>(entry["primary"].get<int>());
+        if (entry.contains("alt")) bindings_[i].alt = static_cast<ImGuiKeyChord>(entry["alt"].get<int>());
     }
 }

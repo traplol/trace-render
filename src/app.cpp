@@ -372,12 +372,7 @@ void App::render_settings_modal() {
                 ImGui::Spacing();
                 ImGui::Spacing();
                 if (ImGui::Button("Reset to Defaults")) {
-                    ImGui::GetIO().FontGlobalScale = 1.0f;
-                    dark_theme_ = true;
-                    ImGui::StyleColorsDark();
-                    vsync_ = true;
-                    SDL_GL_SetSwapInterval(1);
-                    view_.set_time_unit_ns(false);
+                    reset_general_defaults();
                 }
                 break;
             }
@@ -429,8 +424,7 @@ void App::render_settings_modal() {
                 ImGui::Spacing();
                 ImGui::Spacing();
                 if (ImGui::Button("Reset to Defaults")) {
-                    view_.set_show_flows(true);
-                    view_.set_sel_border_color({0.0f, 0.0f, 0.0f, 1.0f});
+                    view_.reset_rendering_defaults();
                 }
                 break;
             }
@@ -463,17 +457,7 @@ void App::render_settings_modal() {
         ImGui::Spacing();
 
         if (ImGui::Button("Reset All", ImVec2(120, 0))) {
-            ImGui::GetIO().FontGlobalScale = 1.0f;
-            dark_theme_ = true;
-            ImGui::StyleColorsDark();
-            vsync_ = true;
-            SDL_GL_SetSwapInterval(1);
-            view_.set_time_unit_ns(false);
-            view_.reset_layout_defaults();
-            view_.set_show_flows(true);
-            view_.set_sel_border_color({0.0f, 0.0f, 0.0f, 1.0f});
-            source_.reset_settings();
-            view_.key_bindings().reset_defaults();
+            reset_all_defaults();
         }
 
         ImGui::SameLine(ImGui::GetContentRegionAvail().x - 120);
@@ -486,6 +470,23 @@ void App::render_settings_modal() {
 
         ImGui::EndPopup();
     }
+}
+
+void App::reset_general_defaults() {
+    ImGui::GetIO().FontGlobalScale = 1.0f;
+    dark_theme_ = true;
+    ImGui::StyleColorsDark();
+    vsync_ = true;
+    SDL_GL_SetSwapInterval(1);
+    view_.set_time_unit_ns(false);
+}
+
+void App::reset_all_defaults() {
+    reset_general_defaults();
+    view_.reset_layout_defaults();
+    view_.reset_rendering_defaults();
+    source_.reset_settings();
+    view_.key_bindings().reset_defaults();
 }
 
 void App::save_settings() {

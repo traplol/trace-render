@@ -49,7 +49,10 @@ private:
     int editing_action_ = -1;
     int editing_slot_ = -1;  // 0=primary, 1=alt
 
+    void clear_conflict(int action_idx, int slot, ImGuiKeyChord chord);
+
     static const char* action_name(Action action);
+    static const char* action_id(Action action);
     static std::string key_chord_name(ImGuiKeyChord chord);
     static bool is_modifier_key(ImGuiKey key);
 };
