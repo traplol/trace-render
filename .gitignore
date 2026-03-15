@@ -10,3 +10,4 @@ compile_commands.json
 test_trace*.json
 src/ui/.timeline_view.cpp.swp
 *.swp
+.claude
