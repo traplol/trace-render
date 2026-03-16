@@ -600,14 +600,11 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
             int32_t target = -1;
             if (keys.is_pressed(Action::NavParent)) {
                 target = model.find_parent_event(sel);
-            }
-            if (keys.is_pressed(Action::NavChild)) {
+            } else if (keys.is_pressed(Action::NavChild)) {
                 target = model.find_first_child(sel);
-            }
-            if (keys.is_pressed(Action::NavPrevSibling)) {
+            } else if (keys.is_pressed(Action::NavPrevSibling)) {
                 target = model.find_prev_sibling(sel);
-            }
-            if (keys.is_pressed(Action::NavNextSibling)) {
+            } else if (keys.is_pressed(Action::NavNextSibling)) {
                 target = model.find_next_sibling(sel);
             }
             if (target >= 0) {
