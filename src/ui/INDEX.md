@@ -85,6 +85,15 @@ void reset();
 std::string build_sql(const char* const* columns, int num_columns) const;
 ```
 
+## flame_graph_panel.h / flame_graph_panel.cpp — per-thread icicle charts with flat node pool; filterable sidebar, zoom, search highlighting, context menu
+```
+void render(const TraceModel&, ViewState&);
+void rebuild(const TraceModel&, const ViewState&);
+const std::vector<FlameTree>& trees() const;
+// FlameNode: name_idx, cat_idx, total_time, self_time, call_count, first_child, next_sibling, parent (all indices)
+// FlameTree: pid, tid, thread_name, root_total_time, first_root, nodes (flat pool)
+```
+
 ## instance_panel.h / instance_panel.cpp — lists all instances of the selected function; keyboard navigation
 ```
 void render(const TraceModel&, ViewState&);

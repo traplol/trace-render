@@ -188,6 +188,7 @@ void App::update() {
         ImGui::DockBuilderDockWindow("Filters", dock_right);
         ImGui::DockBuilderDockWindow("Search", dock_bottom);
         ImGui::DockBuilderDockWindow("Statistics", dock_bottom);
+        ImGui::DockBuilderDockWindow("Flame Graph", dock_bottom);
         ImGui::DockBuilderDockWindow("Instances", dock_bottom_right);
 
         ImGui::DockBuilderFinish(dockspace_id);
@@ -221,6 +222,7 @@ void App::update() {
         instances_.render(model_, view_);
         diagnostics_.stats = timeline_.diag_stats;
         source_.render(model_, view_);
+        flame_graph_.render(model_, view_);
         diagnostics_.render(model_, view_);
     } else {
         // Welcome screen
@@ -254,6 +256,10 @@ void App::update() {
         ImGui::End();
 
         ImGui::Begin("Source");
+        ImGui::TextDisabled("No trace loaded.");
+        ImGui::End();
+
+        ImGui::Begin("Flame Graph");
         ImGui::TextDisabled("No trace loaded.");
         ImGui::End();
 
