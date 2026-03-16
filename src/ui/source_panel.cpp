@@ -233,6 +233,7 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
     }
 
     bool selection_changed = (cached_event_idx_ != view.selected_event_idx());
+    bool tab_just_shown = ImGui::IsWindowAppearing();
 
     // Check if selection or path settings changed
     if (selection_changed) {
@@ -262,6 +263,8 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
         path_settings_changed_ = false;
         cached_file_.clear();  // force reload
         resolve_and_load(cached_raw_file_);
+        need_scroll_ = true;
+    } else if (tab_just_shown && cached_line_ > 0) {
         need_scroll_ = true;
     }
 
