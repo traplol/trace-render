@@ -93,10 +93,11 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
             if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
                 if (instances_dirty_) {
                     sort_specs->SpecsDirty = true;
-                    instances_dirty_ = false;
                 }
                 if (sort_specs->SpecsDirty) {
+                    bool user_sorted = !instances_dirty_;
                     sort_specs->SpecsDirty = false;
+                    instances_dirty_ = false;
                     if (sort_specs->SpecsCount > 0) {
                         const auto& spec = sort_specs->Specs[0];
                         bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
@@ -128,8 +129,16 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                             }
                         }
                     }
+                    if (user_sorted) {
+                        scroll_to_top_ = true;
+                    }
                 }
             }
+        }
+
+        if (scroll_to_top_) {
+            ImGui::SetScrollY(0.0f);
+            scroll_to_top_ = false;
         }
 
         TRACE_SCOPE_CAT("DrawRows", "ui");

@@ -13,4 +13,5 @@ private:
     // Sorted view of search results
     std::vector<uint32_t> sorted_results_;
     bool needs_sort_ = false;
+    bool scroll_to_top_ = false;
 };
