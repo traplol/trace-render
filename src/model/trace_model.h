@@ -147,6 +147,15 @@ public:
     // Compute self time for an event (wall time minus immediate children's durations).
     double compute_self_time(uint32_t event_idx) const;
 
+    // Navigate to the first immediate child of an event. Returns -1 if none found.
+    int32_t find_first_child(uint32_t event_idx) const;
+
+    // Navigate to the previous sibling (same parent, earlier timestamp). Returns -1 if none found.
+    int32_t find_prev_sibling(uint32_t event_idx) const;
+
+    // Navigate to the next sibling (same parent, later timestamp). Returns -1 if none found.
+    int32_t find_next_sibling(uint32_t event_idx) const;
+
     void query_visible(const ThreadInfo& thread, double start_ts, double end_ts, std::vector<uint32_t>& out) const {
         thread.block_index.query(start_ts, end_ts, thread.event_indices, events_, out);
     }

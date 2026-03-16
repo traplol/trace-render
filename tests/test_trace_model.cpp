@@ -520,6 +520,124 @@ TEST(CallStack, SelfTimeMultipleChildren) {
     EXPECT_EQ(m.events()[2].parent_idx, 0);
 }
 
+// --- Navigation: find_first_child, find_prev_sibling, find_next_sibling ---
+
+static TraceModel make_sibling_model() {
+    TraceModel m;
+    m.intern_string("");  // idx 0
+
+    auto& proc = m.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    // Event 0: parent, ts=0, dur=1000
+    TraceEvent parent;
+    parent.ph = Phase::Complete;
+    parent.name_idx = m.intern_string("parent");
+    parent.ts = 0.0;
+    parent.dur = 1000.0;
+    parent.pid = 1;
+    parent.tid = 1;
+    m.add_event(parent);
+    thread.event_indices.push_back(0);
+
+    // Event 1: childA, ts=100, dur=200
+    TraceEvent childA;
+    childA.ph = Phase::Complete;
+    childA.name_idx = m.intern_string("childA");
+    childA.ts = 100.0;
+    childA.dur = 200.0;
+    childA.pid = 1;
+    childA.tid = 1;
+    m.add_event(childA);
+    thread.event_indices.push_back(1);
+
+    // Event 2: childB, ts=400, dur=200
+    TraceEvent childB;
+    childB.ph = Phase::Complete;
+    childB.name_idx = m.intern_string("childB");
+    childB.ts = 400.0;
+    childB.dur = 200.0;
+    childB.pid = 1;
+    childB.tid = 1;
+    m.add_event(childB);
+    thread.event_indices.push_back(2);
+
+    // Event 3: childC, ts=700, dur=100
+    TraceEvent childC;
+    childC.ph = Phase::Complete;
+    childC.name_idx = m.intern_string("childC");
+    childC.ts = 700.0;
+    childC.dur = 100.0;
+    childC.pid = 1;
+    childC.tid = 1;
+    m.add_event(childC);
+    thread.event_indices.push_back(3);
+
+    // Event 4: grandchild under childA, ts=150, dur=50
+    TraceEvent grandchild;
+    grandchild.ph = Phase::Complete;
+    grandchild.name_idx = m.intern_string("grandchild");
+    grandchild.ts = 150.0;
+    grandchild.dur = 50.0;
+    grandchild.pid = 1;
+    grandchild.tid = 1;
+    m.add_event(grandchild);
+    thread.event_indices.push_back(4);
+
+    m.build_index();
+    return m;
+}
+
+TEST(Navigation, FindFirstChildReturnsFirstChild) {
+    auto model = make_sibling_model();
+    // parent (0) -> first child should be childA (1)
+    EXPECT_EQ(model.find_first_child(0), 1);
+}
+
+TEST(Navigation, FindFirstChildOfLeafReturnsNone) {
+    auto model = make_sibling_model();
+    // childC (3) has no children
+    EXPECT_EQ(model.find_first_child(3), -1);
+}
+
+TEST(Navigation, FindFirstChildNested) {
+    auto model = make_sibling_model();
+    // childA (1) -> first child should be grandchild (4)
+    EXPECT_EQ(model.find_first_child(1), 4);
+}
+
+TEST(Navigation, FindNextSibling) {
+    auto model = make_sibling_model();
+    EXPECT_EQ(model.find_next_sibling(1), 2);   // childA -> childB
+    EXPECT_EQ(model.find_next_sibling(2), 3);   // childB -> childC
+    EXPECT_EQ(model.find_next_sibling(3), -1);  // childC -> none
+}
+
+TEST(Navigation, FindPrevSibling) {
+    auto model = make_sibling_model();
+    EXPECT_EQ(model.find_prev_sibling(3), 2);   // childC -> childB
+    EXPECT_EQ(model.find_prev_sibling(2), 1);   // childB -> childA
+    EXPECT_EQ(model.find_prev_sibling(1), -1);  // childA -> none
+}
+
+TEST(Navigation, FindSiblingOfRoot) {
+    auto model = make_sibling_model();
+    // parent (0) is the only root, no siblings
+    EXPECT_EQ(model.find_next_sibling(0), -1);
+    EXPECT_EQ(model.find_prev_sibling(0), -1);
+}
+
+TEST(Navigation, FindFirstChildOutOfBounds) {
+    auto model = make_sibling_model();
+    EXPECT_EQ(model.find_first_child(999), -1);
+}
+
+TEST(Navigation, FindSiblingOutOfBounds) {
+    auto model = make_sibling_model();
+    EXPECT_EQ(model.find_next_sibling(999), -1);
+    EXPECT_EQ(model.find_prev_sibling(999), -1);
+}
+
 // --- Same-timestamp parent/child ---
 
 static TraceModel make_same_ts_model() {
