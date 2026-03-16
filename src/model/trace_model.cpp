@@ -240,3 +240,52 @@ double TraceModel::compute_self_time(uint32_t event_idx) const {
     if (event_idx >= events_.size()) return 0.0;
     return events_[event_idx].self_time;
 }
+
+int32_t TraceModel::find_first_child(uint32_t event_idx) const {
+    if (event_idx >= events_.size()) return -1;
+    const auto& ev = events_[event_idx];
+    const auto* thread = find_thread(ev.pid, ev.tid);
+    if (!thread) return -1;
+    uint8_t child_depth = ev.depth + 1;
+    for (uint32_t idx : thread->event_indices) {
+        const auto& candidate = events_[idx];
+        if (candidate.ts < ev.ts) continue;
+        if (candidate.ts >= ev.end_ts()) break;
+        if (candidate.depth == child_depth && candidate.parent_idx == (int32_t)event_idx) {
+            return (int32_t)idx;
+        }
+    }
+    return -1;
+}
+
+int32_t TraceModel::find_prev_sibling(uint32_t event_idx) const {
+    if (event_idx >= events_.size()) return -1;
+    const auto& ev = events_[event_idx];
+    const auto* thread = find_thread(ev.pid, ev.tid);
+    if (!thread) return -1;
+    int32_t result = -1;
+    for (uint32_t idx : thread->event_indices) {
+        const auto& candidate = events_[idx];
+        if (candidate.depth == ev.depth && candidate.parent_idx == ev.parent_idx) {
+            if (idx == event_idx) return result;
+            result = (int32_t)idx;
+        }
+    }
+    return -1;
+}
+
+int32_t TraceModel::find_next_sibling(uint32_t event_idx) const {
+    if (event_idx >= events_.size()) return -1;
+    const auto& ev = events_[event_idx];
+    const auto* thread = find_thread(ev.pid, ev.tid);
+    if (!thread) return -1;
+    bool found = false;
+    for (uint32_t idx : thread->event_indices) {
+        const auto& candidate = events_[idx];
+        if (candidate.depth == ev.depth && candidate.parent_idx == ev.parent_idx) {
+            if (found) return (int32_t)idx;
+            if (idx == event_idx) found = true;
+        }
+    }
+    return -1;
+}

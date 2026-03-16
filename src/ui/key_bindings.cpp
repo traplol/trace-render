@@ -6,12 +6,12 @@ KeyBindings::KeyBindings() {
 }
 
 void KeyBindings::reset_defaults() {
-    bindings_[static_cast<int>(Action::PanLeft)] = {ImGuiKey_A, ImGuiKey_LeftArrow};
-    bindings_[static_cast<int>(Action::PanRight)] = {ImGuiKey_D, ImGuiKey_RightArrow};
+    bindings_[static_cast<int>(Action::PanLeft)] = {ImGuiKey_LeftArrow, ImGuiKey_None};
+    bindings_[static_cast<int>(Action::PanRight)] = {ImGuiKey_RightArrow, ImGuiKey_None};
     bindings_[static_cast<int>(Action::ScrollUp)] = {ImGuiKey_UpArrow, ImGuiKey_None};
     bindings_[static_cast<int>(Action::ScrollDown)] = {ImGuiKey_DownArrow, ImGuiKey_None};
-    bindings_[static_cast<int>(Action::ZoomIn)] = {ImGuiKey_W, ImGuiKey_None};
-    bindings_[static_cast<int>(Action::ZoomOut)] = {ImGuiKey_S, ImGuiKey_None};
+    bindings_[static_cast<int>(Action::ZoomIn)] = {ImGuiKey_Equal, ImGuiKey_None};
+    bindings_[static_cast<int>(Action::ZoomOut)] = {ImGuiKey_Minus, ImGuiKey_None};
     bindings_[static_cast<int>(Action::FitSelection)] = {ImGuiKey_F, ImGuiKey_None};
     bindings_[static_cast<int>(Action::ClearSelection)] = {ImGuiKey_Escape, ImGuiKey_None};
     bindings_[static_cast<int>(Action::GoToTime)] = {ImGuiKey_G, ImGuiKey_None};
@@ -19,6 +19,10 @@ void KeyBindings::reset_defaults() {
     bindings_[static_cast<int>(Action::Search)] = {ImGuiMod_Ctrl | ImGuiKey_F, ImGuiKey_None};
     bindings_[static_cast<int>(Action::OpenSettings)] = {ImGuiMod_Ctrl | ImGuiKey_Comma, ImGuiKey_None};
     bindings_[static_cast<int>(Action::RunQuery)] = {ImGuiMod_Ctrl | ImGuiKey_Enter, ImGuiKey_None};
+    bindings_[static_cast<int>(Action::NavParent)] = {ImGuiKey_W, ImGuiKey_None};
+    bindings_[static_cast<int>(Action::NavChild)] = {ImGuiKey_S, ImGuiKey_None};
+    bindings_[static_cast<int>(Action::NavPrevSibling)] = {ImGuiKey_A, ImGuiKey_None};
+    bindings_[static_cast<int>(Action::NavNextSibling)] = {ImGuiKey_D, ImGuiKey_None};
 }
 
 bool KeyBindings::is_pressed(Action action) const {
@@ -57,6 +61,14 @@ const char* KeyBindings::action_name(Action action) {
             return "Settings";
         case Action::RunQuery:
             return "Run Query";
+        case Action::NavParent:
+            return "Nav Parent";
+        case Action::NavChild:
+            return "Nav Child";
+        case Action::NavPrevSibling:
+            return "Nav Prev Sibling";
+        case Action::NavNextSibling:
+            return "Nav Next Sibling";
         default:
             return "Unknown";
     }
@@ -101,6 +113,14 @@ const char* KeyBindings::action_id(Action action) {
             return "open_settings";
         case Action::RunQuery:
             return "run_query";
+        case Action::NavParent:
+            return "nav_parent";
+        case Action::NavChild:
+            return "nav_child";
+        case Action::NavPrevSibling:
+            return "nav_prev_sibling";
+        case Action::NavNextSibling:
+            return "nav_next_sibling";
         default:
             return "unknown";
     }

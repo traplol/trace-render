@@ -141,7 +141,7 @@ double RangeEventSummary::avg_dur() const;
 
 ## key_bindings.h / key_bindings.cpp — configurable keyboard shortcuts with settings UI and persistence
 ```
-enum class Action : int { PanLeft, PanRight, ScrollUp, ScrollDown, ZoomIn, ZoomOut, FitSelection, ClearSelection, GoToTime, OpenFile, Search, OpenSettings, RunQuery, Count };
+enum class Action : int { PanLeft, PanRight, ScrollUp, ScrollDown, ZoomIn, ZoomOut, FitSelection, ClearSelection, GoToTime, OpenFile, Search, OpenSettings, RunQuery, NavParent, NavChild, NavPrevSibling, NavNextSibling, Count };
 KeyBindings();
 bool is_pressed(Action action) const;
 ImGuiKeyChord primary(Action action) const;

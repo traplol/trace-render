@@ -544,7 +544,7 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
     }
 
     // Keyboard shortcuts (only when no text input is active)
-    if (ImGui::IsWindowFocused() && !ImGui::GetIO().WantTextInput) {
+    if (!ImGui::GetIO().WantTextInput) {
         float track_width = canvas_size.x - view.label_width();
         double range = view.view_end_ts() - view.view_start_ts();
         double pan_amount = range * 0.1;
@@ -594,6 +594,22 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         if (keys.is_pressed(Action::GoToTime)) {
             show_goto_ = true;
             goto_buf_[0] = '\0';
+        }
+        if (view.selected_event_idx() >= 0) {
+            uint32_t sel = (uint32_t)view.selected_event_idx();
+            int32_t target = -1;
+            if (keys.is_pressed(Action::NavParent)) {
+                target = model.find_parent_event(sel);
+            } else if (keys.is_pressed(Action::NavChild)) {
+                target = model.find_first_child(sel);
+            } else if (keys.is_pressed(Action::NavPrevSibling)) {
+                target = model.find_prev_sibling(sel);
+            } else if (keys.is_pressed(Action::NavNextSibling)) {
+                target = model.find_next_sibling(sel);
+            }
+            if (target >= 0) {
+                view.navigate_to_event(target, model.events()[target]);
+            }
         }
     }
 

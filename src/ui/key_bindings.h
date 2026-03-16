@@ -17,6 +17,10 @@ enum class Action : int {
     Search,
     OpenSettings,
     RunQuery,
+    NavParent,
+    NavChild,
+    NavPrevSibling,
+    NavNextSibling,
     Count
 };
 
