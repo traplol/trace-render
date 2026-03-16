@@ -126,11 +126,13 @@ void App::update() {
 
     // Check if background load is complete
     if (loader_.poll_finished()) {
+        TRACE_SCOPE_CAT("App::finish_load", "app");
         finish_load();
     }
 
     // Check for pending files from platform (dialog, drag-and-drop)
     if (platform::has_pending_file()) {
+        TRACE_SCOPE_CAT("App::pending_file", "app");
         auto f = platform::take_pending_file();
         if (!f.data.empty()) {
             open_buffer(std::move(f.data), f.name);
@@ -140,80 +142,89 @@ void App::update() {
     }
 
     // Set up dockspace over the entire viewport
-    ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
-    ImGui::SetNextWindowViewport(viewport->ID);
+    {
+        TRACE_SCOPE_CAT("App::dockspace_setup", "ui");
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGui::SetNextWindowViewport(viewport->ID);
 
-    ImGuiWindowFlags host_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
-                                  ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking |
-                                  ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
-                                  ImGuiWindowFlags_NoBackground;
+        ImGuiWindowFlags host_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+                                      ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking |
+                                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
+                                      ImGuiWindowFlags_NoBackground;
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
 
-    ImGui::Begin("DockSpaceHost", nullptr, host_flags);
-    ImGui::PopStyleVar(3);
+        ImGui::Begin("DockSpaceHost", nullptr, host_flags);
+        ImGui::PopStyleVar(3);
 
-    ImGuiID dockspace_id = ImGui::GetID("MainDockspace");
+        ImGuiID dockspace_id = ImGui::GetID("MainDockspace");
 
-    // Build default layout on first frame
-    if (first_layout_ && ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
-        first_layout_ = false;
+        // Build default layout on first frame
+        if (first_layout_ && ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
+            TRACE_SCOPE_CAT("App::dock_layout_build", "ui");
+            first_layout_ = false;
 
-        ImGui::DockBuilderRemoveNode(dockspace_id);
-        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-        ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
+            ImGui::DockBuilderRemoveNode(dockspace_id);
+            ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
 
-        // Split: left panel (18%) for diagnostics, remainder for main content
-        ImGuiID dock_main = dockspace_id;
-        ImGuiID dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.18f, nullptr, &dock_main);
+            // Split: left panel (18%) for diagnostics, remainder for main content
+            ImGuiID dock_main = dockspace_id;
+            ImGuiID dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.18f, nullptr, &dock_main);
 
-        // Split main: bottom (42%) for search/instances, top for timeline/details
-        ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.42f, nullptr, &dock_main);
+            // Split main: bottom (42%) for search/instances, top for timeline/details
+            ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.42f, nullptr, &dock_main);
 
-        // Split top: right (35%) for details/filters, left for timeline/source
-        ImGuiID dock_right = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.35f, nullptr, &dock_main);
+            // Split top: right (35%) for details/filters, left for timeline/source
+            ImGuiID dock_right = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.35f, nullptr, &dock_main);
 
-        // Split bottom: right (37%) for instances, left for search/statistics
-        ImGuiID dock_bottom_right =
-            ImGui::DockBuilderSplitNode(dock_bottom, ImGuiDir_Right, 0.37f, nullptr, &dock_bottom);
+            // Split bottom: right (37%) for instances, left for search/statistics
+            ImGuiID dock_bottom_right =
+                ImGui::DockBuilderSplitNode(dock_bottom, ImGuiDir_Right, 0.37f, nullptr, &dock_bottom);
 
-        ImGui::DockBuilderDockWindow("Diagnostics", dock_left);
-        ImGui::DockBuilderDockWindow("Timeline", dock_main);
-        ImGui::DockBuilderDockWindow("Source", dock_main);
-        ImGui::DockBuilderDockWindow("Details", dock_right);
-        ImGui::DockBuilderDockWindow("Filters", dock_right);
-        ImGui::DockBuilderDockWindow("Search", dock_bottom);
-        ImGui::DockBuilderDockWindow("Statistics", dock_bottom);
-        ImGui::DockBuilderDockWindow("Flame Graph", dock_bottom);
-        ImGui::DockBuilderDockWindow("Instances", dock_bottom_right);
+            ImGui::DockBuilderDockWindow("Diagnostics", dock_left);
+            ImGui::DockBuilderDockWindow("Timeline", dock_main);
+            ImGui::DockBuilderDockWindow("Source", dock_main);
+            ImGui::DockBuilderDockWindow("Details", dock_right);
+            ImGui::DockBuilderDockWindow("Filters", dock_right);
+            ImGui::DockBuilderDockWindow("Search", dock_bottom);
+            ImGui::DockBuilderDockWindow("Statistics", dock_bottom);
+            ImGui::DockBuilderDockWindow("Flame Graph", dock_bottom);
+            ImGui::DockBuilderDockWindow("Instances", dock_bottom_right);
 
-        ImGui::DockBuilderFinish(dockspace_id);
-    } else {
-        first_layout_ = false;
+            ImGui::DockBuilderFinish(dockspace_id);
+        } else {
+            first_layout_ = false;
+        }
+
+        ImGui::DockSpace(dockspace_id, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
+
+        ImGui::End();
     }
-
-    ImGui::DockSpace(dockspace_id, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
-
-    ImGui::End();
 
     // Menu bar / toolbar
-    toolbar_.render(model_, view_, diagnostics_.current_rss_mb());
-    if (toolbar_.settings_requested()) {
-        show_settings_ = true;
-        toolbar_.clear_settings_request();
-    }
-    if (view_.key_bindings().is_pressed(Action::OpenSettings)) {
-        show_settings_ = true;
-    }
-    if (show_settings_) {
-        render_settings_modal();
+    {
+        TRACE_SCOPE_CAT("App::toolbar", "ui");
+        toolbar_.render(model_, view_, diagnostics_.current_rss_mb());
+        if (toolbar_.settings_requested()) {
+            show_settings_ = true;
+            toolbar_.clear_settings_request();
+        }
+        if (view_.key_bindings().is_pressed(Action::OpenSettings)) {
+            show_settings_ = true;
+        }
+        if (show_settings_) {
+            render_settings_modal();
+        }
     }
 
+    // Render panels
     if (has_trace_ && !loader_.is_loading()) {
+        TRACE_SCOPE_CAT("App::render_panels", "ui");
         timeline_.render(model_, view_);
         detail_.render(model_, view_);
         search_.render(model_, view_);
@@ -225,6 +236,7 @@ void App::update() {
         flame_graph_.render(model_, view_);
         diagnostics_.render(model_, view_);
     } else {
+        TRACE_SCOPE_CAT("App::welcome_screen", "ui");
         // Welcome screen
         ImGui::Begin("Timeline");
         if (!loader_.is_loading()) {
@@ -268,11 +280,13 @@ void App::update() {
 
     // Loading overlay (drawn on top of everything)
     if (loader_.is_loading()) {
+        TRACE_SCOPE_CAT("App::loading_overlay", "ui");
         render_loading_overlay();
     }
 
     // Status bar
     {
+        TRACE_SCOPE_CAT("App::status_bar", "ui");
         ImGuiViewport* vp = ImGui::GetMainViewport();
         float status_h = ImGui::GetFrameHeight();
         ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x, vp->WorkPos.y + vp->WorkSize.y - status_h));
