@@ -535,3 +535,87 @@ TEST(FlameGraph, HiddenParentCategoryPreservesChild) {
     ASSERT_NE(root, nullptr);
     EXPECT_DOUBLE_EQ(root->total_time, 40.0);
 }
+
+// Regression: context-parent chain where no intermediate node is a direct leaf.
+// Only the deepest node (C) has call_count > 0. A and B are pure context parents
+// whose total_time must propagate bottom-up correctly.
+TEST(FlameGraph, ContextParentChain) {
+    TraceModel m;
+    uint32_t na = m.intern_string("A");
+    uint32_t nb = m.intern_string("B");
+    uint32_t nc = m.intern_string("C");
+    uint32_t cat = m.intern_string("c");
+    auto& t = m.get_or_create_process(1).get_or_create_thread(1);
+
+    // Only C is a real event; A and B appear only as context parents via parent_idx.
+    TraceEvent ec;
+    ec.name_idx = nc;
+    ec.cat_idx = cat;
+    ec.ph = Phase::Complete;
+    ec.ts = 20;
+    ec.dur = 50;
+    ec.pid = 1;
+    ec.tid = 1;
+    ec.depth = 2;
+    ec.parent_idx = -1;  // will set below
+    ec.self_time = 50;
+
+    // Create dummy parent events for the parent chain (not iterated as events themselves).
+    TraceEvent ea;
+    ea.name_idx = na;
+    ea.cat_idx = cat;
+    ea.ph = Phase::Complete;
+    ea.ts = 0;
+    ea.dur = 100;
+    ea.pid = 1;
+    ea.tid = 1;
+    ea.depth = 0;
+    ea.parent_idx = -1;
+    ea.self_time = 30;
+    uint32_t a_idx = m.add_event(ea);
+
+    TraceEvent eb;
+    eb.name_idx = nb;
+    eb.cat_idx = cat;
+    eb.ph = Phase::Complete;
+    eb.ts = 10;
+    eb.dur = 80;
+    eb.pid = 1;
+    eb.tid = 1;
+    eb.depth = 1;
+    eb.parent_idx = (int32_t)a_idx;
+    eb.self_time = 30;
+    uint32_t b_idx = m.add_event(eb);
+
+    ec.parent_idx = (int32_t)b_idx;
+    uint32_t c_idx = m.add_event(ec);
+
+    // Only add C to the thread's event list — A and B exist only as context parents.
+    t.event_indices.push_back(c_idx);
+
+    ViewState v;
+    FlameGraphPanel p;
+    p.rebuild(m, v);
+
+    ASSERT_EQ(p.trees().size(), 1u);
+    const auto& tree = p.trees()[0];
+
+    // A and B are pure context parents (call_count == 0), total propagated from C.
+    const auto* a = find_root(tree, m, "A");
+    ASSERT_NE(a, nullptr);
+    EXPECT_EQ(a->call_count, 0u);
+    EXPECT_DOUBLE_EQ(a->total_time, 50.0);
+    EXPECT_DOUBLE_EQ(a->self_time, 0.0);
+
+    const auto* b = find_child(tree, *a, m, "B");
+    ASSERT_NE(b, nullptr);
+    EXPECT_EQ(b->call_count, 0u);
+    EXPECT_DOUBLE_EQ(b->total_time, 50.0);
+    EXPECT_DOUBLE_EQ(b->self_time, 0.0);
+
+    const auto* c = find_child(tree, *b, m, "C");
+    ASSERT_NE(c, nullptr);
+    EXPECT_EQ(c->call_count, 1u);
+    EXPECT_DOUBLE_EQ(c->total_time, 50.0);
+    EXPECT_DOUBLE_EQ(c->self_time, 50.0);
+}

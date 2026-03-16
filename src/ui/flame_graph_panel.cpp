@@ -90,7 +90,10 @@ uint32_t FlameGraphPanel::sort_children(FlameTree& tree, uint32_t first_child) {
 }
 
 void FlameGraphPanel::compute_self_times(FlameTree& tree) {
-    for (auto& node : tree.nodes) {
+    // Reverse iteration: children are always appended after parents in the pool,
+    // so processing in reverse guarantees children are resolved before parents.
+    for (int i = (int)tree.nodes.size() - 1; i >= 0; --i) {
+        auto& node = tree.nodes[i];
         double children_total = 0.0;
         for (uint32_t c = node.first_child; c != UINT32_MAX; c = tree.nodes[c].next_sibling) {
             children_total += tree.nodes[c].total_time;
@@ -411,8 +414,6 @@ void FlameGraphPanel::render_icicle(const TraceModel& model, ViewState& view, in
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
                 ctx_node_idx_ = entry.node_idx;
                 ctx_tree_idx_ = tree_idx;
-                ctx_name_idx_ = node.name_idx;
-                ctx_cat_idx_ = node.cat_idx;
                 ImGui::OpenPopup("##FlameCtx");
             }
         }

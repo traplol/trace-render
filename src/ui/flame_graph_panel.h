@@ -53,8 +53,6 @@ private:
     float sidebar_width_ = 180.0f;
 
     // Context menu state (indices, not pointers).
-    uint32_t ctx_name_idx_ = UINT32_MAX;
-    uint32_t ctx_cat_idx_ = UINT32_MAX;
     uint32_t ctx_node_idx_ = UINT32_MAX;  // into active tree's nodes
     int ctx_tree_idx_ = -1;
 
