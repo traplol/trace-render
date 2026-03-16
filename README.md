@@ -25,7 +25,9 @@ A fast, native Chrome trace viewer built with C++ and [Dear ImGui](https://githu
 - **Loading progress** — Three-phase progress display (reading file, parsing JSON, building index)
 - **Native file dialog** — OS file picker via SDL3, plus drag & drop support
 - **Resizable label gutter** — Drag the splitter to resize thread labels
-- **Keyboard shortcuts** — WASD zoom/pan, arrow keys, F to fit, G to go to time, Escape to deselect
+- **Flame graph** — Per-thread icicle chart with zoom/breadcrumb navigation, range scoping, search highlighting, and selection sync
+- **Configurable keyboard shortcuts** — Rebindable primary and alternate bindings for all actions via Settings dialog
+- **Keyboard shortcuts** — WASD call-stack navigation, arrow keys for pan/scroll, F to fit, G to go to time, Escape to deselect
 - **Themes** — Dark and light themes with configurable font scale, track height, and selection border color
 - **Self-profiling** — Emit an internal performance trace of the viewer itself with `--trace`
 
@@ -72,6 +74,9 @@ Requires [Emscripten](https://emscripten.org/).
 # Interpret timestamps as nanoseconds (default is microseconds)
 ./build/trace_render -ns trace.json
 
+# Explicitly interpret timestamps as microseconds
+./build/trace_render -us trace.json
+
 # Self-profiling: emit an internal trace of the viewer itself
 ./build/trace_render --trace output.json trace.json
 ```
@@ -82,9 +87,13 @@ You can also drag & drop a trace file onto the window.
 
 | Action | Input |
 |--------|-------|
-| Zoom in/out | Mouse wheel / W/S keys |
-| Pan horizontally | Middle-click drag / Ctrl+left drag / A/D / Left/Right arrows |
+| Zoom in/out | Mouse wheel / =/- keys |
+| Pan horizontally | Middle-click drag / Ctrl+left drag / Left/Right arrows |
 | Scroll vertically | Shift+mouse wheel / Up/Down arrows |
+| Navigate to parent | W |
+| Navigate to first child | S |
+| Navigate to prev sibling | A |
+| Navigate to next sibling | D |
 | Select event | Left click |
 | Select time range | Click+drag on ruler / Shift+drag in tracks |
 | Fit to selection/range | F |
@@ -95,6 +104,8 @@ You can also drag & drop a trace file onto the window.
 | Search | Ctrl+F |
 | Settings | Ctrl+, |
 | Run SQL query | Ctrl+Enter |
+
+All keyboard shortcuts can be customized in Settings > Keyboard.
 
 ## Architecture
 
