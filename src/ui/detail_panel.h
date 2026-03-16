@@ -53,6 +53,8 @@ private:
     std::vector<size_t> filtered_aggregated_;
     double self_time_ = 0.0;
     float self_pct_ = 0.0f;
+    bool scroll_children_to_top_ = false;
+    bool scroll_aggregated_to_top_ = false;
 
     void rebuild_children(const TraceModel& model, const TraceEvent& ev);
     void rebuild_aggregated(const TraceModel& model, double parent_dur);

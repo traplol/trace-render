@@ -428,9 +428,11 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
         }
         ImGui::TableHeadersRow();
 
+        bool scroll_to_top = false;
         if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
             if (sort_specs->SpecsDirty) {
                 sort_specs->SpecsDirty = false;
+                scroll_to_top = true;
                 if (sort_specs->SpecsCount > 0) {
                     const auto& spec = sort_specs->Specs[0];
                     int sort_col = (int)spec.ColumnUserID;
@@ -454,6 +456,10 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
                               });
                 }
             }
+        }
+
+        if (scroll_to_top) {
+            ImGui::SetScrollY(0.0f);
         }
 
         ImGuiListClipper clipper;

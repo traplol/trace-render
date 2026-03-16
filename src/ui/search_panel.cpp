@@ -88,6 +88,7 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
         // Sort
         if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
             if (sort_specs->SpecsDirty || needs_sort_) {
+                bool user_sorted = !needs_sort_;
                 sort_specs->SpecsDirty = false;
                 needs_sort_ = false;
 
@@ -116,7 +117,15 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
                         return ascending ? (cmp < 0) : (cmp > 0);
                     });
                 }
+                if (user_sorted) {
+                    scroll_to_top_ = true;
+                }
             }
+        }
+
+        if (scroll_to_top_) {
+            ImGui::SetScrollY(0.0f);
+            scroll_to_top_ = false;
         }
 
         ImGuiListClipper clipper;

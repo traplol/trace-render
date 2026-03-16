@@ -611,10 +611,11 @@ void DetailPanel::render_aggregated_table(const TraceModel& model, ViewState& vi
         if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
             if (children_dirty_) {
                 sort_specs->SpecsDirty = true;
-                children_dirty_ = false;
             }
             if (sort_specs->SpecsDirty) {
+                bool user_sorted = !children_dirty_;
                 sort_specs->SpecsDirty = false;
+                children_dirty_ = false;
                 if (sort_specs->SpecsCount > 0) {
                     const auto& spec = sort_specs->Specs[0];
                     bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
@@ -651,7 +652,15 @@ void DetailPanel::render_aggregated_table(const TraceModel& model, ViewState& vi
                         return asc ? (cmp < 0) : (cmp > 0);
                     });
                 }
+                if (user_sorted) {
+                    scroll_aggregated_to_top_ = true;
+                }
             }
+        }
+
+        if (scroll_aggregated_to_top_) {
+            ImGui::SetScrollY(0.0f);
+            scroll_aggregated_to_top_ = false;
         }
 
         char buf[64];
@@ -718,10 +727,11 @@ void DetailPanel::render_children_table(const TraceModel& model, ViewState& view
         if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
             if (children_dirty_) {
                 sort_specs->SpecsDirty = true;
-                children_dirty_ = false;
             }
             if (sort_specs->SpecsDirty) {
+                bool user_sorted = !children_dirty_;
                 sort_specs->SpecsDirty = false;
+                children_dirty_ = false;
                 if (sort_specs->SpecsCount > 0) {
                     const auto& spec = sort_specs->Specs[0];
                     bool asc = (spec.SortDirection == ImGuiSortDirection_Ascending);
@@ -746,7 +756,15 @@ void DetailPanel::render_children_table(const TraceModel& model, ViewState& view
                         return asc ? (cmp < 0) : (cmp > 0);
                     });
                 }
+                if (user_sorted) {
+                    scroll_children_to_top_ = true;
+                }
             }
+        }
+
+        if (scroll_children_to_top_) {
+            ImGui::SetScrollY(0.0f);
+            scroll_children_to_top_ = false;
         }
 
         char buf[64];
