@@ -7,8 +7,11 @@
 class InstancePanel {
 public:
     void render(const TraceModel& model, ViewState& view);
+    void on_model_changed();
 
 private:
+    // NOTE: update reset() when adding cached fields
+    void reset();
     std::string selected_name_;
     std::vector<uint32_t> instances_;
     int32_t instance_cursor_ = -1;

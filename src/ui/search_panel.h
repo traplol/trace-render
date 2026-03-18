@@ -5,8 +5,11 @@
 class SearchPanel {
 public:
     void render(const TraceModel& model, ViewState& view);
+    void on_model_changed();
 
 private:
+    // NOTE: update reset() when adding cached fields
+    void reset();
     char search_buf_[256] = {};
     bool needs_search_ = false;
 

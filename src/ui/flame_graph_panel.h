@@ -31,6 +31,7 @@ struct FlameTree {
 class FlameGraphPanel {
 public:
     void render(const TraceModel& model, ViewState& view);
+    void on_model_changed();
 
     // Exposed for testing.
     void rebuild(const TraceModel& model, const ViewState& view);
@@ -41,6 +42,9 @@ public:
     static int32_t find_longest_instance(const TraceModel& model, uint32_t pid, uint32_t tid, uint32_t name_idx);
 
 private:
+    // NOTE: update reset() when adding cached fields
+    void reset();
+
     std::vector<FlameTree> trees_;
 
     // Cache invalidation.

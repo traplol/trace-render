@@ -6,6 +6,24 @@
 #include <algorithm>
 #include <cstdio>
 
+void FlameGraphPanel::reset() {
+    trees_.clear();
+    cached_event_count_ = 0;
+    cached_has_range_ = false;
+    cached_range_start_ = 0.0;
+    cached_range_end_ = 0.0;
+    cached_hidden_hash_ = SIZE_MAX;
+    zoom_root_.clear();
+    selected_tree_ = 0;
+    thread_filter_[0] = '\0';
+    ctx_node_idx_ = UINT32_MAX;
+    ctx_tree_idx_ = -1;
+}
+
+void FlameGraphPanel::on_model_changed() {
+    reset();
+}
+
 int32_t FlameGraphPanel::find_longest_instance(const TraceModel& model, uint32_t pid, uint32_t tid, uint32_t name_idx) {
     const auto* thread = model.find_thread(pid, tid);
     if (!thread) return -1;

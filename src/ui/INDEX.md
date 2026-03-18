@@ -63,11 +63,13 @@ DiagStats diag_stats;  // written each frame, read by DiagnosticsPanel
 ## detail_panel.h / detail_panel.cpp — selected-event details: timing, args, call stack, children table, range summary
 ```
 void render(const TraceModel&, ViewState&);
+void on_model_changed();
 ```
 
 ## search_panel.h / search_panel.cpp — text search over event names; populates `ViewState::search_results`
 ```
 void render(const TraceModel&, ViewState&);
+void on_model_changed();
 ```
 
 ## filter_panel.h / filter_panel.cpp — hide/show processes, threads, categories via `ViewState::hidden_*`
@@ -88,6 +90,7 @@ std::string build_sql(const char* const* columns, int num_columns) const;
 ## flame_graph_panel.h / flame_graph_panel.cpp — per-thread icicle charts with flat node pool; filterable sidebar, zoom, search highlighting, context menu
 ```
 void render(const TraceModel&, ViewState&);
+void on_model_changed();
 void rebuild(const TraceModel&, const ViewState&);
 const std::vector<FlameTree>& trees() const;
 static int32_t find_longest_instance(const TraceModel&, uint32_t pid, uint32_t tid, uint32_t name_idx);
@@ -98,6 +101,7 @@ static int32_t find_longest_instance(const TraceModel&, uint32_t pid, uint32_t t
 ## instance_panel.h / instance_panel.cpp — lists all instances of the selected function; keyboard navigation
 ```
 void render(const TraceModel&, ViewState&);
+void on_model_changed();
 ```
 
 ## diagnostics_panel.h / diagnostics_panel.cpp — FPS / memory sparklines and per-frame render stats

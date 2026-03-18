@@ -54,6 +54,11 @@ void App::finish_load() {
         view_.clear_search_query();
         view_.clear_search_results();
         view_.set_search_current(-1);
+        view_.clear_range_selection();
+        detail_.on_model_changed();
+        search_.on_model_changed();
+        instances_.on_model_changed();
+        flame_graph_.on_model_changed();
         if (model_.min_ts() < model_.max_ts()) {
             view_.zoom_to_fit(model_.min_ts(), model_.max_ts());
         }
