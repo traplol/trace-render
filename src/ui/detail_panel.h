@@ -7,10 +7,11 @@
 class DetailPanel {
 public:
     void render(const TraceModel& model, ViewState& view);
-    void reset();
     void on_model_changed();
 
 private:
+    // NOTE: update reset() when adding cached fields
+    void reset();
     // Range selection cache
     double cached_range_start_ = 0.0;
     double cached_range_end_ = 0.0;
