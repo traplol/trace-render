@@ -241,21 +241,26 @@ double TraceModel::compute_self_time(uint32_t event_idx) const {
     return events_[event_idx].self_time;
 }
 
-int32_t TraceModel::find_first_child(uint32_t event_idx) const {
+int32_t TraceModel::find_longest_child(uint32_t event_idx) const {
     if (event_idx >= events_.size()) return -1;
     const auto& ev = events_[event_idx];
     const auto* thread = find_thread(ev.pid, ev.tid);
     if (!thread) return -1;
     uint8_t child_depth = ev.depth + 1;
+    int32_t best_idx = -1;
+    double best_dur = -1.0;
     for (uint32_t idx : thread->event_indices) {
         const auto& candidate = events_[idx];
         if (candidate.ts < ev.ts) continue;
         if (candidate.ts >= ev.end_ts()) break;
         if (candidate.depth == child_depth && candidate.parent_idx == (int32_t)event_idx) {
-            return (int32_t)idx;
+            if (candidate.dur > best_dur) {
+                best_dur = candidate.dur;
+                best_idx = (int32_t)idx;
+            }
         }
     }
-    return -1;
+    return best_idx;
 }
 
 int32_t TraceModel::find_prev_sibling(uint32_t event_idx) const {

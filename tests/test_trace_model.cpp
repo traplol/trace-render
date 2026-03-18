@@ -520,7 +520,7 @@ TEST(CallStack, SelfTimeMultipleChildren) {
     EXPECT_EQ(m.events()[2].parent_idx, 0);
 }
 
-// --- Navigation: find_first_child, find_prev_sibling, find_next_sibling ---
+// --- Navigation: find_longest_child, find_prev_sibling, find_next_sibling ---
 
 static TraceModel make_sibling_model() {
     TraceModel m;
@@ -588,22 +588,69 @@ static TraceModel make_sibling_model() {
     return m;
 }
 
-TEST(Navigation, FindFirstChildReturnsFirstChild) {
+TEST(Navigation, FindLongestChildReturnsLongestChild) {
     auto model = make_sibling_model();
-    // parent (0) -> first child should be childA (1)
-    EXPECT_EQ(model.find_first_child(0), 1);
+    // parent (0) -> childA (dur=200) and childB (dur=200) tie, childA comes first
+    EXPECT_EQ(model.find_longest_child(0), 1);
 }
 
-TEST(Navigation, FindFirstChildOfLeafReturnsNone) {
+TEST(Navigation, FindLongestChildOfLeafReturnsNone) {
     auto model = make_sibling_model();
     // childC (3) has no children
-    EXPECT_EQ(model.find_first_child(3), -1);
+    EXPECT_EQ(model.find_longest_child(3), -1);
 }
 
-TEST(Navigation, FindFirstChildNested) {
+TEST(Navigation, FindLongestChildNested) {
     auto model = make_sibling_model();
-    // childA (1) -> first child should be grandchild (4)
-    EXPECT_EQ(model.find_first_child(1), 4);
+    // childA (1) -> only child is grandchild (4)
+    EXPECT_EQ(model.find_longest_child(1), 4);
+}
+
+TEST(Navigation, FindLongestChildSelectsLongest) {
+    // Build a model where the longest child is NOT the first child
+    TraceModel m;
+    m.intern_string("");  // idx 0
+
+    auto& proc = m.get_or_create_process(1);
+    auto& thread = proc.get_or_create_thread(1);
+
+    // Event 0: parent, ts=0, dur=1000
+    TraceEvent parent;
+    parent.ph = Phase::Complete;
+    parent.name_idx = m.intern_string("parent");
+    parent.ts = 0.0;
+    parent.dur = 1000.0;
+    parent.pid = 1;
+    parent.tid = 1;
+    m.add_event(parent);
+    thread.event_indices.push_back(0);
+
+    // Event 1: short child, ts=0, dur=100
+    TraceEvent short_child;
+    short_child.ph = Phase::Complete;
+    short_child.name_idx = m.intern_string("short");
+    short_child.ts = 0.0;
+    short_child.dur = 100.0;
+    short_child.pid = 1;
+    short_child.tid = 1;
+    m.add_event(short_child);
+    thread.event_indices.push_back(1);
+
+    // Event 2: long child, ts=200, dur=500
+    TraceEvent long_child;
+    long_child.ph = Phase::Complete;
+    long_child.name_idx = m.intern_string("long");
+    long_child.ts = 200.0;
+    long_child.dur = 500.0;
+    long_child.pid = 1;
+    long_child.tid = 1;
+    m.add_event(long_child);
+    thread.event_indices.push_back(2);
+
+    m.build_index();
+
+    // Should select the longest child (event 2), not the first (event 1)
+    EXPECT_EQ(m.find_longest_child(0), 2);
 }
 
 TEST(Navigation, FindNextSibling) {
@@ -627,9 +674,9 @@ TEST(Navigation, FindSiblingOfRoot) {
     EXPECT_EQ(model.find_prev_sibling(0), -1);
 }
 
-TEST(Navigation, FindFirstChildOutOfBounds) {
+TEST(Navigation, FindLongestChildOutOfBounds) {
     auto model = make_sibling_model();
-    EXPECT_EQ(model.find_first_child(999), -1);
+    EXPECT_EQ(model.find_longest_child(999), -1);
 }
 
 TEST(Navigation, FindSiblingOutOfBounds) {
