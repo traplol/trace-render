@@ -77,14 +77,13 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
         navigate_to_instance(instance_cursor_ + 1, model, view);
     }
 
-    if (ImGui::BeginTable("InstancesTable", 3,
+    if (ImGui::BeginTable("InstancesTable", 2,
                           ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
                               ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
                           ImVec2(0, 0))) {
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_DefaultSort, 0.0f, 0);
         ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_None, 0.0f, 1);
-        ImGui::TableSetupColumn("Thread", ImGuiTableColumnFlags_None, 0.0f, 2);
         ImGui::TableHeadersRow();
 
         {
@@ -110,9 +109,6 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                                     break;
                                 case 1:
                                     cmp = sort_utils::three_way_cmp(a.dur, b.dur);
-                                    break;
-                                case 2:
-                                    cmp = sort_utils::three_way_cmp(a.tid, b.tid);
                                     break;
                             }
                             return asc ? (cmp < 0) : (cmp > 0);
@@ -171,13 +167,6 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                 ImGui::TableNextColumn();
                 format_time(ev.dur, buf, sizeof(buf));
                 ImGui::TextUnformatted(buf);
-
-                ImGui::TableNextColumn();
-                if (const auto* thread = model.find_thread(ev.pid, ev.tid)) {
-                    ImGui::TextUnformatted(thread->name.c_str());
-                } else {
-                    ImGui::Text("%u:%u", ev.pid, ev.tid);
-                }
             }
         }
 
