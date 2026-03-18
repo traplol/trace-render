@@ -19,11 +19,11 @@ static void format_bytes(size_t bytes, char* buf, size_t buf_size) {
 
 void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
     TRACE_FUNCTION_CAT("ui");
-    ImGui::Begin("Diagnostics");
 
-    // Update frame timing and memory
+    // Update frame timing and memory (always, even when panel sections are collapsed)
     auto now = std::chrono::steady_clock::now();
-    current_rss_mb_ = get_rss_bytes() / (1024.0f * 1024.0f);
+    size_t rss = get_rss_bytes();
+    current_rss_mb_ = rss / (1024.0f * 1024.0f);
     if (!first_frame_) {
         float dt = std::chrono::duration<float>(now - last_frame_).count();
         float fps = (dt > 0.0f) ? 1.0f / dt : 0.0f;
@@ -34,6 +34,8 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
     }
     first_frame_ = false;
     last_frame_ = now;
+
+    ImGui::Begin("Diagnostics");
 
     // FPS section
     if (ImGui::CollapsingHeader("Frame Rate", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -56,7 +58,6 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
 
     // Memory section
     if (ImGui::CollapsingHeader("Memory", ImGuiTreeNodeFlags_DefaultOpen)) {
-        size_t rss = get_rss_bytes();
         char rss_str[32];
         format_bytes(rss, rss_str, sizeof(rss_str));
         ImGui::Text("Process RSS: %s", rss_str);
@@ -80,21 +81,16 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
             format_bytes(events_bytes, ev_str, sizeof(ev_str));
             ImGui::Text("Events: %s (%zu events)", ev_str, model.events().size());
 
-            size_t strings_bytes = 0;
-            for (const auto& s : model.strings()) strings_bytes += s.capacity();
             char str_str[32];
-            format_bytes(strings_bytes, str_str, sizeof(str_str));
+            format_bytes(model.cached_strings_bytes(), str_str, sizeof(str_str));
             ImGui::Text("String pool: %s (%zu strings)", str_str, model.strings().size());
 
-            size_t args_bytes = 0;
-            for (const auto& a : model.args()) args_bytes += a.capacity();
             char args_str[32];
-            format_bytes(args_bytes, args_str, sizeof(args_str));
+            format_bytes(model.cached_args_bytes(), args_str, sizeof(args_str));
             ImGui::Text("Args pool: %s (%zu entries)", args_str, model.args().size());
 
-            size_t counter_points = 0;
-            for (const auto& cs : model.counter_series()) counter_points += cs.points.size();
-            ImGui::Text("Counter series: %zu (%zu points)", model.counter_series().size(), counter_points);
+            ImGui::Text("Counter series: %zu (%zu points)", model.counter_series().size(),
+                        model.cached_counter_points());
 
             ImGui::Text("Flow groups: %zu", model.flow_groups().size());
         }
@@ -103,9 +99,7 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
     // Trace overview
     if (!model.events().empty() && ImGui::CollapsingHeader("Trace Overview", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("Processes: %zu", model.processes().size());
-        int total_threads = 0;
-        for (const auto& proc : model.processes()) total_threads += (int)proc.threads.size();
-        ImGui::Text("Threads: %d", total_threads);
+        ImGui::Text("Threads: %d", model.cached_total_threads());
         ImGui::Text("Total events: %zu", model.events().size());
 
         char dur_buf[64];

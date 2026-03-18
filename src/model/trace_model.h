@@ -67,6 +67,12 @@ public:
     const std::vector<uint32_t>& categories() const { return categories_; }
     const std::unordered_map<uint32_t, std::vector<uint32_t>>& name_to_events() const { return name_to_events_; }
 
+    // Pre-computed aggregate stats for diagnostics (computed once in build_index)
+    size_t cached_strings_bytes() const { return cached_strings_bytes_; }
+    size_t cached_args_bytes() const { return cached_args_bytes_; }
+    size_t cached_counter_points() const { return cached_counter_points_; }
+    int cached_total_threads() const { return cached_total_threads_; }
+
     // --- Mutation methods for building the model ---
     uint32_t add_event(const TraceEvent& ev) {
         uint32_t idx = (uint32_t)events_.size();
@@ -172,6 +178,10 @@ public:
         name_to_events_.clear();
         min_ts_ = 1e18;
         max_ts_ = -1e18;
+        cached_strings_bytes_ = 0;
+        cached_args_bytes_ = 0;
+        cached_counter_points_ = 0;
+        cached_total_threads_ = 0;
     }
 
 private:
@@ -186,4 +196,10 @@ private:
     double max_ts_ = -1e18;
     std::vector<uint32_t> categories_;
     std::unordered_map<uint32_t, std::vector<uint32_t>> name_to_events_;
+
+    // Cached aggregate stats for diagnostics panel
+    size_t cached_strings_bytes_ = 0;
+    size_t cached_args_bytes_ = 0;
+    size_t cached_counter_points_ = 0;
+    int cached_total_threads_ = 0;
 };
