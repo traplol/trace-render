@@ -504,11 +504,18 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
             double new_start = mouse_time + (view.view_start_ts() - mouse_time) * zoom_factor;
             double new_end = mouse_time + (view.view_end_ts() - mouse_time) * zoom_factor;
 
-            // Minimum range: 10 us
+            // Minimum range: 1 ns
             if (new_end - new_start > 0.001) {
                 view.set_view_range(new_start, new_end);
             }
         }
+    }
+
+    // Horizontal wheel/trackpad: pan timeline left/right
+    if (any_hovered && io.MouseWheelH != 0.0f) {
+        double range = view.view_end_ts() - view.view_start_ts();
+        double pan_amount = -io.MouseWheelH * range * 0.05;
+        view.set_view_range(view.view_start_ts() + pan_amount, view.view_end_ts() + pan_amount);
     }
 
     // Pan with middle mouse or ctrl+left
@@ -762,11 +769,29 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
         ImU32 thumb_col = IM_COL32(100, 100, 110, 200);
         if (sb_active && thumb_travel > 0) {
             thumb_col = IM_COL32(160, 160, 170, 255);
-            float drag_ratio = io.MouseDelta.x / thumb_travel;
-            double shift = drag_ratio * (total_time - visible_time);
-            view.set_view_range(view.view_start_ts() + shift, view.view_end_ts() + shift);
+            // On initial click outside the thumb, jump to the clicked position
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                float click_x = io.MousePos.x;
+                if (click_x < thumb_min.x || click_x > thumb_max.x) {
+                    // Click was on the track, not the thumb - jump to that position
+                    float new_frac = (click_x - sb_min.x - thumb_w * 0.5f) / thumb_travel;
+                    new_frac = std::max(0.0f, std::min(1.0f, new_frac));
+                    double new_start = model.min_ts() + new_frac * (total_time - visible_time);
+                    view.set_view_range(new_start, new_start + visible_time);
+                }
+            } else {
+                // Drag: shift view proportionally to mouse movement
+                float drag_ratio = io.MouseDelta.x / thumb_travel;
+                double shift = drag_ratio * (total_time - visible_time);
+                view.set_view_range(view.view_start_ts() + shift, view.view_end_ts() + shift);
+            }
         } else if (sb_hovered) {
             thumb_col = IM_COL32(130, 130, 140, 230);
+            // Wheel on scrollbar: pan horizontally
+            if (io.MouseWheel != 0.0f) {
+                double pan_amount = -io.MouseWheel * visible_time * 0.1;
+                view.set_view_range(view.view_start_ts() + pan_amount, view.view_end_ts() + pan_amount);
+            }
         }
 
         dl->AddRectFilled(thumb_min, thumb_max, thumb_col, scrollbar_size * 0.3f);
