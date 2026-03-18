@@ -41,7 +41,7 @@ void build_index(std::function<void(float)> on_progress = nullptr);
 int32_t find_parent_event(uint32_t event_idx) const;
 std::vector<uint32_t> build_call_stack(uint32_t event_idx) const;
 double compute_self_time(uint32_t event_idx) const;
-int32_t find_first_child(uint32_t event_idx) const;
+int32_t find_longest_child(uint32_t event_idx) const;
 int32_t find_prev_sibling(uint32_t event_idx) const;
 int32_t find_next_sibling(uint32_t event_idx) const;
 void query_visible(const ThreadInfo&, double start_ts, double end_ts, std::vector<uint32_t>& out) const;
