@@ -13,7 +13,7 @@ int32_t FlameGraphPanel::find_longest_instance(const TraceModel& model, uint32_t
     double best_dur = -1.0;
     for (uint32_t ei : thread->event_indices) {
         const auto& ev = model.events()[ei];
-        if (ev.name_idx == name_idx && ev.dur > best_dur) {
+        if (ev.name_idx == name_idx && ev.dur > 0 && ev.dur > best_dur) {
             best_dur = ev.dur;
             best = static_cast<int32_t>(ei);
         }
