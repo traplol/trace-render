@@ -831,19 +831,19 @@ TEST_F(TraceModelTest, CachedDiagStatsComputedByBuildIndex) {
     model.build_index();
 
     // 3 threads total across 2 processes
-    EXPECT_EQ(model.cached_total_threads(), 3);
+    EXPECT_EQ(model.total_threads(), 3);
 
     // String pool bytes should be sum of capacity() for all interned strings
-    EXPECT_GT(model.cached_strings_bytes(), 0u);
+    EXPECT_GT(model.strings_bytes(), 0u);
 
     // Args pool bytes should be > 0 since we added one arg
-    EXPECT_GT(model.cached_args_bytes(), 0u);
+    EXPECT_GT(model.args_bytes(), 0u);
 
     // Counter points: 3 points in the one series
-    EXPECT_EQ(model.cached_counter_points(), 3u);
+    EXPECT_EQ(model.counter_points_count(), 3u);
 }
 
-TEST_F(TraceModelTest, CachedDiagStatsResetByeClear) {
+TEST_F(TraceModelTest, CachedDiagStatsResetByClear) {
     model.intern_string("test");
     model.add_args("{}");
     auto& proc = model.get_or_create_process(1);
@@ -852,12 +852,12 @@ TEST_F(TraceModelTest, CachedDiagStatsResetByeClear) {
     cs.points = {{0.0, 1.0}};
 
     model.build_index();
-    EXPECT_GT(model.cached_strings_bytes(), 0u);
-    EXPECT_GT(model.cached_total_threads(), 0);
+    EXPECT_GT(model.strings_bytes(), 0u);
+    EXPECT_GT(model.total_threads(), 0);
 
     model.clear();
-    EXPECT_EQ(model.cached_strings_bytes(), 0u);
-    EXPECT_EQ(model.cached_args_bytes(), 0u);
-    EXPECT_EQ(model.cached_counter_points(), 0u);
-    EXPECT_EQ(model.cached_total_threads(), 0);
+    EXPECT_EQ(model.strings_bytes(), 0u);
+    EXPECT_EQ(model.args_bytes(), 0u);
+    EXPECT_EQ(model.counter_points_count(), 0u);
+    EXPECT_EQ(model.total_threads(), 0);
 }

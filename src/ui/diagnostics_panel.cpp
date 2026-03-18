@@ -20,7 +20,8 @@ static void format_bytes(size_t bytes, char* buf, size_t buf_size) {
 void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
     TRACE_FUNCTION_CAT("ui");
 
-    // Update frame timing and memory (always, even when panel sections are collapsed)
+    // Update frame timing and memory before Begin() so history stays accurate
+    // even when the Diagnostics window is closed (current_rss_mb_ is also read by the toolbar)
     auto now = std::chrono::steady_clock::now();
     size_t rss = get_rss_bytes();
     current_rss_mb_ = rss / (1024.0f * 1024.0f);
@@ -82,15 +83,15 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
             ImGui::Text("Events: %s (%zu events)", ev_str, model.events().size());
 
             char str_str[32];
-            format_bytes(model.cached_strings_bytes(), str_str, sizeof(str_str));
+            format_bytes(model.strings_bytes(), str_str, sizeof(str_str));
             ImGui::Text("String pool: %s (%zu strings)", str_str, model.strings().size());
 
             char args_str[32];
-            format_bytes(model.cached_args_bytes(), args_str, sizeof(args_str));
+            format_bytes(model.args_bytes(), args_str, sizeof(args_str));
             ImGui::Text("Args pool: %s (%zu entries)", args_str, model.args().size());
 
             ImGui::Text("Counter series: %zu (%zu points)", model.counter_series().size(),
-                        model.cached_counter_points());
+                        model.counter_points_count());
 
             ImGui::Text("Flow groups: %zu", model.flow_groups().size());
         }
@@ -99,7 +100,7 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
     // Trace overview
     if (!model.events().empty() && ImGui::CollapsingHeader("Trace Overview", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("Processes: %zu", model.processes().size());
-        ImGui::Text("Threads: %d", model.cached_total_threads());
+        ImGui::Text("Threads: %d", model.total_threads());
         ImGui::Text("Total events: %zu", model.events().size());
 
         char dur_buf[64];

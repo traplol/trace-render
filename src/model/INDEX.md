@@ -23,10 +23,10 @@ const std::vector<CounterSeries>& counter_series() const;
 const std::unordered_map<uint64_t, std::vector<uint32_t>>& flow_groups() const;
 double min_ts() const;
 double max_ts() const;
-size_t cached_strings_bytes() const;
-size_t cached_args_bytes() const;
-size_t cached_counter_points() const;
-int cached_total_threads() const;
+size_t strings_bytes() const;
+size_t args_bytes() const;
+size_t counter_points_count() const;
+int total_threads() const;
 const std::vector<uint32_t>& categories() const;
 const std::unordered_map<uint32_t, std::vector<uint32_t>>& name_to_events() const;
 // TraceModel — mutation methods

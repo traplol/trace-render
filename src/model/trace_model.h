@@ -67,11 +67,11 @@ public:
     const std::vector<uint32_t>& categories() const { return categories_; }
     const std::unordered_map<uint32_t, std::vector<uint32_t>>& name_to_events() const { return name_to_events_; }
 
-    // Pre-computed aggregate stats for diagnostics (computed once in build_index)
-    size_t cached_strings_bytes() const { return cached_strings_bytes_; }
-    size_t cached_args_bytes() const { return cached_args_bytes_; }
-    size_t cached_counter_points() const { return cached_counter_points_; }
-    int cached_total_threads() const { return cached_total_threads_; }
+    // Aggregate stats (computed once in build_index)
+    size_t strings_bytes() const { return cached_strings_bytes_; }
+    size_t args_bytes() const { return cached_args_bytes_; }
+    size_t counter_points_count() const { return cached_counter_points_; }
+    int total_threads() const { return cached_total_threads_; }
 
     // --- Mutation methods for building the model ---
     uint32_t add_event(const TraceEvent& ev) {
