@@ -77,15 +77,14 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
         navigate_to_instance(instance_cursor_ + 1, model, view);
     }
 
-    if (ImGui::BeginTable("InstancesTable", 4,
+    if (ImGui::BeginTable("InstancesTable", 3,
                           ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
                               ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
                           ImVec2(0, 0))) {
         ImGui::TableSetupScrollFreeze(0, 1);
-        ImGui::TableSetupColumn("##Num", ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthFixed, 80.0f, 0);
-        ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_DefaultSort, 0.0f, 1);
-        ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_None, 0.0f, 2);
-        ImGui::TableSetupColumn("Thread", ImGuiTableColumnFlags_None, 0.0f, 3);
+        ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_DefaultSort, 0.0f, 0);
+        ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_None, 0.0f, 1);
+        ImGui::TableSetupColumn("Thread", ImGuiTableColumnFlags_None, 0.0f, 2);
         ImGui::TableHeadersRow();
 
         {
@@ -106,13 +105,13 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                             const auto& b = model.events()[b_idx];
                             int cmp = 0;
                             switch (spec.ColumnUserID) {
-                                case 1:
+                                case 0:
                                     cmp = sort_utils::three_way_cmp(a.ts, b.ts);
                                     break;
-                                case 2:
+                                case 1:
                                     cmp = sort_utils::three_way_cmp(a.dur, b.dur);
                                     break;
-                                case 3:
+                                case 2:
                                     cmp = sort_utils::three_way_cmp(a.tid, b.tid);
                                     break;
                             }
@@ -156,9 +155,10 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                 ImGui::TableNextRow();
 
                 ImGui::TableNextColumn();
-                char id_buf[32];
-                snprintf(id_buf, sizeof(id_buf), "%d##i%d", i + 1, i);
+                format_time(ev.ts, buf, sizeof(buf));
                 bool is_selected = (instance_cursor_ == i);
+                char id_buf[80];
+                snprintf(id_buf, sizeof(id_buf), "%s##i%d", buf, i);
                 if (ImGui::Selectable(id_buf, is_selected,
                                       ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
                     navigate_to_instance(i, model, view);
@@ -167,10 +167,6 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                     ImGui::SetScrollHereY(0.5f);
                     scroll_to_cursor_ = false;
                 }
-
-                ImGui::TableNextColumn();
-                format_time(ev.ts, buf, sizeof(buf));
-                ImGui::TextUnformatted(buf);
 
                 ImGui::TableNextColumn();
                 format_time(ev.dur, buf, sizeof(buf));
