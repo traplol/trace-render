@@ -307,8 +307,62 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
     ImGui::Separator();
 
-    // --- Tab bar for Call Stack / Children / Arguments ---
+    // --- Tab bar for Children / Call Stack / Arguments ---
     if (ImGui::BeginTabBar("##DetailTabs")) {
+        // Children tab
+        {
+            // Re-check children cache in case Parent button changed selection
+            const auto& current_ev = model.events()[view.selected_event_idx()];
+            if (current_ev.dur > 0) {
+                if (cached_event_idx_ != view.selected_event_idx() ||
+                    cached_descendants_flag_ != include_all_descendants_) {
+                    cached_event_idx_ = view.selected_event_idx();
+                    cached_descendants_flag_ = include_all_descendants_;
+                    rebuild_children(model, current_ev);
+                    children_dirty_ = true;
+                }
+
+                if (cached_group_flag_ != group_by_name_ || children_dirty_) {
+                    cached_group_flag_ = group_by_name_;
+                    if (group_by_name_) {
+                        rebuild_aggregated(model, current_ev.dur);
+                    }
+                    rebuild_filter(model);
+                }
+            }
+
+            char children_label[32];
+            snprintf(children_label, sizeof(children_label), "Children (%zu)###Children", children_.size());
+            if (ImGui::BeginTabItem(children_label)) {
+                if (children_.empty()) {
+                    ImGui::TextDisabled("No children.");
+                } else {
+                    ImGui::Checkbox("Include all descendants", &include_all_descendants_);
+                    ImGui::SameLine();
+                    ImGui::Checkbox("Group by name", &group_by_name_);
+
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputTextWithHint("##filter", "Filter by name...", filter_buf_, sizeof(filter_buf_))) {
+                        rebuild_filter(model);
+                    }
+                    if (filter_buf_[0] != '\0') {
+                        size_t shown = group_by_name_ ? filtered_aggregated_.size() : filtered_children_.size();
+                        size_t total = group_by_name_ ? aggregated_.size() : children_.size();
+                        ImGui::TextDisabled("Showing %zu / %zu", shown, total);
+                    }
+
+                    ImGui::Spacing();
+
+                    if (group_by_name_) {
+                        render_aggregated_table(model, view);
+                    } else {
+                        render_children_table(model, view);
+                    }
+                }
+                ImGui::EndTabItem();
+            }
+        }
+
         // Call Stack tab — rebuild cache if selected event changed
         if (cached_stack_event_idx_ != view.selected_event_idx()) {
             TRACE_SCOPE_CAT("RebuildCallStack", "ui");
@@ -508,60 +562,6 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 }
             }
             ImGui::EndTabItem();
-        }
-
-        // Children tab
-        {
-            // Re-check children cache in case Parent button changed selection
-            const auto& current_ev = model.events()[view.selected_event_idx()];
-            if (current_ev.dur > 0) {
-                if (cached_event_idx_ != view.selected_event_idx() ||
-                    cached_descendants_flag_ != include_all_descendants_) {
-                    cached_event_idx_ = view.selected_event_idx();
-                    cached_descendants_flag_ = include_all_descendants_;
-                    rebuild_children(model, current_ev);
-                    children_dirty_ = true;
-                }
-
-                if (cached_group_flag_ != group_by_name_ || children_dirty_) {
-                    cached_group_flag_ = group_by_name_;
-                    if (group_by_name_) {
-                        rebuild_aggregated(model, current_ev.dur);
-                    }
-                    rebuild_filter(model);
-                }
-            }
-
-            char children_label[32];
-            snprintf(children_label, sizeof(children_label), "Children (%zu)###Children", children_.size());
-            if (ImGui::BeginTabItem(children_label)) {
-                if (children_.empty()) {
-                    ImGui::TextDisabled("No children.");
-                } else {
-                    ImGui::Checkbox("Include all descendants", &include_all_descendants_);
-                    ImGui::SameLine();
-                    ImGui::Checkbox("Group by name", &group_by_name_);
-
-                    ImGui::SetNextItemWidth(-1);
-                    if (ImGui::InputTextWithHint("##filter", "Filter by name...", filter_buf_, sizeof(filter_buf_))) {
-                        rebuild_filter(model);
-                    }
-                    if (filter_buf_[0] != '\0') {
-                        size_t shown = group_by_name_ ? filtered_aggregated_.size() : filtered_children_.size();
-                        size_t total = group_by_name_ ? aggregated_.size() : children_.size();
-                        ImGui::TextDisabled("Showing %zu / %zu", shown, total);
-                    }
-
-                    ImGui::Spacing();
-
-                    if (group_by_name_) {
-                        render_aggregated_table(model, view);
-                    } else {
-                        render_children_table(model, view);
-                    }
-                }
-                ImGui::EndTabItem();
-            }
         }
 
         // Arguments tab
