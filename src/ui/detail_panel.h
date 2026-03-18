@@ -7,6 +7,8 @@
 class DetailPanel {
 public:
     void render(const TraceModel& model, ViewState& view);
+    void reset();
+    void on_model_changed();
 
 private:
     // Range selection cache

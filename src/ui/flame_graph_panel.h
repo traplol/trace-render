@@ -31,6 +31,8 @@ struct FlameTree {
 class FlameGraphPanel {
 public:
     void render(const TraceModel& model, ViewState& view);
+    void reset();
+    void on_model_changed();
 
     // Exposed for testing.
     void rebuild(const TraceModel& model, const ViewState& view);

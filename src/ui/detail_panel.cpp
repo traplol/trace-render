@@ -12,6 +12,37 @@
 #include <cmath>
 #include <unordered_map>
 
+void DetailPanel::reset() {
+    cached_range_start_ = 0.0;
+    cached_range_end_ = 0.0;
+    range_stats_ = {};
+    cached_event_idx_ = -1;
+    include_all_descendants_ = false;
+    cached_descendants_flag_ = false;
+    children_dirty_ = false;
+    group_by_name_ = false;
+    cached_group_flag_ = false;
+    cached_stack_event_idx_ = -1;
+    cached_call_stack_.clear();
+    cached_stack_children_.clear();
+    stack_collapsed_.clear();
+    stack_has_children_.clear();
+    filter_buf_[0] = '\0';
+    active_filter_.clear();
+    children_.clear();
+    filtered_children_.clear();
+    aggregated_.clear();
+    filtered_aggregated_.clear();
+    self_time_ = 0.0;
+    self_pct_ = 0.0f;
+    scroll_children_to_top_ = false;
+    scroll_aggregated_to_top_ = false;
+}
+
+void DetailPanel::on_model_changed() {
+    reset();
+}
+
 // Returns a color interpolated from blue (cool, 0%) through green/yellow to red (hot, 100%)
 static ImVec4 heat_color(float pct) {
     float t = std::min(std::max(pct / 100.0f, 0.0f), 1.0f);

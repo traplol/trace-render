@@ -5,6 +5,8 @@
 class SearchPanel {
 public:
     void render(const TraceModel& model, ViewState& view);
+    void reset();
+    void on_model_changed();
 
 private:
     char search_buf_[256] = {};

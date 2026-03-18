@@ -7,6 +7,8 @@
 class InstancePanel {
 public:
     void render(const TraceModel& model, ViewState& view);
+    void reset();
+    void on_model_changed();
 
 private:
     std::string selected_name_;

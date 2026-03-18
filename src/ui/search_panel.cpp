@@ -7,6 +7,18 @@
 #include <algorithm>
 #include <cstdio>
 
+void SearchPanel::reset() {
+    search_buf_[0] = '\0';
+    needs_search_ = false;
+    sorted_results_.clear();
+    needs_sort_ = false;
+    scroll_to_top_ = false;
+}
+
+void SearchPanel::on_model_changed() {
+    reset();
+}
+
 void SearchPanel::render(const TraceModel& model, ViewState& view) {
     TRACE_SCOPE_CAT("Search", "ui");
     ImGui::Begin("Search");

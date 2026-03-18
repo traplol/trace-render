@@ -7,6 +7,20 @@
 #include <cstdio>
 #include <cmath>
 
+void InstancePanel::reset() {
+    selected_name_.clear();
+    instances_.clear();
+    instance_cursor_ = -1;
+    last_selected_event_ = -1;
+    instances_dirty_ = false;
+    scroll_to_cursor_ = false;
+    scroll_to_top_ = false;
+}
+
+void InstancePanel::on_model_changed() {
+    reset();
+}
+
 void InstancePanel::select_function_by_name(const std::string& name, const TraceModel& model) {
     TRACE_FUNCTION_CAT("ui");
     selected_name_ = name;
