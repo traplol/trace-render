@@ -90,6 +90,7 @@ std::string build_sql(const char* const* columns, int num_columns) const;
 void render(const TraceModel&, ViewState&);
 void rebuild(const TraceModel&, const ViewState&);
 const std::vector<FlameTree>& trees() const;
+static int32_t find_longest_instance(const TraceModel&, uint32_t pid, uint32_t tid, uint32_t name_idx);
 // FlameNode: name_idx, cat_idx, total_time, self_time, call_count, first_child, next_sibling, parent (all indices)
 // FlameTree: pid, tid, thread_name, root_total_time, first_root, nodes (flat pool)
 ```
