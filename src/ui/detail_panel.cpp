@@ -292,7 +292,11 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
         ImGui::Text("ID: 0x%llx", (unsigned long long)ev.id);
     }
 
-    ImGui::Text("Depth: %d", ev.depth);
+    if (const auto* th = model.find_thread(ev.pid, ev.tid)) {
+        ImGui::Text("Depth: %d / %d", ev.depth, th->max_depth);
+    } else {
+        ImGui::Text("Depth: %d", ev.depth);
+    }
 
     // Parent button
     if (ev.depth > 0) {
