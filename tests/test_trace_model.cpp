@@ -801,3 +801,63 @@ TEST(SameTimestamp, ThreeLevelsSameTimestamp) {
     EXPECT_EQ(m.get_string(m.events()[stack[1]].name_idx), "parent");
     EXPECT_EQ(m.get_string(m.events()[stack[2]].name_idx), "child");
 }
+
+// --- Cached diagnostics stats ---
+
+TEST_F(TraceModelTest, CachedDiagStatsComputedByBuildIndex) {
+    auto& proc = model.get_or_create_process(1);
+    auto& t1 = proc.get_or_create_thread(1);
+    auto& t2 = proc.get_or_create_thread(2);
+    auto& proc2 = model.get_or_create_process(2);
+    proc2.get_or_create_thread(3);
+
+    model.intern_string("hello");
+    model.intern_string("world");
+    model.add_args("{\"key\": \"value\"}");
+
+    auto& cs = model.find_or_create_counter_series(1, "Memory");
+    cs.points = {{100.0, 1.0}, {200.0, 2.0}, {300.0, 3.0}};
+
+    TraceEvent ev;
+    ev.ph = Phase::Complete;
+    ev.name_idx = model.intern_string("task");
+    ev.ts = 100.0;
+    ev.dur = 50.0;
+    ev.pid = 1;
+    ev.tid = 1;
+    model.add_event(ev);
+    t1.event_indices.push_back(0);
+
+    model.build_index();
+
+    // 3 threads total across 2 processes
+    EXPECT_EQ(model.total_threads(), 3);
+
+    // String pool bytes should be sum of capacity() for all interned strings
+    EXPECT_GT(model.strings_bytes(), 0u);
+
+    // Args pool bytes should be > 0 since we added one arg
+    EXPECT_GT(model.args_bytes(), 0u);
+
+    // Counter points: 3 points in the one series
+    EXPECT_EQ(model.counter_points_count(), 3u);
+}
+
+TEST_F(TraceModelTest, CachedDiagStatsResetByClear) {
+    model.intern_string("test");
+    model.add_args("{}");
+    auto& proc = model.get_or_create_process(1);
+    proc.get_or_create_thread(1);
+    auto& cs = model.find_or_create_counter_series(1, "C");
+    cs.points = {{0.0, 1.0}};
+
+    model.build_index();
+    EXPECT_GT(model.strings_bytes(), 0u);
+    EXPECT_GT(model.total_threads(), 0);
+
+    model.clear();
+    EXPECT_EQ(model.strings_bytes(), 0u);
+    EXPECT_EQ(model.args_bytes(), 0u);
+    EXPECT_EQ(model.counter_points_count(), 0u);
+    EXPECT_EQ(model.total_threads(), 0);
+}

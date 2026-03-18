@@ -209,6 +209,19 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
             }
         }
     }
+
+    // Cache aggregate stats for diagnostics panel (avoid per-frame O(n) scans)
+    {
+        TRACE_SCOPE_CAT("CacheDiagStats", "model");
+        cached_strings_bytes_ = 0;
+        for (const auto& s : strings_) cached_strings_bytes_ += s.capacity();
+        cached_args_bytes_ = 0;
+        for (const auto& a : args_) cached_args_bytes_ += a.capacity();
+        cached_counter_points_ = 0;
+        for (const auto& cs : counter_series_) cached_counter_points_ += cs.points.size();
+        cached_total_threads_ = 0;
+        for (const auto& proc : processes_) cached_total_threads_ += (int)proc.threads.size();
+    }
 }
 
 int32_t TraceModel::find_parent_event(uint32_t event_idx) const {
