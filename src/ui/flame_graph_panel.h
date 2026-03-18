@@ -36,6 +36,10 @@ public:
     void rebuild(const TraceModel& model, const ViewState& view);
     const std::vector<FlameTree>& trees() const { return trees_; }
 
+    // Find the event with the longest duration matching name_idx within a thread.
+    // Returns -1 if no match found.
+    static int32_t find_longest_instance(const TraceModel& model, uint32_t pid, uint32_t tid, uint32_t name_idx);
+
 private:
     std::vector<FlameTree> trees_;
 

@@ -6,6 +6,21 @@
 #include <algorithm>
 #include <cstdio>
 
+int32_t FlameGraphPanel::find_longest_instance(const TraceModel& model, uint32_t pid, uint32_t tid, uint32_t name_idx) {
+    const auto* thread = model.find_thread(pid, tid);
+    if (!thread) return -1;
+    int32_t best = -1;
+    double best_dur = -1.0;
+    for (uint32_t ei : thread->event_indices) {
+        const auto& ev = model.events()[ei];
+        if (ev.name_idx == name_idx && ev.dur > best_dur) {
+            best_dur = ev.dur;
+            best = static_cast<int32_t>(ei);
+        }
+    }
+    return best;
+}
+
 // ---------------------------------------------------------------------------
 // Cache invalidation
 // ---------------------------------------------------------------------------
@@ -406,10 +421,8 @@ void FlameGraphPanel::render_icicle(const TraceModel& model, ViewState& view, in
         if (hoverable && mouse.x >= x0 && mouse.x < x1 && mouse.y >= y && mouse.y < y + BAR_H) {
             hovered_idx = entry.node_idx;
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-                auto it = model.name_to_events().find(node.name_idx);
-                if (it != model.name_to_events().end() && !it->second.empty()) {
-                    view.set_selected_event_idx(it->second[0]);
-                }
+                int32_t best = find_longest_instance(model, tree.pid, tree.tid, node.name_idx);
+                if (best >= 0) view.set_selected_event_idx(best);
             }
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
                 ctx_node_idx_ = entry.node_idx;
@@ -463,10 +476,8 @@ void FlameGraphPanel::render_icicle(const TraceModel& model, ViewState& view, in
                 view.hide_cat(ctx.cat_idx);
             }
             if (ImGui::MenuItem("Show in Instances")) {
-                auto it = model.name_to_events().find(ctx.name_idx);
-                if (it != model.name_to_events().end() && !it->second.empty()) {
-                    view.set_selected_event_idx(it->second[0]);
-                }
+                int32_t best = find_longest_instance(model, tree.pid, tree.tid, ctx.name_idx);
+                if (best >= 0) view.set_selected_event_idx(best);
             }
         }
         ImGui::EndPopup();
