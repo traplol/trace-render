@@ -144,6 +144,9 @@ public:
         }
     }
 
+    void set_verbose(bool v) { verbose_ = v; }
+    bool verbose() const { return verbose_; }
+
     void close() {
         std::lock_guard<std::mutex> lock(mutex_);
         close_file();
@@ -221,6 +224,7 @@ private:
     FILE* file_ = nullptr;
     bool first_event_ = true;
     bool enabled_ = false;
+    bool verbose_ = false;
     std::mutex mutex_;
     std::chrono::steady_clock::time_point epoch_;
 };
@@ -228,9 +232,10 @@ private:
 // RAII scope tracer — always emits file/line/func as args
 class TraceScope {
 public:
-    TraceScope(const char* name, const char* cat, const char* file, int line, const char* func)
+    TraceScope(const char* name, const char* cat, const char* file, int line, const char* func,
+               bool verbose_only = false)
         : name_(name), cat_(cat), file_(file), line_(line), func_(func) {
-        if (Tracer::instance().enabled()) {
+        if (Tracer::instance().enabled() && (!verbose_only || Tracer::instance().verbose())) {
             start_ = Tracer::instance().now_us();
             active_ = true;
         }
@@ -303,3 +308,9 @@ private:
 #define TRACE_FUNCTION() TraceScope _trace_scope_##__LINE__(TRACE_FUNC_SIG, "app", __FILE__, __LINE__, TRACE_FUNC_SIG)
 #define TRACE_FUNCTION_CAT(cat) \
     TraceScope _trace_scope_##__LINE__(TRACE_FUNC_SIG, cat, __FILE__, __LINE__, TRACE_FUNC_SIG)
+
+// Verbose variants — only emit when --verbose-trace is enabled
+#define TRACE_VERBOSE_SCOPE_CAT(name, cat) \
+    TraceScope _trace_scope_##__LINE__(name, cat, __FILE__, __LINE__, TRACE_FUNC_SIG, true)
+#define TRACE_VERBOSE_FUNCTION_CAT(cat) \
+    TraceScope _trace_scope_##__LINE__(TRACE_FUNC_SIG, cat, __FILE__, __LINE__, TRACE_FUNC_SIG, true)

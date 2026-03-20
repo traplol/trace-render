@@ -19,6 +19,8 @@ static Tracer& instance();
 void set_output(const std::string& path);
 void close();
 bool enabled() const;
+void set_verbose(bool v);
+bool verbose() const;
 void write_complete(const char* name, const char* cat, uint64_t ts_us, uint64_t dur_us, const char* args_json = nullptr);
 void write_counter(const char* name, const char* cat, uint64_t ts_us, const char* key, double value);
 uint64_t now_us() const;
@@ -28,4 +30,6 @@ TRACE_SCOPE_CAT(name, cat)
 TRACE_SCOPE_ARGS(name, cat, ...)
 TRACE_FUNCTION()
 TRACE_FUNCTION_CAT(cat)
+TRACE_VERBOSE_SCOPE_CAT(name, cat)
+TRACE_VERBOSE_FUNCTION_CAT(cat)
 ```

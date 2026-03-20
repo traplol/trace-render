@@ -8,7 +8,7 @@
 #include <cmath>
 
 void InstancePanel::reset() {
-    TRACE_FUNCTION_CAT("ui");
+    TRACE_VERBOSE_FUNCTION_CAT("ui");
     selected_name_.clear();
     instances_.clear();
     instance_cursor_ = -1;

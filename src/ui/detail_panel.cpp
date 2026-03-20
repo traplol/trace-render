@@ -13,7 +13,7 @@
 #include <unordered_map>
 
 void DetailPanel::reset() {
-    TRACE_FUNCTION_CAT("ui");
+    TRACE_VERBOSE_FUNCTION_CAT("ui");
     cached_range_start_ = 0.0;
     cached_range_end_ = 0.0;
     range_stats_ = {};
@@ -46,7 +46,7 @@ void DetailPanel::on_model_changed() {
 
 // Returns a color interpolated from blue (cool, 0%) through green/yellow to red (hot, 100%)
 static ImVec4 heat_color(float pct) {
-    TRACE_FUNCTION_CAT("ui");
+    TRACE_VERBOSE_FUNCTION_CAT("ui");
     float t = std::min(std::max(pct / 100.0f, 0.0f), 1.0f);
     // Blue -> Cyan -> Green -> Yellow -> Red
     float r, g, b;
@@ -75,7 +75,7 @@ static ImVec4 heat_color(float pct) {
 }
 
 static void render_heat_bar(float pct) {
-    TRACE_FUNCTION_CAT("ui");
+    TRACE_VERBOSE_FUNCTION_CAT("ui");
     ImVec4 col = heat_color(pct);
     ImGui::PushStyleColor(ImGuiCol_PlotHistogram, col);
     ImGui::ProgressBar(pct / 100.0f, ImVec2(-1, 0), "");
@@ -117,7 +117,7 @@ static const char* phase_name(Phase ph) {
 }
 
 static void render_json_value(const nlohmann::json& j, int depth = 0) {
-    TRACE_FUNCTION_CAT("ui");
+    TRACE_VERBOSE_FUNCTION_CAT("ui");
     if (j.is_object()) {
         for (auto& [key, val] : j.items()) {
             if (val.is_object() || val.is_array()) {

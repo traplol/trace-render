@@ -230,7 +230,7 @@ QueryDb::QueryResult QueryDb::execute(const std::string& sql) {
 }
 
 int QueryDb::progress_callback(void* data) {
-    TRACE_FUNCTION_CAT("model");
+    TRACE_VERBOSE_FUNCTION_CAT("model");
     auto* self = static_cast<QueryDb*>(data);
     self->query_steps_.fetch_add(1000, std::memory_order_relaxed);
     // Return non-zero to cancel

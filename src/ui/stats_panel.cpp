@@ -11,7 +11,7 @@
 #include <cstring>
 
 static bool is_time_column(const std::string& name) {
-    TRACE_FUNCTION_CAT("ui");
+    TRACE_VERBOSE_FUNCTION_CAT("ui");
     if (name.find("dur") != std::string::npos) return true;
     if (name == "ts" || name == "min_ts" || name == "max_ts") return true;
     if (name.find("time") != std::string::npos) return true;
@@ -19,7 +19,7 @@ static bool is_time_column(const std::string& name) {
 }
 
 static void render_cell(const std::string& value, bool is_time) {
-    TRACE_FUNCTION_CAT("ui");
+    TRACE_VERBOSE_FUNCTION_CAT("ui");
     if (is_time) {
         char* end = nullptr;
         double v = strtod(value.c_str(), &end);
@@ -34,7 +34,7 @@ static void render_cell(const std::string& value, bool is_time) {
 }
 
 void StatsPanel::ensure_default_tab() {
-    TRACE_FUNCTION_CAT("ui");
+    TRACE_VERBOSE_FUNCTION_CAT("ui");
     if (tabs_.empty()) {
         QueryTab tab;
         tab.title = "Hot Functions";
@@ -46,7 +46,7 @@ void StatsPanel::ensure_default_tab() {
 }
 
 nlohmann::json StatsPanel::save_tabs() const {
-    TRACE_FUNCTION_CAT("ui");
+    TRACE_VERBOSE_FUNCTION_CAT("ui");
     nlohmann::json arr = nlohmann::json::array();
     for (const auto& tab : tabs_) {
         nlohmann::json t;
@@ -62,7 +62,7 @@ nlohmann::json StatsPanel::save_tabs() const {
 }
 
 void StatsPanel::load_tabs(const nlohmann::json& j) {
-    TRACE_FUNCTION_CAT("ui");
+    TRACE_VERBOSE_FUNCTION_CAT("ui");
     tabs_.clear();
     if (!j.is_array()) return;
     for (const auto& item : j) {

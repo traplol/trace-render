@@ -51,7 +51,7 @@ static float time_to_x(double ts, double view_start, double view_end, float trac
 std::vector<MergedCounterSegment> merge_counter_points(const std::vector<std::pair<double, double>>& points,
                                                        double view_start, double view_end, float track_x,
                                                        float track_w) {
-    TRACE_FUNCTION_CAT("timeline");
+    TRACE_VERBOSE_FUNCTION_CAT("timeline");
     std::vector<MergedCounterSegment> result;
     if (points.empty()) return result;
 
@@ -161,7 +161,7 @@ void CounterTrackRenderer::render_series(ImDrawList* dl, ImVec2 track_min, ImVec
 }
 
 bool counter_lookup_value(const CounterSeries& series, double time, double& out_timestamp, double& out_value) {
-    TRACE_FUNCTION_CAT("timeline");
+    TRACE_VERBOSE_FUNCTION_CAT("timeline");
     if (series.points.empty()) return false;
 
     auto it = std::upper_bound(series.points.begin(), series.points.end(), time,
@@ -178,7 +178,7 @@ bool counter_lookup_value(const CounterSeries& series, double time, double& out_
 
 bool CounterTrackRenderer::hit_test(float mouse_x, float mouse_y, const ViewState& view,
                                     CounterHitResult& result) const {
-    TRACE_FUNCTION_CAT("timeline");
+    TRACE_VERBOSE_FUNCTION_CAT("timeline");
     for (const auto& layout : layouts_) {
         if (mouse_y < layout.track_min.y || mouse_y >= layout.track_max.y) continue;
         if (mouse_x < layout.track_min.x || mouse_x >= layout.track_max.x) continue;

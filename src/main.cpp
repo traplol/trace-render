@@ -127,6 +127,7 @@ int main(int argc, char* argv[]) {
     // Parse command-line arguments
     const char* file_arg = nullptr;
     const char* trace_output = nullptr;
+    bool verbose_trace = false;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-ns") == 0) {
             app.set_time_unit_ns(true);
@@ -134,6 +135,8 @@ int main(int argc, char* argv[]) {
             app.set_time_unit_ns(false);
         } else if (strcmp(argv[i], "--trace") == 0 && i + 1 < argc) {
             trace_output = argv[++i];
+        } else if (strcmp(argv[i], "--verbose-trace") == 0) {
+            verbose_trace = true;
         } else {
             file_arg = argv[i];
         }
@@ -141,7 +144,12 @@ int main(int argc, char* argv[]) {
 
     if (trace_output) {
         Tracer::instance().set_output(trace_output);
-        printf("Tracing to: %s\n", trace_output);
+        if (verbose_trace) {
+            Tracer::instance().set_verbose(true);
+            printf("Verbose tracing to: %s\n", trace_output);
+        } else {
+            printf("Tracing to: %s\n", trace_output);
+        }
     }
 
     if (file_arg) {

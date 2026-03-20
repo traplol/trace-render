@@ -255,7 +255,7 @@ double TraceModel::compute_self_time(uint32_t event_idx) const {
 }
 
 int32_t TraceModel::find_longest_child(uint32_t event_idx) const {
-    TRACE_FUNCTION_CAT("model");
+    TRACE_VERBOSE_FUNCTION_CAT("model");
     if (event_idx >= events_.size()) return -1;
     const auto& ev = events_[event_idx];
     const auto* thread = find_thread(ev.pid, ev.tid);
@@ -278,7 +278,7 @@ int32_t TraceModel::find_longest_child(uint32_t event_idx) const {
 }
 
 int32_t TraceModel::find_prev_sibling(uint32_t event_idx) const {
-    TRACE_FUNCTION_CAT("model");
+    TRACE_VERBOSE_FUNCTION_CAT("model");
     if (event_idx >= events_.size()) return -1;
     const auto& ev = events_[event_idx];
     const auto* thread = find_thread(ev.pid, ev.tid);
@@ -295,7 +295,7 @@ int32_t TraceModel::find_prev_sibling(uint32_t event_idx) const {
 }
 
 int32_t TraceModel::find_next_sibling(uint32_t event_idx) const {
-    TRACE_FUNCTION_CAT("model");
+    TRACE_VERBOSE_FUNCTION_CAT("model");
     if (event_idx >= events_.size()) return -1;
     const auto& ev = events_[event_idx];
     const auto* thread = find_thread(ev.pid, ev.tid);

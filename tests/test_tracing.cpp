@@ -233,6 +233,50 @@ TEST_F(TracingIntegration, TraceFunctionMacro) {
     EXPECT_TRUE(ev["args"].contains("func"));
 }
 
+TEST_F(TracingIntegration, VerboseMacroSkippedWhenNotVerbose) {
+    Tracer::instance().set_output(tmp_path_);
+    // verbose is off by default — verbose macros should not emit events
+    { TRACE_VERBOSE_FUNCTION_CAT("test"); }
+    { TRACE_VERBOSE_SCOPE_CAT("verbose_scope", "test"); }
+    Tracer::instance().close();
+
+    auto j = read_trace();
+    EXPECT_EQ(j["traceEvents"].size(), 0);
+}
+
+TEST_F(TracingIntegration, VerboseMacroEmitsWhenVerbose) {
+    Tracer::instance().set_output(tmp_path_);
+    Tracer::instance().set_verbose(true);
+    { TRACE_VERBOSE_FUNCTION_CAT("test"); }
+    { TRACE_VERBOSE_SCOPE_CAT("verbose_scope", "test"); }
+    Tracer::instance().close();
+    Tracer::instance().set_verbose(false);
+
+    auto j = read_trace();
+    EXPECT_EQ(j["traceEvents"].size(), 2);
+    // First event: TRACE_VERBOSE_FUNCTION_CAT — name is __PRETTY_FUNCTION__
+    auto& ev0 = j["traceEvents"][0];
+    std::string name0 = ev0["name"].get<std::string>();
+    EXPECT_NE(name0.find("VerboseMacroEmitsWhenVerbose"), std::string::npos);
+    EXPECT_EQ(ev0["cat"], "test");
+    // Second event: TRACE_VERBOSE_SCOPE_CAT
+    auto& ev1 = j["traceEvents"][1];
+    EXPECT_EQ(ev1["name"], "verbose_scope");
+    EXPECT_EQ(ev1["cat"], "test");
+}
+
+TEST_F(TracingIntegration, NonVerboseMacroStillEmitsWhenVerboseOn) {
+    // Regular macros should work regardless of verbose flag
+    Tracer::instance().set_output(tmp_path_);
+    Tracer::instance().set_verbose(true);
+    { TRACE_FUNCTION_CAT("test"); }
+    Tracer::instance().close();
+    Tracer::instance().set_verbose(false);
+
+    auto j = read_trace();
+    EXPECT_EQ(j["traceEvents"].size(), 1);
+}
+
 TEST_F(TracingIntegration, MultipleEvents) {
     Tracer::instance().set_output(tmp_path_);
     Tracer::instance().write_complete("a", "c", 100, 10);
