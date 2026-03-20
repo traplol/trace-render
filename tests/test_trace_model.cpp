@@ -221,10 +221,11 @@ TEST_F(TraceModelTest, BuildIndexDeduplicatesSameNameAndTimestamp) {
 }
 
 TEST_F(TraceModelTest, BuildIndexSortsProcessesAndThreads) {
-    auto& p2 = model.get_or_create_process(2);
-    p2.sort_index = 10;
-    auto& p1 = model.get_or_create_process(1);
-    p1.sort_index = 5;
+    model.get_or_create_process(2);
+    model.get_or_create_process(1);
+    // Set sort_index after both processes exist to avoid dangling references
+    model.find_process(2)->sort_index = 10;
+    model.find_process(1)->sort_index = 5;
 
     model.build_index();
 
@@ -805,11 +806,11 @@ TEST(SameTimestamp, ThreeLevelsSameTimestamp) {
 // --- Cached diagnostics stats ---
 
 TEST_F(TraceModelTest, CachedDiagStatsComputedByBuildIndex) {
-    auto& proc = model.get_or_create_process(1);
-    auto& t1 = proc.get_or_create_thread(1);
-    auto& t2 = proc.get_or_create_thread(2);
-    auto& proc2 = model.get_or_create_process(2);
-    proc2.get_or_create_thread(3);
+    // Create all processes/threads first to avoid dangling references
+    // (vector reallocation invalidates earlier references).
+    model.get_or_create_process(1).get_or_create_thread(1);
+    model.get_or_create_process(1).get_or_create_thread(2);
+    model.get_or_create_process(2).get_or_create_thread(3);
 
     model.intern_string("hello");
     model.intern_string("world");
@@ -826,7 +827,7 @@ TEST_F(TraceModelTest, CachedDiagStatsComputedByBuildIndex) {
     ev.pid = 1;
     ev.tid = 1;
     model.add_event(ev);
-    t1.event_indices.push_back(0);
+    model.find_thread(1, 1)->event_indices.push_back(0);
 
     model.build_index();
 
