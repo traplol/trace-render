@@ -50,6 +50,7 @@ bool time_unit_ns() const; void set_time_unit_ns(bool);
 // Coordinate conversion
 float time_to_x(double ts, float timeline_left, float timeline_width) const;
 double x_to_time(float x, float timeline_left, float timeline_width) const;
+void set_trace_bounds(double min_ts, double max_ts);
 void zoom_to_fit(double min_ts, double max_ts);
 void navigate_to_event(int32_t ev_idx, const TraceEvent& ev, double pad_factor = 0.5, double min_pad_us = 100.0);
 ```

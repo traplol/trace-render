@@ -60,6 +60,7 @@ void App::finish_load() {
         instances_.on_model_changed();
         flame_graph_.on_model_changed();
         if (model_.min_ts() < model_.max_ts()) {
+            view_.set_trace_bounds(model_.min_ts(), model_.max_ts());
             view_.zoom_to_fit(model_.min_ts(), model_.max_ts());
         }
         status_message_ = "Loaded: " + loader_.filename() + " (" + std::to_string(model_.events().size()) +
