@@ -18,6 +18,14 @@ public:
     void set_view_range(double start, double end) {
         view_start_ts_ = start;
         view_end_ts_ = end;
+        clamp_view_to_bounds();
+    }
+
+    // --- Trace time bounds (set once after loading) ---
+    void set_trace_bounds(double min_ts, double max_ts) {
+        trace_min_ts_ = min_ts;
+        trace_max_ts_ = max_ts;
+        has_trace_bounds_ = true;
     }
 
     // --- Selection ---
@@ -158,8 +166,36 @@ public:
     }
 
 private:
+    void clamp_view_to_bounds() {
+        if (!has_trace_bounds_) return;
+        double range = view_end_ts_ - view_start_ts_;
+        double total = trace_max_ts_ - trace_min_ts_;
+        // Allow padding up to 2% of total range beyond the bounds
+        double pad = total * 0.02;
+        double lo = trace_min_ts_ - pad;
+        double hi = trace_max_ts_ + pad;
+        if (range >= (hi - lo)) {
+            // Viewport wider than trace — center it
+            double center = (trace_min_ts_ + trace_max_ts_) / 2.0;
+            view_start_ts_ = center - range / 2.0;
+            view_end_ts_ = center + range / 2.0;
+        } else {
+            if (view_start_ts_ < lo) {
+                view_start_ts_ = lo;
+                view_end_ts_ = lo + range;
+            }
+            if (view_end_ts_ > hi) {
+                view_end_ts_ = hi;
+                view_start_ts_ = hi - range;
+            }
+        }
+    }
+
     double view_start_ts_ = 0.0;
     double view_end_ts_ = 1000.0;
+    double trace_min_ts_ = 0.0;
+    double trace_max_ts_ = 0.0;
+    bool has_trace_bounds_ = false;
     int32_t selected_event_idx_ = -1;
     int32_t pending_scroll_event_idx_ = -1;
     bool has_range_selection_ = false;

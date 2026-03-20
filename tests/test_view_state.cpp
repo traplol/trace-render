@@ -150,6 +150,46 @@ TEST(ViewState, ClearRangeSelection) {
     EXPECT_DOUBLE_EQ(vs.range_end_ts(), 0.0);
 }
 
+// --- Trace bounds clamping ---
+
+TEST(ViewState, ClampViewToBoundsPreventsPanningPastEnd) {
+    ViewState vs;
+    vs.set_trace_bounds(100.0, 1000.0);
+    // Try to pan past the end
+    vs.set_view_range(900.0, 1100.0);
+    // Should be clamped: end <= max_ts + 2% padding
+    double pad = (1000.0 - 100.0) * 0.02;
+    EXPECT_LE(vs.view_end_ts(), 1000.0 + pad + 0.001);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts() - vs.view_start_ts(), 200.0);
+}
+
+TEST(ViewState, ClampViewToBoundsPreventsPanningPastStart) {
+    ViewState vs;
+    vs.set_trace_bounds(100.0, 1000.0);
+    // Try to pan before the start
+    vs.set_view_range(0.0, 200.0);
+    double pad = (1000.0 - 100.0) * 0.02;
+    EXPECT_GE(vs.view_start_ts(), 100.0 - pad - 0.001);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts() - vs.view_start_ts(), 200.0);
+}
+
+TEST(ViewState, ClampViewToBoundsAllowsNormalRange) {
+    ViewState vs;
+    vs.set_trace_bounds(100.0, 1000.0);
+    vs.set_view_range(200.0, 500.0);
+    // Should be unchanged — well within bounds
+    EXPECT_DOUBLE_EQ(vs.view_start_ts(), 200.0);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts(), 500.0);
+}
+
+TEST(ViewState, NoBoundsSetDoesNotClamp) {
+    ViewState vs;
+    // No trace bounds set — should not clamp
+    vs.set_view_range(-5000.0, 50000.0);
+    EXPECT_DOUBLE_EQ(vs.view_start_ts(), -5000.0);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts(), 50000.0);
+}
+
 // --- Range Stats ---
 
 static TraceModel make_range_test_model() {
