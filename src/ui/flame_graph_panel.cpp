@@ -2,11 +2,13 @@
 #include "ui/format_time.h"
 #include "ui/string_utils.h"
 #include "model/color_palette.h"
+#include "tracing.h"
 #include "imgui.h"
 #include <algorithm>
 #include <cstdio>
 
 void FlameGraphPanel::reset() {
+    TRACE_FUNCTION_CAT("ui");
     trees_.clear();
     cached_event_count_ = 0;
     cached_has_range_ = false;
@@ -25,6 +27,7 @@ void FlameGraphPanel::on_model_changed() {
 }
 
 int32_t FlameGraphPanel::find_longest_instance(const TraceModel& model, uint32_t pid, uint32_t tid, uint32_t name_idx) {
+    TRACE_FUNCTION_CAT("ui");
     const auto* thread = model.find_thread(pid, tid);
     if (!thread) return -1;
     int32_t best = -1;
@@ -44,6 +47,7 @@ int32_t FlameGraphPanel::find_longest_instance(const TraceModel& model, uint32_t
 // ---------------------------------------------------------------------------
 
 size_t FlameGraphPanel::compute_hidden_hash(const ViewState& view) const {
+    TRACE_FUNCTION_CAT("ui");
     size_t h = view.hidden_pids().size() * 31 + view.hidden_tids().size() * 37 + view.hidden_cats().size() * 41;
     for (uint32_t v : view.hidden_pids()) h ^= std::hash<uint32_t>{}(v) * 0x9e3779b97f4a7c15ULL;
     for (uint32_t v : view.hidden_tids()) h ^= std::hash<uint32_t>{}(v) * 0x517cc1b727220a95ULL;
@@ -52,6 +56,7 @@ size_t FlameGraphPanel::compute_hidden_hash(const ViewState& view) const {
 }
 
 bool FlameGraphPanel::needs_rebuild(const ViewState& view, size_t event_count) const {
+    TRACE_FUNCTION_CAT("ui");
     if (cached_event_count_ != event_count) return true;
     if (cached_has_range_ != view.has_range_selection()) return true;
     if (view.has_range_selection()) {
@@ -62,6 +67,7 @@ bool FlameGraphPanel::needs_rebuild(const ViewState& view, size_t event_count) c
 }
 
 void FlameGraphPanel::update_cache_keys(const ViewState& view, size_t event_count) {
+    TRACE_FUNCTION_CAT("ui");
     cached_event_count_ = event_count;
     cached_has_range_ = view.has_range_selection();
     cached_range_start_ = view.range_start_ts();
@@ -75,6 +81,7 @@ void FlameGraphPanel::update_cache_keys(const ViewState& view, size_t event_coun
 
 uint32_t FlameGraphPanel::find_or_create_child(FlameTree& tree, uint32_t parent_idx, uint32_t name_idx,
                                                uint32_t cat_idx) {
+    TRACE_FUNCTION_CAT("ui");
     for (uint32_t c = tree.nodes[parent_idx].first_child; c != UINT32_MAX; c = tree.nodes[c].next_sibling) {
         if (tree.nodes[c].name_idx == name_idx && tree.nodes[c].cat_idx == cat_idx) return c;
     }
@@ -90,6 +97,7 @@ uint32_t FlameGraphPanel::find_or_create_child(FlameTree& tree, uint32_t parent_
 }
 
 uint32_t FlameGraphPanel::find_or_create_root(FlameTree& tree, uint32_t name_idx, uint32_t cat_idx) {
+    TRACE_FUNCTION_CAT("ui");
     for (uint32_t c = tree.first_root; c != UINT32_MAX; c = tree.nodes[c].next_sibling) {
         if (tree.nodes[c].name_idx == name_idx && tree.nodes[c].cat_idx == cat_idx) return c;
     }
@@ -104,6 +112,7 @@ uint32_t FlameGraphPanel::find_or_create_root(FlameTree& tree, uint32_t name_idx
 }
 
 uint32_t FlameGraphPanel::sort_children(FlameTree& tree, uint32_t first_child) {
+    TRACE_FUNCTION_CAT("ui");
     if (first_child == UINT32_MAX) return UINT32_MAX;
 
     // Collect child indices, sort by total_time descending, re-link.
@@ -123,6 +132,7 @@ uint32_t FlameGraphPanel::sort_children(FlameTree& tree, uint32_t first_child) {
 }
 
 void FlameGraphPanel::compute_self_times(FlameTree& tree) {
+    TRACE_FUNCTION_CAT("ui");
     // Reverse iteration: children are always appended after parents in the pool,
     // so processing in reverse guarantees children are resolved before parents.
     for (int i = (int)tree.nodes.size() - 1; i >= 0; --i) {
@@ -140,6 +150,7 @@ void FlameGraphPanel::compute_self_times(FlameTree& tree) {
 }
 
 void FlameGraphPanel::rebuild(const TraceModel& model, const ViewState& view) {
+    TRACE_FUNCTION_CAT("ui");
     trees_.clear();
 
     bool has_range = view.has_range_selection();
@@ -229,6 +240,7 @@ void FlameGraphPanel::rebuild(const TraceModel& model, const ViewState& view) {
 // ---------------------------------------------------------------------------
 
 void FlameGraphPanel::render(const TraceModel& model, ViewState& view) {
+    TRACE_SCOPE_CAT("FlameGraph", "ui");
     ImGui::Begin("Flame Graph");
 
     if (model.events().empty()) {
@@ -311,6 +323,7 @@ void FlameGraphPanel::render(const TraceModel& model, ViewState& view) {
 }
 
 void FlameGraphPanel::render_icicle(const TraceModel& model, ViewState& view, int tree_idx) {
+    TRACE_FUNCTION_CAT("ui");
     const auto& tree = trees_[tree_idx];
     uint32_t zoom = zoom_root_[tree_idx];
     bool zoomed = (zoom != UINT32_MAX);

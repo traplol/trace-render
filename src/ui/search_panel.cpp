@@ -8,6 +8,7 @@
 #include <cstdio>
 
 void SearchPanel::reset() {
+    TRACE_FUNCTION_CAT("ui");
     search_buf_[0] = '\0';
     needs_search_ = false;
     sorted_results_.clear();

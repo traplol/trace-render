@@ -41,6 +41,7 @@ struct SaxHandler : json::json_sax_t {
     SaxHandler(TraceModel& m, std::function<void(const char*, float)>& prog) : model(m), on_progress(prog) {}
 
     void finish_event() {
+        TRACE_FUNCTION_CAT("io");
         event_count++;
         if (on_progress && (event_count & 0xFFFF) == 0 && estimated_events > 0) {
             float p = std::min(0.99f, (float)event_count / (float)estimated_events);
@@ -95,6 +96,7 @@ struct SaxHandler : json::json_sax_t {
     }
 
     void handle_metadata() {
+        TRACE_FUNCTION_CAT("io");
         const std::string& name = model.get_string(current_event.name_idx);
         auto& proc = model.get_or_create_process(current_event.pid);
 
@@ -177,6 +179,7 @@ struct SaxHandler : json::json_sax_t {
     }
 
     bool handle_number(double val, const std::string& raw) {
+        TRACE_FUNCTION_CAT("io");
         if (state == State::InArgs) {
             if (args_depth == 0) {
                 // Top-level arg value - for counter events, capture the value
@@ -382,6 +385,7 @@ struct SaxHandler : json::json_sax_t {
     }
 
     static std::string escape_json_string(const std::string& s) {
+        TRACE_FUNCTION_CAT("io");
         std::string result;
         result.reserve(s.size());
         for (char c : s) {

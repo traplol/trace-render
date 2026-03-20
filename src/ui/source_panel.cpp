@@ -13,6 +13,7 @@ using json = nlohmann::json;
 
 // Try common field names for source file and line in event args
 bool extract_source_location(const TraceModel& model, const TraceEvent& ev, std::string& file, int& line) {
+    TRACE_FUNCTION_CAT("io");
     if (ev.args_idx == UINT32_MAX || ev.args_idx >= model.args().size()) return false;
 
     try {
@@ -51,6 +52,7 @@ bool extract_source_location(const TraceModel& model, const TraceEvent& ev, std:
 }
 
 static std::string normalize_slashes(const std::string& path) {
+    TRACE_FUNCTION_CAT("io");
     std::string out = path;
     for (auto& c : out) {
         if (c == '\\') c = '/';
@@ -60,6 +62,7 @@ static std::string normalize_slashes(const std::string& path) {
 
 std::string remap_source_path(const std::string& trace_path, const std::string& strip_prefix,
                               const std::string& local_base) {
+    TRACE_FUNCTION_CAT("io");
     std::string path = normalize_slashes(trace_path);
     std::string strip = normalize_slashes(strip_prefix);
     std::string base = normalize_slashes(local_base);
@@ -96,6 +99,7 @@ std::string remap_source_path(const std::string& trace_path, const std::string& 
 }
 
 json SourcePanel::save_settings() const {
+    TRACE_FUNCTION_CAT("ui");
     json j;
     j["strip_prefix"] = strip_prefix_;
     j["local_base"] = local_base_;
@@ -103,6 +107,7 @@ json SourcePanel::save_settings() const {
 }
 
 void SourcePanel::load_settings(const json& j) {
+    TRACE_FUNCTION_CAT("ui");
     if (j.contains("strip_prefix")) {
         snprintf(strip_prefix_, sizeof(strip_prefix_), "%s", j["strip_prefix"].get<std::string>().c_str());
     }
@@ -112,12 +117,14 @@ void SourcePanel::load_settings(const json& j) {
 }
 
 void SourcePanel::reset_settings() {
+    TRACE_FUNCTION_CAT("ui");
     strip_prefix_[0] = '\0';
     local_base_[0] = '\0';
     path_settings_changed_ = true;
 }
 
 void SourcePanel::render_settings() {
+    TRACE_FUNCTION_CAT("ui");
     ImGui::TextWrapped("Remap source paths from the trace to your local filesystem.");
     ImGui::Spacing();
 
@@ -171,6 +178,7 @@ void SourcePanel::resolve_and_load(const std::string& raw_file) {
 }
 
 void SourcePanel::build_display_text() {
+    TRACE_FUNCTION_CAT("ui");
     cached_display_text_.clear();
     if (cached_lines_.empty()) return;
 
@@ -185,6 +193,7 @@ void SourcePanel::build_display_text() {
 }
 
 void SourcePanel::build_gutter_text() {
+    TRACE_FUNCTION_CAT("ui");
     cached_gutter_text_.clear();
     int num_lines = (int)cached_lines_.size();
     if (num_lines == 0) return;
