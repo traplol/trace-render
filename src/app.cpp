@@ -29,12 +29,14 @@ void App::shutdown() {
 }
 
 void App::open_file(const std::string& path) {
+    TRACE_FUNCTION_CAT("app");
     if (loader_.is_loading()) return;
     loader_.load_file(path, view_.time_unit_ns(), &query_db_);
     status_message_ = "Loading: " + loader_.filename();
 }
 
 void App::open_buffer(std::vector<char> data, const std::string& filename) {
+    TRACE_FUNCTION_CAT("app");
     if (loader_.is_loading()) return;
     loader_.load_buffer(std::move(data), filename, view_.time_unit_ns(), &query_db_);
     status_message_ = "Loading: " + loader_.filename();
@@ -499,6 +501,7 @@ void App::render_settings_modal() {
 }
 
 void App::reset_general_defaults() {
+    TRACE_FUNCTION_CAT("app");
     ImGui::GetIO().FontGlobalScale = 1.0f;
     dark_theme_ = true;
     ImGui::StyleColorsDark();
@@ -508,6 +511,7 @@ void App::reset_general_defaults() {
 }
 
 void App::reset_all_defaults() {
+    TRACE_FUNCTION_CAT("app");
     reset_general_defaults();
     view_.reset_layout_defaults();
     view_.reset_rendering_defaults();

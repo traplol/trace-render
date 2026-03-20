@@ -1,4 +1,5 @@
 #include "ui/key_bindings.h"
+#include "tracing.h"
 #include <nlohmann/json.hpp>
 
 KeyBindings::KeyBindings() {
@@ -6,6 +7,7 @@ KeyBindings::KeyBindings() {
 }
 
 void KeyBindings::reset_defaults() {
+    TRACE_FUNCTION_CAT("ui");
     bindings_[static_cast<int>(Action::PanLeft)] = {ImGuiKey_LeftArrow, ImGuiKey_None};
     bindings_[static_cast<int>(Action::PanRight)] = {ImGuiKey_RightArrow, ImGuiKey_None};
     bindings_[static_cast<int>(Action::ScrollUp)] = {ImGuiKey_UpArrow, ImGuiKey_None};
@@ -26,6 +28,7 @@ void KeyBindings::reset_defaults() {
 }
 
 bool KeyBindings::is_pressed(Action action) const {
+    TRACE_FUNCTION_CAT("ui");
     int idx = static_cast<int>(action);
     const auto& b = bindings_[idx];
     if (b.primary != ImGuiKey_None && ImGui::IsKeyChordPressed(b.primary)) return true;
@@ -34,6 +37,7 @@ bool KeyBindings::is_pressed(Action action) const {
 }
 
 const char* KeyBindings::action_name(Action action) {
+    TRACE_FUNCTION_CAT("ui");
     switch (action) {
         case Action::PanLeft:
             return "Pan Left";
@@ -75,6 +79,7 @@ const char* KeyBindings::action_name(Action action) {
 }
 
 std::string KeyBindings::key_chord_name(ImGuiKeyChord chord) {
+    TRACE_FUNCTION_CAT("ui");
     if (chord == ImGuiKey_None) return "---";
     std::string result;
     if (chord & ImGuiMod_Ctrl) result += "Ctrl+";
@@ -86,6 +91,7 @@ std::string KeyBindings::key_chord_name(ImGuiKeyChord chord) {
 }
 
 const char* KeyBindings::action_id(Action action) {
+    TRACE_FUNCTION_CAT("ui");
     switch (action) {
         case Action::PanLeft:
             return "pan_left";
@@ -127,6 +133,7 @@ const char* KeyBindings::action_id(Action action) {
 }
 
 bool KeyBindings::is_modifier_key(ImGuiKey key) {
+    TRACE_FUNCTION_CAT("ui");
     return key == ImGuiKey_LeftCtrl || key == ImGuiKey_RightCtrl || key == ImGuiKey_LeftShift ||
            key == ImGuiKey_RightShift || key == ImGuiKey_LeftAlt || key == ImGuiKey_RightAlt ||
            key == ImGuiKey_LeftSuper || key == ImGuiKey_RightSuper || key == ImGuiKey_ReservedForModCtrl ||
@@ -135,6 +142,7 @@ bool KeyBindings::is_modifier_key(ImGuiKey key) {
 }
 
 void KeyBindings::clear_conflict(int action_idx, int slot, ImGuiKeyChord chord) {
+    TRACE_FUNCTION_CAT("ui");
     if (chord == ImGuiKey_None) return;
     for (int i = 0; i < kCount; i++) {
         if (i == action_idx) continue;
@@ -147,6 +155,7 @@ void KeyBindings::clear_conflict(int action_idx, int slot, ImGuiKeyChord chord) 
 }
 
 void KeyBindings::render_settings() {
+    TRACE_FUNCTION_CAT("ui");
     ImGui::TextWrapped("Click a binding to change it. Press Escape to cancel, Delete to clear.");
     ImGui::Spacing();
 
@@ -216,6 +225,7 @@ void KeyBindings::render_settings() {
 }
 
 nlohmann::json KeyBindings::save() const {
+    TRACE_FUNCTION_CAT("ui");
     nlohmann::json j = nlohmann::json::object();
     for (int i = 0; i < kCount; i++) {
         auto action = static_cast<Action>(i);
@@ -226,6 +236,7 @@ nlohmann::json KeyBindings::save() const {
 }
 
 void KeyBindings::load(const nlohmann::json& j) {
+    TRACE_FUNCTION_CAT("ui");
     if (!j.is_object()) return;
     for (int i = 0; i < kCount; i++) {
         auto action = static_cast<Action>(i);
