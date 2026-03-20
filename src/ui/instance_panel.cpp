@@ -97,8 +97,9 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                               ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
                           ImVec2(0, 0))) {
         ImGui::TableSetupScrollFreeze(0, 1);
-        ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_DefaultSort, 0.0f, 0);
-        ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_None, 0.0f, 1);
+        ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_None, 0.0f, 0);
+        ImGui::TableSetupColumn(
+            "Duration", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending, 0.0f, 1);
         ImGui::TableHeadersRow();
 
         {
