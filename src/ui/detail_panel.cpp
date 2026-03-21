@@ -442,6 +442,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
         snprintf(stack_label, sizeof(stack_label), "Call Stack (%d)###Stack", stack_count);
         if (has_stack && ImGui::BeginTabItem(stack_label)) {
             const float indent_per_level = ImGui::GetFontSize() * 0.75f;
+            const float gutter_width = ImGui::CalcTextSize("000.000 ms").x + ImGui::GetStyle().ItemSpacing.x * 2;
             const auto& stack = cached_call_stack_;
             // Render ancestors and selected event
             for (int i = 0; i < (int)stack.size(); i++) {
@@ -454,7 +455,12 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 format_time(self, self_buf, sizeof(self_buf));
 
                 float indent = i * indent_per_level;
-                if (indent > 0) ImGui::Indent(indent);
+
+                // Self-time gutter (right-aligned)
+                float text_w = ImGui::CalcTextSize(self_buf).x;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + gutter_width - text_w - ImGui::GetStyle().ItemSpacing.x);
+                ImGui::TextDisabled("%s", self_buf);
+                ImGui::SameLine(gutter_width + indent);
 
                 char id_buf[32];
                 snprintf(id_buf, sizeof(id_buf), "##frame%d", i);
@@ -469,10 +475,6 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 } else {
                     ImGui::TextUnformatted(model.get_string(frame.name_idx).c_str());
                 }
-                ImGui::SameLine();
-                ImGui::TextDisabled("  self: %s", self_buf);
-
-                if (indent > 0) ImGui::Unindent(indent);
 
                 if (row_hovered) {
                     char wall_buf[64];
@@ -531,7 +533,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 float arrow_sz = ImGui::GetFontSize();
                 float row_height = ImGui::GetTextLineHeightWithSpacing();
                 ImDrawList* dl = ImGui::GetWindowDrawList();
-                float base_x = ImGui::GetCursorScreenPos().x;
+                float base_x = ImGui::GetCursorScreenPos().x + gutter_width;
                 float list_start_y = ImGui::GetCursorScreenPos().y;
 
                 // Use clipper to only create ImGui widgets for on-screen rows
@@ -546,7 +548,21 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
                         int vis_depth = (int)frame.depth + depth_offset;
                         float indent = vis_depth * indent_per_level;
-                        if (indent > 0) ImGui::Indent(indent);
+
+                        // Self-time gutter (right-aligned)
+                        char self_buf[64];
+                        double self;
+                        if (is_consolidated) {
+                            self = entry.total_self / entry.count;
+                        } else {
+                            self = model.compute_self_time(idx);
+                        }
+                        format_time(self, self_buf, sizeof(self_buf));
+                        float text_w = ImGui::CalcTextSize(self_buf).x;
+                        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + gutter_width - text_w -
+                                             ImGui::GetStyle().ItemSpacing.x);
+                        ImGui::TextDisabled("%s", self_buf);
+                        ImGui::SameLine(gutter_width + indent);
 
                         if (is_consolidated) {
                             // Consolidated entry — no tree arrow, just spacer
@@ -582,10 +598,6 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                             bool has_children = stack_has_children_.count(idx) > 0;
                             bool is_collapsed = stack_collapsed_.count(idx) > 0;
 
-                            char self_buf[64];
-                            double self = model.compute_self_time(idx);
-                            format_time(self, self_buf, sizeof(self_buf));
-
                             if (has_children) {
                                 ImVec2 cursor = ImGui::GetCursorScreenPos();
                                 char arrow_id[32];
@@ -613,8 +625,6 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                             bool row_hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
                             ImGui::SameLine();
                             ImGui::TextUnformatted(model.get_string(frame.name_idx).c_str());
-                            ImGui::SameLine();
-                            ImGui::TextDisabled("  self: %s", self_buf);
 
                             if (row_hovered) {
                                 char wall_buf[64];
@@ -625,8 +635,6 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                                   self_pct);
                             }
                         }
-
-                        if (indent > 0) ImGui::Unindent(indent);
                     }
                 }
 
