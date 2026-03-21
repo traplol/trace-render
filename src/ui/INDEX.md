@@ -27,6 +27,7 @@ int32_t search_current() const; void set_search_current(int32_t);
 // Layout defaults
 static constexpr float kDefaultTrackHeight, kDefaultTrackPadding, kDefaultCounterTrackHeight;
 static constexpr float kDefaultLabelWidth, kDefaultRulerHeight, kDefaultProcHeaderHeight, kDefaultScrollbarScale;
+static constexpr float kDefaultFlameBarHeight, kDefaultFlameBarGap;
 // Layout
 float track_height() const; void set_track_height(float);
 float track_padding() const; void set_track_padding(float);
@@ -35,6 +36,8 @@ float label_width() const; void set_label_width(float);
 float ruler_height() const; void set_ruler_height(float);
 float proc_header_height() const; void set_proc_header_height(float);
 float scrollbar_scale() const; void set_scrollbar_scale(float);
+float flame_bar_height() const; void set_flame_bar_height(float);
+float flame_bar_gap() const; void set_flame_bar_gap(float);
 void reset_layout_defaults();
 // Rendering defaults
 static constexpr bool kDefaultShowFlows; static constexpr std::array<float, 4> kDefaultSelBorderColor;

@@ -341,8 +341,8 @@ void App::render_settings_modal() {
     ImGui::SetNextWindowSize(ImVec2(800, 500), ImGuiCond_Appearing);
 
     if (ImGui::BeginPopupModal("Settings", &show_settings_)) {
-        const char* tab_labels[] = {"General", "Timeline", "Rendering", "Source", "Keyboard"};
-        constexpr int kTabCount = 5;
+        const char* tab_labels[] = {"General", "Timeline", "Flamegraph", "Rendering", "Source", "Keyboard"};
+        constexpr int kTabCount = 6;
         constexpr float kSidebarWidth = 140.0f;
         const float footer_height = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
 
@@ -437,7 +437,26 @@ void App::render_settings_modal() {
                 }
                 break;
             }
-            case 2: {  // Rendering
+            case 2: {  // Flamegraph
+                ImGui::SeparatorText("Layout");
+
+                constexpr auto fg_clamp = ImGuiSliderFlags_AlwaysClamp;
+                float fv = view_.flame_bar_height();
+                if (ImGui::DragFloat("Bar Height", &fv, 1.0f, 10.0f, 100.0f, "%.0f px", fg_clamp))
+                    view_.set_flame_bar_height(fv);
+                fv = view_.flame_bar_gap();
+                if (ImGui::DragFloat("Bar Gap", &fv, 0.5f, 0.0f, 10.0f, "%.0f px", fg_clamp))
+                    view_.set_flame_bar_gap(fv);
+
+                ImGui::Spacing();
+                ImGui::Spacing();
+                if (ImGui::Button("Reset to Defaults")) {
+                    view_.set_flame_bar_height(ViewState::kDefaultFlameBarHeight);
+                    view_.set_flame_bar_gap(ViewState::kDefaultFlameBarGap);
+                }
+                break;
+            }
+            case 3: {  // Rendering
                 {
                     bool show = view_.show_flows();
                     if (ImGui::Checkbox("Show Flow Arrows", &show)) view_.set_show_flows(show);
@@ -456,7 +475,7 @@ void App::render_settings_modal() {
                 }
                 break;
             }
-            case 3: {  // Source
+            case 4: {  // Source
                 source_.render_settings();
 
                 ImGui::Spacing();
@@ -466,7 +485,7 @@ void App::render_settings_modal() {
                 }
                 break;
             }
-            case 4: {  // Keyboard
+            case 5: {  // Keyboard
                 view_.key_bindings().render_settings();
 
                 ImGui::Spacing();
@@ -537,6 +556,8 @@ void App::save_settings() {
     j["ruler_height"] = view_.ruler_height();
     j["proc_header_height"] = view_.proc_header_height();
     j["scrollbar_scale"] = view_.scrollbar_scale();
+    j["flame_bar_height"] = view_.flame_bar_height();
+    j["flame_bar_gap"] = view_.flame_bar_gap();
     j["sel_border_color"] = {view_.sel_border_color()[0], view_.sel_border_color()[1], view_.sel_border_color()[2],
                              view_.sel_border_color()[3]};
     j["dark_theme"] = dark_theme_;
@@ -572,6 +593,8 @@ void App::load_settings() {
         if (j.contains("ruler_height")) view_.set_ruler_height(j["ruler_height"].get<float>());
         if (j.contains("proc_header_height")) view_.set_proc_header_height(j["proc_header_height"].get<float>());
         if (j.contains("scrollbar_scale")) view_.set_scrollbar_scale(j["scrollbar_scale"].get<float>());
+        if (j.contains("flame_bar_height")) view_.set_flame_bar_height(j["flame_bar_height"].get<float>());
+        if (j.contains("flame_bar_gap")) view_.set_flame_bar_gap(j["flame_bar_gap"].get<float>());
         if (j.contains("sel_border_color")) {
             auto& arr = j["sel_border_color"];
             std::array<float, 4> col;

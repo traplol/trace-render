@@ -9,6 +9,21 @@ TEST(ViewState, DefaultValues) {
     EXPECT_DOUBLE_EQ(vs.view_end_ts(), 1000.0);
     EXPECT_EQ(vs.selected_event_idx(), -1);
     EXPECT_TRUE(vs.show_flows());
+    EXPECT_FLOAT_EQ(vs.flame_bar_height(), ViewState::kDefaultFlameBarHeight);
+    EXPECT_FLOAT_EQ(vs.flame_bar_gap(), ViewState::kDefaultFlameBarGap);
+}
+
+TEST(ViewState, FlameBarHeightConfigurable) {
+    ViewState vs;
+    vs.set_flame_bar_height(30.0f);
+    EXPECT_FLOAT_EQ(vs.flame_bar_height(), 30.0f);
+
+    vs.set_flame_bar_gap(3.0f);
+    EXPECT_FLOAT_EQ(vs.flame_bar_gap(), 3.0f);
+
+    vs.reset_layout_defaults();
+    EXPECT_FLOAT_EQ(vs.flame_bar_height(), ViewState::kDefaultFlameBarHeight);
+    EXPECT_FLOAT_EQ(vs.flame_bar_gap(), ViewState::kDefaultFlameBarGap);
 }
 
 TEST(ViewState, TimeToX) {

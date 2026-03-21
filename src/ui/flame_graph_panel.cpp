@@ -355,7 +355,7 @@ void FlameGraphPanel::render_icicle(const TraceModel& model, ViewState& view, in
         ImGui::Separator();
     }
 
-    constexpr float BAR_H = 20.0f, BAR_GAP = 1.0f;
+    const float BAR_H = view.flame_bar_height(), BAR_GAP = view.flame_bar_gap();
 
     float canvas_w = ImGui::GetContentRegionAvail().x;
     if (canvas_w < 10.0f) return;
