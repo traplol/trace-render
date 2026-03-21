@@ -1,426 +1,148 @@
 #include "trace_parser.h"
 #include "tracing.h"
+#include <simdjson.h>
 #include <nlohmann/json.hpp>
 #include <fstream>
-#include <sstream>
 
 using json = nlohmann::json;
 
-struct SaxHandler : json::json_sax_t {
-    TraceModel& model;
-    std::function<void(const char*, float)>& on_progress;
-    double time_divisor = 1.0;
-    size_t file_size = 0;
-    size_t bytes_read = 0;
-
-    enum class State {
-        TopLevel,
-        InTopObject,
-        InTraceEvents,
-        InEvent,
-        InArgs,
-        Skipping,
-    };
-
-    State state = State::TopLevel;
-    int skip_depth = 0;
-    std::string current_key;
-
-    // Current event being assembled
-    TraceEvent current_event{};
-    std::string current_args_json;
-    int args_depth = 0;
-    bool first_args_key = true;
-
-    // Counter args accumulation
-    std::vector<std::pair<std::string, double>> counter_values;
-
+static void parse_events(simdjson::ondemand::array events, TraceModel& model, double time_divisor,
+                         std::function<void(const char*, float)>& on_progress, uint64_t estimated_events) {
     uint64_t event_count = 0;
-    uint64_t estimated_events = 0;
 
-    SaxHandler(TraceModel& m, std::function<void(const char*, float)>& prog) : model(m), on_progress(prog) {}
+    for (auto event_result : events) {
+        auto obj = event_result.get_object().value();
+        TraceEvent ev{};
+        std::string_view args_raw;
+        bool has_args = false;
 
-    void finish_event() {
+        for (auto field : obj) {
+            std::string_view key = field.unescaped_key().value();
+
+            if (key == "name") {
+                std::string_view val;
+                if (!field.value().get_string().get(val)) ev.name_idx = model.intern_string(std::string(val));
+            } else if (key == "cat") {
+                std::string_view val;
+                if (!field.value().get_string().get(val)) ev.cat_idx = model.intern_string(std::string(val));
+            } else if (key == "ph") {
+                std::string_view val;
+                if (!field.value().get_string().get(val))
+                    if (!val.empty()) ev.ph = phase_from_char(val[0]);
+            } else if (key == "ts") {
+                double val;
+                if (!field.value().get_double().get(val)) ev.ts = val / time_divisor;
+            } else if (key == "dur") {
+                double val;
+                if (!field.value().get_double().get(val)) ev.dur = val / time_divisor;
+            } else if (key == "pid") {
+                double val;
+                if (!field.value().get_double().get(val)) ev.pid = (uint32_t)val;
+            } else if (key == "tid") {
+                double val;
+                if (!field.value().get_double().get(val)) ev.tid = (uint32_t)val;
+            } else if (key == "id") {
+                try {
+                    auto val = field.value();
+                    auto t = val.type().value();
+                    if (t == simdjson::ondemand::json_type::string) {
+                        auto s = std::string(val.get_string().value());
+                        if (s.size() > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+                            ev.id = std::stoull(s, nullptr, 16);
+                        } else {
+                            ev.id = std::stoull(s);
+                        }
+                    } else if (t == simdjson::ondemand::json_type::number) {
+                        ev.id = (uint64_t)val.get_double().value();
+                    }
+                } catch (...) {}
+            } else if (key == "args") {
+                auto val = field.value();
+                auto rj = val.raw_json();
+                if (!rj.error()) {
+                    args_raw = rj.value();
+                    has_args = true;
+                }
+            }
+            // Unknown fields are automatically skipped by simdjson
+        }
+
         event_count++;
         if (on_progress && (event_count & 0xFFFF) == 0 && estimated_events > 0) {
             float p = std::min(0.99f, (float)event_count / (float)estimated_events);
             on_progress("Parsing JSON", p);
         }
 
-        if (current_event.ph == Phase::Metadata) {
-            handle_metadata();
-            return;
+        // Handle metadata events
+        if (ev.ph == Phase::Metadata) {
+            const std::string& name = model.get_string(ev.name_idx);
+            auto& proc = model.get_or_create_process(ev.pid);
+            if (has_args) {
+                try {
+                    auto args = json::parse(args_raw);
+                    if (name == "process_name" && args.contains("name")) {
+                        proc.name = args["name"].get<std::string>();
+                    } else if (name == "thread_name" && args.contains("name")) {
+                        proc.get_or_create_thread(ev.tid).name = args["name"].get<std::string>();
+                    } else if (name == "process_sort_index" && args.contains("sort_index")) {
+                        proc.sort_index = args["sort_index"].get<int32_t>();
+                    } else if (name == "thread_sort_index" && args.contains("sort_index")) {
+                        proc.get_or_create_thread(ev.tid).sort_index = args["sort_index"].get<int32_t>();
+                    }
+                } catch (...) {}
+            }
+            continue;
         }
 
         uint32_t ev_idx = (uint32_t)model.events().size();
 
-        // Store args if present
-        if (!current_args_json.empty()) {
-            current_event.args_idx = model.add_args(std::move(current_args_json));
-            current_args_json.clear();
+        // Store args
+        if (has_args) {
+            ev.args_idx = model.add_args(std::string(args_raw));
         }
 
         // Handle counter events
-        if (current_event.ph == Phase::Counter) {
-            const std::string& event_name = model.get_string(current_event.name_idx);
-            for (auto& [arg_key, val] : counter_values) {
-                // Use event name; append arg key if multiple values
-                std::string series_name = event_name;
-                if (counter_values.size() > 1) {
-                    series_name += "." + arg_key;
+        if (ev.ph == Phase::Counter && has_args) {
+            const std::string& event_name = model.get_string(ev.name_idx);
+            try {
+                auto args = json::parse(args_raw);
+                std::vector<std::pair<std::string, double>> counter_values;
+                for (auto& [k, v] : args.items()) {
+                    if (v.is_number()) {
+                        counter_values.push_back({k, v.get<double>()});
+                    } else if (v.is_string()) {
+                        try {
+                            counter_values.push_back({k, std::stod(v.get<std::string>())});
+                        } catch (...) {}
+                    }
                 }
-                auto& cs = model.find_or_create_counter_series(current_event.pid, series_name);
-                cs.points.push_back({current_event.ts, val});
-            }
-            counter_values.clear();
+                for (auto& [arg_key, val] : counter_values) {
+                    std::string series_name = event_name;
+                    if (counter_values.size() > 1) {
+                        series_name += "." + arg_key;
+                    }
+                    auto& cs = model.find_or_create_counter_series(ev.pid, series_name);
+                    cs.points.push_back({ev.ts, val});
+                }
+            } catch (...) {}
         }
 
         // Handle flow events
-        if (current_event.ph == Phase::FlowStart || current_event.ph == Phase::FlowStep ||
-            current_event.ph == Phase::FlowEnd) {
-            model.add_flow_event(current_event.id, ev_idx);
+        if (ev.ph == Phase::FlowStart || ev.ph == Phase::FlowStep || ev.ph == Phase::FlowEnd) {
+            model.add_flow_event(ev.id, ev_idx);
         }
 
-        model.add_event(current_event);
+        model.add_event(ev);
 
-        // Add to thread (skip counter events - they render as separate tracks)
-        if (current_event.ph != Phase::Counter) {
-            auto& proc = model.get_or_create_process(current_event.pid);
-            auto& thread = proc.get_or_create_thread(current_event.tid);
+        if (ev.ph != Phase::Counter) {
+            auto& proc = model.get_or_create_process(ev.pid);
+            auto& thread = proc.get_or_create_thread(ev.tid);
             thread.event_indices.push_back(ev_idx);
         } else {
-            // Ensure process exists for counter tracks
-            model.get_or_create_process(current_event.pid);
+            model.get_or_create_process(ev.pid);
         }
     }
-
-    void handle_metadata() {
-        TRACE_FUNCTION_CAT("parser");
-        const std::string& name = model.get_string(current_event.name_idx);
-        auto& proc = model.get_or_create_process(current_event.pid);
-
-        if (name == "process_name") {
-            // Extract name from args
-            if (current_event.args_idx != UINT32_MAX || !current_args_json.empty()) {
-                const std::string& args_str =
-                    current_args_json.empty() ? model.args()[current_event.args_idx] : current_args_json;
-                try {
-                    auto args = json::parse(args_str);
-                    if (args.contains("name")) {
-                        proc.name = args["name"].get<std::string>();
-                    }
-                } catch (...) {}
-            }
-        } else if (name == "thread_name") {
-            auto& thread = proc.get_or_create_thread(current_event.tid);
-            if (!current_args_json.empty()) {
-                try {
-                    auto args = json::parse(current_args_json);
-                    if (args.contains("name")) {
-                        thread.name = args["name"].get<std::string>();
-                    }
-                } catch (...) {}
-            }
-        } else if (name == "process_sort_index") {
-            if (!current_args_json.empty()) {
-                try {
-                    auto args = json::parse(current_args_json);
-                    if (args.contains("sort_index")) {
-                        proc.sort_index = args["sort_index"].get<int32_t>();
-                    }
-                } catch (...) {}
-            }
-        } else if (name == "thread_sort_index") {
-            auto& thread = proc.get_or_create_thread(current_event.tid);
-            if (!current_args_json.empty()) {
-                try {
-                    auto args = json::parse(current_args_json);
-                    if (args.contains("sort_index")) {
-                        thread.sort_index = args["sort_index"].get<int32_t>();
-                    }
-                } catch (...) {}
-            }
-        }
-        current_args_json.clear();
-    }
-
-    void args_append(const std::string& s) {
-        if (!first_args_key) current_args_json += ",";
-        current_args_json += s;
-    }
-
-    // --- SAX callbacks ---
-
-    bool null() override {
-        TRACE_FUNCTION_CAT("parser");
-        if (state == State::InArgs) {
-            args_append("null");
-            return true;
-        }
-        if (state == State::Skipping) return true;
-        return true;
-    }
-
-    bool boolean(bool val) override {
-        TRACE_FUNCTION_CAT("parser");
-        if (state == State::InArgs) {
-            args_append(val ? "true" : "false");
-            return true;
-        }
-        if (state == State::Skipping) return true;
-        return true;
-    }
-
-    bool number_integer(number_integer_t val) override { return handle_number((double)val, std::to_string(val)); }
-
-    bool number_unsigned(number_unsigned_t val) override { return handle_number((double)val, std::to_string(val)); }
-
-    bool number_float(number_float_t val, const string_t& s) override {
-        return handle_number(val, s.empty() ? std::to_string(val) : s);
-    }
-
-    bool handle_number(double val, const std::string& raw) {
-        if (state == State::InArgs) {
-            if (args_depth == 0) {
-                // Top-level arg value - for counter events, capture the value
-                if (current_event.ph == Phase::Counter) {
-                    counter_values.push_back({current_key, val});
-                }
-                args_append("\"" + current_key + "\":" + raw);
-                first_args_key = false;
-            } else {
-                current_args_json += raw;
-            }
-            return true;
-        }
-        if (state == State::Skipping) return true;
-        if (state == State::InEvent) {
-            if (current_key == "ts")
-                current_event.ts = val / time_divisor;
-            else if (current_key == "dur")
-                current_event.dur = val / time_divisor;
-            else if (current_key == "pid")
-                current_event.pid = (uint32_t)val;
-            else if (current_key == "tid")
-                current_event.tid = (uint32_t)val;
-            else if (current_key == "id")
-                current_event.id = (uint64_t)val;
-        }
-        return true;
-    }
-
-    bool string(string_t& val) override {
-        if (state == State::InArgs) {
-            if (args_depth == 0) {
-                std::string escaped = escape_json_string(val);
-                args_append("\"" + current_key + "\":\"" + escaped + "\"");
-                first_args_key = false;
-                if (current_event.ph == Phase::Counter) {
-                    // Try parsing string as number for counter
-                    try {
-                        counter_values.push_back({current_key, std::stod(val)});
-                    } catch (...) {}
-                }
-            } else {
-                current_args_json += "\"" + escape_json_string(val) + "\"";
-            }
-            return true;
-        }
-        if (state == State::Skipping) return true;
-        if (state == State::InEvent) {
-            if (current_key == "name") {
-                current_event.name_idx = model.intern_string(val);
-            } else if (current_key == "cat") {
-                current_event.cat_idx = model.intern_string(val);
-            } else if (current_key == "ph") {
-                if (!val.empty()) current_event.ph = phase_from_char(val[0]);
-            } else if (current_key == "id") {
-                // Hex string id like "0x1234"
-                if (val.size() > 2 && val[0] == '0' && (val[1] == 'x' || val[1] == 'X')) {
-                    current_event.id = std::stoull(val, nullptr, 16);
-                } else {
-                    try {
-                        current_event.id = std::stoull(val);
-                    } catch (...) {}
-                }
-            }
-        }
-        if (state == State::InTopObject) {
-            // Could be metadata values at top level
-        }
-        return true;
-    }
-
-    bool binary(binary_t&) override { return true; }
-
-    bool start_object(std::size_t) override {
-        if (state == State::Skipping) {
-            skip_depth++;
-            return true;
-        }
-        if (state == State::TopLevel) {
-            state = State::InTopObject;
-            return true;
-        }
-        if (state == State::InTraceEvents) {
-            state = State::InEvent;
-            current_event = TraceEvent{};
-            current_args_json.clear();
-            counter_values.clear();
-            return true;
-        }
-        if (state == State::InEvent && current_key == "args") {
-            state = State::InArgs;
-            args_depth = 0;
-            first_args_key = true;
-            current_args_json = "{";
-            return true;
-        }
-        if (state == State::InArgs) {
-            args_depth++;
-            current_args_json += "{";
-            return true;
-        }
-        if (state == State::InEvent) {
-            // Unknown object field - skip it
-            state = State::Skipping;
-            skip_depth = 1;
-            return true;
-        }
-        return true;
-    }
-
-    bool end_object() override {
-        if (state == State::Skipping) {
-            skip_depth--;
-            if (skip_depth == 0) state = State::InEvent;
-            return true;
-        }
-        if (state == State::InArgs) {
-            if (args_depth > 0) {
-                args_depth--;
-                current_args_json += "}";
-            } else {
-                current_args_json += "}";
-                state = State::InEvent;
-            }
-            return true;
-        }
-        if (state == State::InEvent) {
-            finish_event();
-            state = State::InTraceEvents;
-            return true;
-        }
-        if (state == State::InTopObject) {
-            state = State::TopLevel;
-            return true;
-        }
-        return true;
-    }
-
-    bool start_array(std::size_t) override {
-        TRACE_FUNCTION_CAT("parser");
-        if (state == State::Skipping) {
-            skip_depth++;
-            return true;
-        }
-        if (state == State::TopLevel) {
-            state = State::InTraceEvents;
-            return true;
-        }
-        if (state == State::InTopObject && current_key == "traceEvents") {
-            state = State::InTraceEvents;
-            return true;
-        }
-        if (state == State::InArgs) {
-            args_depth++;
-            current_args_json += "[";
-            return true;
-        }
-        if (state == State::InEvent || state == State::InTopObject) {
-            state = State::Skipping;
-            skip_depth = 1;
-            return true;
-        }
-        return true;
-    }
-
-    bool end_array() override {
-        TRACE_FUNCTION_CAT("parser");
-        if (state == State::Skipping) {
-            skip_depth--;
-            if (skip_depth == 0) state = State::InEvent;
-            return true;
-        }
-        if (state == State::InArgs) {
-            if (args_depth > 0) {
-                args_depth--;
-                current_args_json += "]";
-            }
-            return true;
-        }
-        if (state == State::InTraceEvents) {
-            state = State::InTopObject;  // might have more top-level keys
-            return true;
-        }
-        return true;
-    }
-
-    bool key(string_t& val) override {
-        if (state == State::Skipping) return true;
-        if (state == State::InArgs && args_depth > 0) {
-            current_args_json += "\"" + escape_json_string(val) + "\":";
-            return true;
-        }
-        current_key = val;
-        if (state == State::InArgs && args_depth == 0) {
-            // Will be handled by the value callback
-        }
-        return true;
-    }
-
-    bool parse_error(std::size_t position, const std::string& last_token, const json::exception& ex) override {
-        TRACE_FUNCTION_CAT("parser");
-        (void)position;
-        (void)last_token;
-        (void)ex;
-        return false;
-    }
-
-    static std::string escape_json_string(const std::string& s) {
-        std::string result;
-        result.reserve(s.size());
-        for (char c : s) {
-            switch (c) {
-                case '"':
-                    result += "\\\"";
-                    break;
-                case '\\':
-                    result += "\\\\";
-                    break;
-                case '\n':
-                    result += "\\n";
-                    break;
-                case '\r':
-                    result += "\\r";
-                    break;
-                case '\t':
-                    result += "\\t";
-                    break;
-                default:
-                    if (static_cast<unsigned char>(c) < 0x20) {
-                        char buf[8];
-                        snprintf(buf, sizeof(buf), "\\u%04x", (unsigned char)c);
-                        result += buf;
-                    } else {
-                        result += c;
-                    }
-                    break;
-            }
-        }
-        return result;
-    }
-};
+}
 
 bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
     TRACE_FUNCTION_CAT("parser");
@@ -435,8 +157,8 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
 
     if (on_progress_) on_progress_("Reading file", 0.0f);
 
-    // Read file in chunks to report progress
-    std::string content(file_size, '\0');
+    // Allocate with simdjson padding
+    std::string content(file_size + simdjson::SIMDJSON_PADDING, '\0');
     {
         constexpr size_t CHUNK = 4 * 1024 * 1024;  // 4MB chunks
         size_t read_so_far = 0;
@@ -452,28 +174,44 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
     }
 
     model.clear();
-    // Intern empty string at index 0
     model.intern_string("");
 
     if (on_progress_) on_progress_("Parsing JSON", 0.0f);
 
-    SaxHandler handler(model, on_progress_);
-    handler.time_divisor = time_unit_ns_ ? 1000.0 : 1.0;
-    handler.file_size = file_size;
-    // Rough estimate: ~100 bytes per event in JSON
-    handler.estimated_events = file_size / 100;
+    double time_divisor = time_unit_ns_ ? 1000.0 : 1.0;
+    uint64_t estimated_events = file_size / 100;
 
-    bool result;
-    { result = json::sax_parse(content, &handler); }
+    simdjson::ondemand::parser parser;
+    simdjson::padded_string_view psv(content.data(), file_size, content.size());
+
+    try {
+        auto doc = parser.iterate(psv);
+        auto type = doc.type().value();
+
+        if (type == simdjson::ondemand::json_type::array) {
+            parse_events(doc.get_array().value(), model, time_divisor, on_progress_, estimated_events);
+        } else if (type == simdjson::ondemand::json_type::object) {
+            auto obj = doc.get_object().value();
+            for (auto field : obj) {
+                auto key = field.unescaped_key().value();
+                if (key == "traceEvents") {
+                    parse_events(field.value().get_array().value(), model, time_divisor, on_progress_,
+                                 estimated_events);
+                    break;
+                }
+            }
+        }
+    } catch (simdjson::simdjson_error& e) {
+        // If we parsed some events, continue with what we have (truncated trace)
+        if (model.events().empty()) {
+            error_message_ = std::string("JSON parse error: ") + e.what();
+            return false;
+        }
+    }
 
     // Free the raw JSON string before building the index
     content.clear();
     content.shrink_to_fit();
-
-    if (!result) {
-        error_message_ = "JSON parse error";
-        return false;
-    }
 
     if (on_progress_) on_progress_("Building index", 0.0f);
     model.build_index(on_progress_ ? [this](float p) { on_progress_("Building index", p); }
@@ -492,17 +230,34 @@ bool TraceParser::parse_buffer(const char* data, size_t size, TraceModel& model)
 
     if (on_progress_) on_progress_("Parsing JSON", 0.0f);
 
-    SaxHandler handler(model, on_progress_);
-    handler.time_divisor = time_unit_ns_ ? 1000.0 : 1.0;
-    handler.file_size = size;
-    handler.estimated_events = size / 100;
+    double time_divisor = time_unit_ns_ ? 1000.0 : 1.0;
+    uint64_t estimated_events = size / 100;
 
-    std::string_view sv(data, size);
-    bool result = json::sax_parse(sv, &handler);
+    simdjson::ondemand::parser parser;
+    simdjson::padded_string padded(data, size);
 
-    if (!result) {
-        error_message_ = "JSON parse error";
-        return false;
+    try {
+        auto doc = parser.iterate(padded);
+        auto type = doc.type().value();
+
+        if (type == simdjson::ondemand::json_type::array) {
+            parse_events(doc.get_array().value(), model, time_divisor, on_progress_, estimated_events);
+        } else if (type == simdjson::ondemand::json_type::object) {
+            auto obj = doc.get_object().value();
+            for (auto field : obj) {
+                auto key = field.unescaped_key().value();
+                if (key == "traceEvents") {
+                    parse_events(field.value().get_array().value(), model, time_divisor, on_progress_,
+                                 estimated_events);
+                    break;
+                }
+            }
+        }
+    } catch (simdjson::simdjson_error& e) {
+        if (model.events().empty()) {
+            error_message_ = std::string("JSON parse error: ") + e.what();
+            return false;
+        }
     }
 
     if (on_progress_) on_progress_("Building index", 0.0f);

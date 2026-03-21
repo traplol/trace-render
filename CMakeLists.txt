@@ -6,12 +6,20 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(FetchContent)
 
-# --- nlohmann/json ---
+# --- nlohmann/json (settings/config serialization) ---
 FetchContent_Declare(json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
   GIT_TAG        v3.11.3
   GIT_SHALLOW    TRUE
 )
+
+# --- simdjson (fast trace parsing) ---
+FetchContent_Declare(simdjson
+  GIT_REPOSITORY https://github.com/simdjson/simdjson.git
+  GIT_TAG        v3.12.2
+  GIT_SHALLOW    TRUE
+)
+set(SIMDJSON_JUST_LIBRARY ON CACHE BOOL "" FORCE)
 
 # --- SDL3 ---
 if(NOT EMSCRIPTEN)
@@ -39,9 +47,9 @@ FetchContent_Declare(sqlite3
 )
 
 if(EMSCRIPTEN)
-  FetchContent_MakeAvailable(json imgui sqlite3)
+  FetchContent_MakeAvailable(json simdjson imgui sqlite3)
 else()
-  FetchContent_MakeAvailable(json SDL3 imgui sqlite3)
+  FetchContent_MakeAvailable(json simdjson SDL3 imgui sqlite3)
 endif()
 
 # Build SQLite as a static library
@@ -90,6 +98,7 @@ if(EMSCRIPTEN)
   target_link_libraries(trace_render PRIVATE
     imgui_lib
     nlohmann_json::nlohmann_json
+    simdjson
     sqlite3_lib
   )
   # Emscripten linker flags
@@ -111,6 +120,7 @@ else()
   target_link_libraries(trace_render PRIVATE
     imgui_lib
     nlohmann_json::nlohmann_json
+    simdjson
     sqlite3_lib
     SDL3::SDL3-static
     OpenGL::GL
@@ -144,6 +154,7 @@ if(NOT EMSCRIPTEN)
       GTest::gtest_main
       imgui_lib
       nlohmann_json::nlohmann_json
+      simdjson
       sqlite3_lib
       SDL3::SDL3-static
       OpenGL::GL

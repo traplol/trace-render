@@ -1,5 +1,5 @@
 # src/parser/
-Chrome JSON trace format parser (SAX streaming, no full DOM).
+Chrome JSON trace format parser (simdjson On-Demand, nlohmann for metadata/counters).
 
 ## trace_parser.h / trace_parser.cpp — parses file or buffer into `TraceModel`, then calls `build_index()`
 ```
