@@ -41,7 +41,6 @@ struct SaxHandler : json::json_sax_t {
     SaxHandler(TraceModel& m, std::function<void(const char*, float)>& prog) : model(m), on_progress(prog) {}
 
     void finish_event() {
-        TRACE_FUNCTION_CAT("io");
         event_count++;
         if (on_progress && (event_count & 0xFFFF) == 0 && estimated_events > 0) {
             float p = std::min(0.99f, (float)event_count / (float)estimated_events);
@@ -96,7 +95,7 @@ struct SaxHandler : json::json_sax_t {
     }
 
     void handle_metadata() {
-        TRACE_FUNCTION_CAT("io");
+        TRACE_FUNCTION_CAT("parser");
         const std::string& name = model.get_string(current_event.name_idx);
         auto& proc = model.get_or_create_process(current_event.pid);
 
@@ -153,6 +152,7 @@ struct SaxHandler : json::json_sax_t {
     // --- SAX callbacks ---
 
     bool null() override {
+        TRACE_FUNCTION_CAT("parser");
         if (state == State::InArgs) {
             args_append("null");
             return true;
@@ -162,6 +162,7 @@ struct SaxHandler : json::json_sax_t {
     }
 
     bool boolean(bool val) override {
+        TRACE_FUNCTION_CAT("parser");
         if (state == State::InArgs) {
             args_append(val ? "true" : "false");
             return true;
@@ -179,7 +180,6 @@ struct SaxHandler : json::json_sax_t {
     }
 
     bool handle_number(double val, const std::string& raw) {
-        TRACE_FUNCTION_CAT("io");
         if (state == State::InArgs) {
             if (args_depth == 0) {
                 // Top-level arg value - for counter events, capture the value
@@ -319,6 +319,7 @@ struct SaxHandler : json::json_sax_t {
     }
 
     bool start_array(std::size_t) override {
+        TRACE_FUNCTION_CAT("parser");
         if (state == State::Skipping) {
             skip_depth++;
             return true;
@@ -345,6 +346,7 @@ struct SaxHandler : json::json_sax_t {
     }
 
     bool end_array() override {
+        TRACE_FUNCTION_CAT("parser");
         if (state == State::Skipping) {
             skip_depth--;
             if (skip_depth == 0) state = State::InEvent;
@@ -378,6 +380,7 @@ struct SaxHandler : json::json_sax_t {
     }
 
     bool parse_error(std::size_t position, const std::string& last_token, const json::exception& ex) override {
+        TRACE_FUNCTION_CAT("parser");
         (void)position;
         (void)last_token;
         (void)ex;
@@ -385,7 +388,6 @@ struct SaxHandler : json::json_sax_t {
     }
 
     static std::string escape_json_string(const std::string& s) {
-        TRACE_FUNCTION_CAT("io");
         std::string result;
         result.reserve(s.size());
         for (char c : s) {
@@ -421,7 +423,7 @@ struct SaxHandler : json::json_sax_t {
 };
 
 bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
-    TRACE_SCOPE_CAT("Parse", "io");
+    TRACE_FUNCTION_CAT("parser");
     std::ifstream file(filepath, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
         error_message_ = "Could not open file: " + filepath;
@@ -436,7 +438,6 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
     // Read file in chunks to report progress
     std::string content(file_size, '\0');
     {
-        TRACE_SCOPE_CAT("ReadFile", "io");
         constexpr size_t CHUNK = 4 * 1024 * 1024;  // 4MB chunks
         size_t read_so_far = 0;
         while (read_so_far < file_size) {
@@ -463,10 +464,7 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
     handler.estimated_events = file_size / 100;
 
     bool result;
-    {
-        TRACE_SCOPE_CAT("ParseJSON", "io");
-        result = json::sax_parse(content, &handler);
-    }
+    { result = json::sax_parse(content, &handler); }
 
     // Free the raw JSON string before building the index
     content.clear();
@@ -487,7 +485,7 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
 }
 
 bool TraceParser::parse_buffer(const char* data, size_t size, TraceModel& model) {
-    TRACE_SCOPE_CAT("ParseBuffer", "io");
+    TRACE_FUNCTION_CAT("parser");
 
     model.clear();
     model.intern_string("");

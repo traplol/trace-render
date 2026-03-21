@@ -81,7 +81,6 @@ void FlameGraphPanel::update_cache_keys(const ViewState& view, size_t event_coun
 
 uint32_t FlameGraphPanel::find_or_create_child(FlameTree& tree, uint32_t parent_idx, uint32_t name_idx,
                                                uint32_t cat_idx) {
-    TRACE_FUNCTION_CAT("ui");
     for (uint32_t c = tree.nodes[parent_idx].first_child; c != UINT32_MAX; c = tree.nodes[c].next_sibling) {
         if (tree.nodes[c].name_idx == name_idx && tree.nodes[c].cat_idx == cat_idx) return c;
     }
@@ -97,7 +96,6 @@ uint32_t FlameGraphPanel::find_or_create_child(FlameTree& tree, uint32_t parent_
 }
 
 uint32_t FlameGraphPanel::find_or_create_root(FlameTree& tree, uint32_t name_idx, uint32_t cat_idx) {
-    TRACE_FUNCTION_CAT("ui");
     for (uint32_t c = tree.first_root; c != UINT32_MAX; c = tree.nodes[c].next_sibling) {
         if (tree.nodes[c].name_idx == name_idx && tree.nodes[c].cat_idx == cat_idx) return c;
     }
@@ -132,7 +130,6 @@ uint32_t FlameGraphPanel::sort_children(FlameTree& tree, uint32_t first_child) {
 }
 
 void FlameGraphPanel::compute_self_times(FlameTree& tree) {
-    TRACE_FUNCTION_CAT("ui");
     // Reverse iteration: children are always appended after parents in the pool,
     // so processing in reverse guarantees children are resolved before parents.
     for (int i = (int)tree.nodes.size() - 1; i >= 0; --i) {
@@ -240,7 +237,7 @@ void FlameGraphPanel::rebuild(const TraceModel& model, const ViewState& view) {
 // ---------------------------------------------------------------------------
 
 void FlameGraphPanel::render(const TraceModel& model, ViewState& view) {
-    TRACE_SCOPE_CAT("FlameGraph", "ui");
+    TRACE_FUNCTION_CAT("ui");
     ImGui::Begin("Flame Graph");
 
     if (model.events().empty()) {

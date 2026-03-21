@@ -23,7 +23,7 @@ static inline int ctz32(uint32_t x) {
 #endif
 
 void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max, const ViewState& view) {
-    TRACE_SCOPE_CAT("TimeRuler", "timeline");
+    TRACE_FUNCTION_CAT("ui");
     float ruler_height = view.ruler_height();
     float width = area_max.x - area_min.x;
     double range = view.view_end_ts() - view.view_start_ts();
@@ -76,7 +76,6 @@ void TimelineView::render_time_ruler(ImDrawList* dl, ImVec2 area_min, ImVec2 are
 
 void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_max, const TraceModel& model,
                                  ViewState& view) {
-    TRACE_SCOPE_CAT("RenderTracks", "timeline");
     diag_stats = {};
     float ruler_height = view.ruler_height();
     float width = area_max.x - area_min.x;
@@ -319,7 +318,6 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
 
         // Counter tracks for this process
         {
-            TRACE_SCOPE_CAT("RenderTracks_counters", "timeline");
             float counter_h = counter_renderer_.render(dl, area_min, y, width, model, proc.pid, view);
             y += counter_h;
         }
@@ -363,7 +361,7 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
 
 int32_t TimelineView::hit_test(float click_x, float click_y, ImVec2 area_min, ImVec2 area_max, const TraceModel& model,
                                const ViewState& view) {
-    TRACE_FUNCTION_CAT("timeline");
+    TRACE_FUNCTION_CAT("ui");
     float track_left = area_min.x + view.label_width();
     float track_width = (area_max.x - area_min.x) - view.label_width();
 
@@ -414,7 +412,7 @@ int32_t TimelineView::hit_test(float click_x, float click_y, ImVec2 area_min, Im
 }
 
 void TimelineView::render(const TraceModel& model, ViewState& view) {
-    TRACE_SCOPE_CAT("Timeline", "ui");
+    TRACE_FUNCTION_CAT("ui");
     ImGui::Begin("Timeline", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
     ImVec2 canvas_min = ImGui::GetCursorScreenPos();

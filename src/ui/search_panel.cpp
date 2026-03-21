@@ -21,7 +21,7 @@ void SearchPanel::on_model_changed() {
 }
 
 void SearchPanel::render(const TraceModel& model, ViewState& view) {
-    TRACE_SCOPE_CAT("Search", "ui");
+    TRACE_FUNCTION_CAT("ui");
     ImGui::Begin("Search");
 
     if (view.key_bindings().is_pressed(Action::Search)) {

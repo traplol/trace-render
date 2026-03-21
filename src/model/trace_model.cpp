@@ -4,7 +4,7 @@
 #include <algorithm>
 
 void TraceModel::build_index(std::function<void(float)> on_progress) {
-    TRACE_SCOPE_CAT("BuildIndex", "model");
+    TRACE_FUNCTION_CAT("model");
 
     size_t total_threads = 0;
     for (const auto& proc : processes_) {
@@ -20,7 +20,6 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
     // Uses key extraction for cache-friendly sorting: copy (ts, dur, index) into a
     // contiguous array, sort that, then write sorted indices back.
     {
-        TRACE_SCOPE_CAT("SortEvents", "model");
         struct SortKey {
             double ts;
             double dur;
@@ -51,7 +50,6 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
 
     // Match B/E pairs and compute duration
     {
-        TRACE_SCOPE_CAT("MatchBEPairs", "model");
         for (auto& proc : processes_) {
             for (auto& thread : proc.threads) {
                 std::stack<uint32_t> begin_stack;
@@ -74,7 +72,6 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
 
     // Remove end events, dedup, compute depth/self-time, build spatial index
     {
-        TRACE_SCOPE_CAT("ProcessThreads", "model");
         for (auto& proc : processes_) {
             for (auto& thread : proc.threads) {
                 // Remove matched end events
@@ -155,7 +152,6 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
 
     // Sort threads and processes
     {
-        TRACE_SCOPE_CAT("SortThreadsAndProcesses", "model");
         for (auto& proc : processes_) {
             std::sort(proc.threads.begin(), proc.threads.end(), [](const ThreadInfo& a, const ThreadInfo& b) {
                 if (a.sort_index != b.sort_index) return a.sort_index < b.sort_index;
@@ -170,7 +166,6 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
 
     // Compute global time range, collect unique categories, and build name-to-events index
     {
-        TRACE_SCOPE_CAT("ComputeTimeRangeAndCategories", "model");
         categories_.clear();
         name_to_events_.clear();
         std::unordered_set<uint32_t> cat_set;
@@ -197,7 +192,6 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
 
     // Compute counter series min/max
     {
-        TRACE_SCOPE_CAT("ComputeCounterMinMax", "model");
         for (auto& cs : counter_series_) {
             if (cs.points.empty()) continue;
             std::sort(cs.points.begin(), cs.points.end());
@@ -212,7 +206,6 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
 
     // Cache aggregate stats for diagnostics panel (avoid per-frame O(n) scans)
     {
-        TRACE_SCOPE_CAT("CacheDiagStats", "model");
         cached_strings_bytes_ = 0;
         for (const auto& s : strings_) cached_strings_bytes_ += s.capacity();
         cached_args_bytes_ = 0;
@@ -225,7 +218,6 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
 }
 
 int32_t TraceModel::find_parent_event(uint32_t event_idx) const {
-    TRACE_FUNCTION_CAT("model");
     if (event_idx >= events_.size()) return -1;
     return events_[event_idx].parent_idx;
 }
@@ -249,7 +241,6 @@ std::vector<uint32_t> TraceModel::build_call_stack(uint32_t event_idx) const {
 }
 
 double TraceModel::compute_self_time(uint32_t event_idx) const {
-    TRACE_FUNCTION_CAT("model");
     if (event_idx >= events_.size()) return 0.0;
     return events_[event_idx].self_time;
 }

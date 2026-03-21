@@ -3,7 +3,7 @@
 #include "imgui.h"
 
 void FilterPanel::render(const TraceModel& model, ViewState& view) {
-    TRACE_SCOPE_CAT("Filters", "ui");
+    TRACE_FUNCTION_CAT("ui");
     ImGui::Begin("Filters");
 
     // Process / Thread tree

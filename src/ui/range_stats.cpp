@@ -1,8 +1,10 @@
 #include "range_stats.h"
 #include <algorithm>
 #include <unordered_map>
+#include "tracing.h"
 
 RangeStats compute_range_stats(const TraceModel& model, double start_ts, double end_ts) {
+    TRACE_FUNCTION_CAT("ui");
     RangeStats stats;
     stats.range_duration = end_ts - start_ts;
 

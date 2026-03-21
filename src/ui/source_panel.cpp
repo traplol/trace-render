@@ -13,7 +13,7 @@ using json = nlohmann::json;
 
 // Try common field names for source file and line in event args
 bool extract_source_location(const TraceModel& model, const TraceEvent& ev, std::string& file, int& line) {
-    TRACE_FUNCTION_CAT("io");
+    TRACE_FUNCTION_CAT("ui");
     if (ev.args_idx == UINT32_MAX || ev.args_idx >= model.args().size()) return false;
 
     try {
@@ -52,7 +52,7 @@ bool extract_source_location(const TraceModel& model, const TraceEvent& ev, std:
 }
 
 static std::string normalize_slashes(const std::string& path) {
-    TRACE_FUNCTION_CAT("io");
+    TRACE_FUNCTION_CAT("ui");
     std::string out = path;
     for (auto& c : out) {
         if (c == '\\') c = '/';
@@ -62,7 +62,7 @@ static std::string normalize_slashes(const std::string& path) {
 
 std::string remap_source_path(const std::string& trace_path, const std::string& strip_prefix,
                               const std::string& local_base) {
-    TRACE_FUNCTION_CAT("io");
+    TRACE_FUNCTION_CAT("ui");
     std::string path = normalize_slashes(trace_path);
     std::string strip = normalize_slashes(strip_prefix);
     std::string base = normalize_slashes(local_base);
@@ -149,7 +149,7 @@ void SourcePanel::render_settings() {
 }
 
 void SourcePanel::load_file(const std::string& path) {
-    TRACE_FUNCTION_CAT("io");
+    TRACE_FUNCTION_CAT("ui");
     cached_lines_.clear();
     cached_error_.clear();
 
@@ -166,7 +166,7 @@ void SourcePanel::load_file(const std::string& path) {
 }
 
 void SourcePanel::resolve_and_load(const std::string& raw_file) {
-    TRACE_FUNCTION_CAT("io");
+    TRACE_FUNCTION_CAT("ui");
     std::string full_path = remap_source_path(raw_file, strip_prefix_, local_base_);
 
     if (full_path != cached_file_) {
@@ -211,7 +211,7 @@ void SourcePanel::build_gutter_text() {
 }
 
 void SourcePanel::render(const TraceModel& model, ViewState& view) {
-    TRACE_SCOPE_CAT("Source", "ui");
+    TRACE_FUNCTION_CAT("ui");
     ImGui::Begin("Source");
 
     // Path remapping inputs
