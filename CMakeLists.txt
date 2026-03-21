@@ -138,7 +138,7 @@ if(NOT EMSCRIPTEN)
     list(FILTER LIB_SOURCES EXCLUDE REGEX "platform_wasm\\.cpp$|file_loader_wasm\\.cpp$")
 
     file(GLOB TEST_SOURCES tests/*.cpp)
-    add_executable(trace_render_tests ${TEST_SOURCES} ${LIB_SOURCES})
+    add_executable(trace_render_tests EXCLUDE_FROM_ALL ${TEST_SOURCES} ${LIB_SOURCES})
     target_include_directories(trace_render_tests PRIVATE src)
     target_link_libraries(trace_render_tests PRIVATE
       GTest::gtest_main
