@@ -16,6 +16,7 @@ void App::init(SDL_Window* window) {
     TRACE_FUNCTION_CAT("app");
     window_ = window;
     toolbar_.set_window(window);
+    stats_.set_window(window);
     load_settings();
     if (platform::supports_vsync()) {
         SDL_GL_SetSwapInterval(vsync_ ? 1 : 0);

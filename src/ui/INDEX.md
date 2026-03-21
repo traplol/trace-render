@@ -81,14 +81,20 @@ void on_model_changed();
 void render(const TraceModel&, ViewState&);
 ```
 
-## stats_panel.h / stats_panel.cpp — SQL editor + result table + visual query builder; tabs serialized to JSON
+## stats_panel.h / stats_panel.cpp — SQL editor + result table + visual query builder; tabs serialized to JSON; CSV/TSV export
 ```
 void render(const TraceModel&, QueryDb&, ViewState&);
+void set_window(SDL_Window*);
 nlohmann::json save_tabs() const;
 void load_tabs(const nlohmann::json&);
 // QueryBuilderState
 void reset();
 std::string build_sql(const char* const* columns, int num_columns) const;
+```
+
+## export_utils.h — export query results to CSV or TSV format
+```
+std::string export_result(const QueryDb::QueryResult&, char delimiter);
 ```
 
 ## flame_graph_panel.h / flame_graph_panel.cpp — per-thread icicle charts with flat node pool; filterable sidebar, zoom, search highlighting, context menu

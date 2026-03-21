@@ -69,6 +69,28 @@ bool platform::supports_vsync() {
     return false;
 }
 
+void platform::save_file_dialog(SDL_Window* /*window*/, const std::string& default_name, const std::string& content) {
+    // Trigger browser download via JS blob
+    EM_ASM(
+        {
+            var name = UTF8ToString($0);
+            var data = UTF8ToString($1);
+            var blob = new Blob([data], {
+                type:
+                    'text/plain'
+            });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        },
+        default_name.c_str(), content.c_str());
+}
+
 void platform::open_file_dialog(SDL_Window* /*window*/) {
     trigger_file_input();
 }

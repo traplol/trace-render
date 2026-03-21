@@ -1,7 +1,9 @@
 #include "stats_panel.h"
+#include "export_utils.h"
 #include "format_time.h"
 #include "sort_utils.h"
 #include "tracing.h"
+#include "platform/platform.h"
 #include "imgui.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -400,6 +402,16 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
     if (!tab.result.ok || tab.result.columns.empty()) return;
 
     ImGui::Text("%zu rows", tab.result.rows.size());
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Export CSV")) {
+        std::string content = export_result(tab.result, ',');
+        platform::save_file_dialog(window_, tab.title + ".csv", content);
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Export TSV")) {
+        std::string content = export_result(tab.result, '\t');
+        platform::save_file_dialog(window_, tab.title + ".tsv", content);
+    }
 
     // Find the "name" column index for click-to-browse
     int name_col = -1;
