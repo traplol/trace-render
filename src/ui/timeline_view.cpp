@@ -359,6 +359,28 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
     total_content_height_ = (y + scroll_y_) - (area_min.y + ruler_height);
 }
 
+int32_t TimelineView::select_best_candidate(const std::vector<uint32_t>& candidates,
+                                            const std::vector<TraceEvent>& events,
+                                            const std::unordered_set<uint32_t>& hidden_cats, int clicked_depth,
+                                            double click_time, double tolerance) {
+    int32_t best = -1;
+    double best_dur = 1e18;
+    const bool has_hidden_cats = !hidden_cats.empty();
+    for (uint32_t idx : candidates) {
+        const auto& ev = events[idx];
+        if (ev.is_end_event) continue;
+        if (has_hidden_cats && hidden_cats.count(ev.cat_idx)) continue;
+        if (ev.depth != clicked_depth) continue;
+        if (click_time >= ev.ts - tolerance && click_time <= ev.end_ts() + tolerance) {
+            if (ev.dur < best_dur) {
+                best_dur = ev.dur;
+                best = (int32_t)idx;
+            }
+        }
+    }
+    return best;
+}
+
 int32_t TimelineView::hit_test(float click_x, float click_y, ImVec2 area_min, ImVec2 area_max, const TraceModel& model,
                                const ViewState& view) {
     TRACE_FUNCTION_CAT("ui");
@@ -387,28 +409,11 @@ int32_t TimelineView::hit_test(float click_x, float click_y, ImVec2 area_min, Im
         double time_per_px = (view.view_end_ts() - view.view_start_ts()) / (double)track_width;
         double tolerance = px_tolerance * time_per_px;
 
-        // Find the best matching event at this depth and time
-        int32_t best = -1;
-        double best_dur = 1e18;
-
         std::vector<uint32_t> candidates;
         model.query_visible(thread, click_time - tolerance, click_time + tolerance, candidates);
 
-        const bool has_hidden_cats = !view.hidden_cats().empty();
-        for (uint32_t idx : candidates) {
-            const auto& ev = model.events()[idx];
-            if (ev.is_end_event) continue;
-            if (has_hidden_cats && view.hidden_cats().count(ev.cat_idx)) continue;
-            if (ev.depth != clicked_depth) continue;
-            if (click_time >= ev.ts - tolerance && click_time <= ev.end_ts() + tolerance) {
-                if (ev.dur < best_dur) {
-                    best_dur = ev.dur;
-                    best = (int32_t)idx;
-                }
-            }
-        }
-
-        return best;
+        return select_best_candidate(candidates, model.events(), view.hidden_cats(), clicked_depth, click_time,
+                                     tolerance);
     }
     return -1;
 }
