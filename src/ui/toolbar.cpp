@@ -5,7 +5,7 @@
 #include <SDL3/SDL.h>
 
 void Toolbar::render(const TraceModel& model, ViewState& view, float rss_mb) {
-    TRACE_SCOPE_CAT("Toolbar", "ui");
+    TRACE_FUNCTION_CAT("ui");
     if (ImGui::BeginMainMenuBar()) {
         ImGui::TextDisabled("%.0f FPS", ImGui::GetIO().Framerate);
         ImGui::SameLine();

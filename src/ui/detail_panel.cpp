@@ -126,7 +126,6 @@ static const char* phase_name(Phase ph) {
 }
 
 static void render_json_value(const nlohmann::json& j, int depth = 0) {
-    TRACE_FUNCTION_CAT("ui");
     if (j.is_object()) {
         for (auto& [key, val] : j.items()) {
             if (val.is_object() || val.is_array()) {
@@ -157,13 +156,12 @@ static void render_json_value(const nlohmann::json& j, int depth = 0) {
 }
 
 void DetailPanel::render_range_selection(const TraceModel& model, ViewState& view) {
-    TRACE_SCOPE_CAT("RangeSelection", "ui");
+    TRACE_FUNCTION_CAT("ui");
 
     // Defer expensive stats computation while actively drag-selecting;
     // only compute once the drag finishes.
     if (!view.range_selecting() &&
         (cached_range_start_ != view.range_start_ts() || cached_range_end_ != view.range_end_ts())) {
-        TRACE_SCOPE_CAT("ComputeRangeStats", "ui");
         cached_range_start_ = view.range_start_ts();
         cached_range_end_ = view.range_end_ts();
         range_stats_ = compute_range_stats(model, view.range_start_ts(), view.range_end_ts());
@@ -252,7 +250,7 @@ void DetailPanel::render_range_selection(const TraceModel& model, ViewState& vie
 }
 
 void DetailPanel::render(const TraceModel& model, ViewState& view) {
-    TRACE_SCOPE_CAT("Details", "ui");
+    TRACE_FUNCTION_CAT("ui");
     ImGui::Begin("Details");
 
     if (view.has_range_selection()) {
@@ -413,7 +411,6 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
         // Call Stack tab — rebuild cache if selected event changed
         if (cached_stack_event_idx_ != view.selected_event_idx()) {
-            TRACE_SCOPE_CAT("RebuildCallStack", "ui");
             cached_stack_event_idx_ = view.selected_event_idx();
             cached_call_stack_ = model.build_call_stack(view.selected_event_idx());
 
@@ -697,7 +694,6 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 }
 
 void DetailPanel::render_aggregated_table(const TraceModel& model, ViewState& view) {
-    TRACE_FUNCTION_CAT("ui");
     if (ImGui::BeginTable("AggChildrenTable", 7,
                           ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
                               ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
@@ -817,7 +813,6 @@ void DetailPanel::render_aggregated_table(const TraceModel& model, ViewState& vi
 }
 
 void DetailPanel::render_children_table(const TraceModel& model, ViewState& view) {
-    TRACE_FUNCTION_CAT("ui");
     if (ImGui::BeginTable("ChildrenTable", 3,
                           ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
                               ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
@@ -939,7 +934,6 @@ void DetailPanel::rebuild_children(const TraceModel& model, const TraceEvent& ev
 }
 
 void DetailPanel::rebuild_aggregated(const TraceModel& model, double parent_dur) {
-    TRACE_FUNCTION_CAT("ui");
     aggregated_.clear();
 
     // Group by name_idx using a map to accumulator index

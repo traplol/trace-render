@@ -71,6 +71,7 @@ FileLoader::~FileLoader() {
 }
 
 void FileLoader::load_file(const std::string& path, bool time_ns, QueryDb* query_db) {
+    TRACE_FUNCTION_CAT("platform");
     join();
 
     impl_->filename_ = path;
@@ -85,8 +86,6 @@ void FileLoader::load_file(const std::string& path, bool time_ns, QueryDb* query
     impl_->error_.clear();
 
     impl_->thread = std::thread([this, path, time_ns, query_db]() {
-        TRACE_SCOPE_CAT("OpenFile", "io");
-
         TraceParser parser;
         impl_->setup_progress(parser);
         parser.set_time_unit_ns(time_ns);
@@ -109,8 +108,6 @@ void FileLoader::load_buffer(std::vector<char> data, const std::string& filename
     impl_->error_.clear();
 
     impl_->thread = std::thread([this, data = std::move(data), time_ns, query_db]() {
-        TRACE_SCOPE_CAT("OpenBuffer", "io");
-
         TraceParser parser;
         impl_->setup_progress(parser);
         parser.set_time_unit_ns(time_ns);
@@ -126,6 +123,7 @@ bool FileLoader::is_loading() const {
 }
 
 bool FileLoader::poll_finished() {
+    TRACE_FUNCTION_CAT("platform");
     if (!impl_->finished.load(std::memory_order_acquire)) return false;
     join();
     impl_->loading = false;

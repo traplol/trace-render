@@ -1,0 +1,20 @@
+# Functions to exclude from automatic TRACE_ insertion.
+# One per line. Supports bare names (main) or qualified (Class::method).
+# Blank lines and #comments are ignored.
+
+# SAX parser callbacks — called per JSON token, far too hot to trace
+SaxHandler::key
+SaxHandler::handle_number
+SaxHandler::string
+SaxHandler::args_append
+SaxHandler::start_object
+SaxHandler::end_object
+SaxHandler::escape_json_string
+SaxHandler::finish_event
+
+# Flame graph tree building — called per event during indexing
+FlameGraphPanel::find_or_create_child
+FlameGraphPanel::find_or_create_root
+
+# Called multiple times per frame for every action
+KeyBindings::is_pressed

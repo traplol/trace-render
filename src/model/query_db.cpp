@@ -7,6 +7,7 @@ QueryDb::QueryDb() {
 }
 
 QueryDb::~QueryDb() {
+    TRACE_FUNCTION_CAT("model");
     cancel_query();
     if (query_thread_.joinable()) query_thread_.join();
     if (index_thread_.joinable()) index_thread_.join();
@@ -14,7 +15,7 @@ QueryDb::~QueryDb() {
 }
 
 void QueryDb::load(const TraceModel& model, std::function<void(float)> on_progress) {
-    TRACE_SCOPE_CAT("QueryDb::load", "model");
+    TRACE_FUNCTION_CAT("model");
     if (!db_) return;
 
     // Cancel any running query and wait for background indexing
@@ -78,7 +79,6 @@ void QueryDb::load(const TraceModel& model, std::function<void(float)> on_progre
 
     // Events
     {
-        TRACE_SCOPE_CAT("InsertEvents", "model");
         sqlite3_stmt* stmt = nullptr;
         sqlite3_prepare_v2(db_, "INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?)", -1, &stmt, nullptr);
 
@@ -115,7 +115,6 @@ void QueryDb::load(const TraceModel& model, std::function<void(float)> on_progre
 
     // Processes and threads
     {
-        TRACE_SCOPE_CAT("InsertProcessesAndThreads", "model");
         sqlite3_stmt* stmt = nullptr;
         sqlite3_prepare_v2(db_, "INSERT INTO processes VALUES (?,?)", -1, &stmt, nullptr);
 
@@ -143,7 +142,6 @@ void QueryDb::load(const TraceModel& model, std::function<void(float)> on_progre
 
     // Counters
     {
-        TRACE_SCOPE_CAT("InsertCounters", "model");
         sqlite3_stmt* stmt = nullptr;
         sqlite3_prepare_v2(db_, "INSERT INTO counters VALUES (?,?,?,?)", -1, &stmt, nullptr);
 
@@ -168,13 +166,13 @@ void QueryDb::load(const TraceModel& model, std::function<void(float)> on_progre
 }
 
 void QueryDb::create_indexes_async() {
+    TRACE_FUNCTION_CAT("model");
     if (index_thread_.joinable()) index_thread_.join();
 
     indexing_ = true;
     indexing_progress_ = 0.0f;
 
     index_thread_ = std::thread([this]() {
-        TRACE_SCOPE_CAT("CreateIndexes", "model");
         sqlite3_exec(db_, "CREATE INDEX IF NOT EXISTS idx_events_name ON events(name)", nullptr, nullptr, nullptr);
         indexing_progress_.store(0.25f, std::memory_order_relaxed);
         sqlite3_exec(db_, "CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts)", nullptr, nullptr, nullptr);

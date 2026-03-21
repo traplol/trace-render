@@ -7,7 +7,6 @@
 #include <cstdlib>
 
 static void format_bytes(size_t bytes, char* buf, size_t buf_size) {
-    TRACE_FUNCTION_CAT("ui");
     if (bytes >= 1024ULL * 1024 * 1024)
         snprintf(buf, buf_size, "%.1f GB", bytes / (1024.0 * 1024 * 1024));
     else if (bytes >= 1024ULL * 1024)

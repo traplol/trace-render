@@ -34,7 +34,6 @@ static void render_cell(const std::string& value, bool is_time) {
 }
 
 void StatsPanel::ensure_default_tab() {
-    TRACE_FUNCTION_CAT("ui");
     if (tabs_.empty()) {
         QueryTab tab;
         tab.title = "Hot Functions";
@@ -76,7 +75,7 @@ void StatsPanel::load_tabs(const nlohmann::json& j) {
 }
 
 void StatsPanel::render(const TraceModel& model, QueryDb& db, ViewState& view) {
-    TRACE_SCOPE_CAT("Statistics", "ui");
+    TRACE_FUNCTION_CAT("ui");
     ImGui::Begin("Statistics");
 
     if (!db.is_loaded()) {
@@ -534,6 +533,7 @@ static const int NUM_OPS = 11;
 static const char* LOGIC_NAMES[] = {"AND", "OR"};
 
 void QueryBuilderState::reset() {
+    TRACE_FUNCTION_CAT("ui");
     table_idx = 0;
     select_cols.clear();
     where_clauses.clear();
@@ -545,6 +545,7 @@ void QueryBuilderState::reset() {
 }
 
 std::string QueryBuilderState::build_sql(const char* const* columns, int num_columns) const {
+    TRACE_FUNCTION_CAT("ui");
     std::string sql = "SELECT ";
 
     // SELECT

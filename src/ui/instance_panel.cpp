@@ -38,6 +38,7 @@ void InstancePanel::select_function_by_name(const std::string& name, const Trace
 }
 
 void InstancePanel::navigate_to_instance(int32_t idx, const TraceModel& model, ViewState& view) {
+    TRACE_FUNCTION_CAT("ui");
     if (idx < 0 || idx >= (int32_t)instances_.size()) return;
     instance_cursor_ = idx;
     uint32_t ev_idx = instances_[idx];
@@ -45,7 +46,7 @@ void InstancePanel::navigate_to_instance(int32_t idx, const TraceModel& model, V
 }
 
 void InstancePanel::render(const TraceModel& model, ViewState& view) {
-    TRACE_SCOPE_CAT("Instances", "ui");
+    TRACE_FUNCTION_CAT("ui");
     ImGui::Begin("Instances");
 
     if (model.events().empty()) {
@@ -56,7 +57,6 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
 
     // Track external selection changes
     {
-        TRACE_SCOPE_CAT("TrackSelection", "ui");
         if (view.selected_event_idx() != last_selected_event_ && view.selected_event_idx() >= 0) {
             last_selected_event_ = view.selected_event_idx();
             const auto& ev = model.events()[view.selected_event_idx()];
@@ -102,7 +102,6 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
         ImGui::TableHeadersRow();
 
         {
-            TRACE_SCOPE_CAT("SortInstances", "ui");
             if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs()) {
                 if (instances_dirty_) {
                     sort_specs->SpecsDirty = true;
@@ -151,7 +150,6 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
             scroll_to_top_ = false;
         }
 
-        TRACE_SCOPE_CAT("DrawRows", "ui");
         char buf[64];
         ImGuiListClipper clipper;
         clipper.Begin((int)instances_.size());
