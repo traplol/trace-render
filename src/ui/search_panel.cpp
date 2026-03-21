@@ -14,6 +14,20 @@ void SearchPanel::reset() {
     sorted_results_.clear();
     needs_sort_ = false;
     scroll_to_top_ = false;
+    name_stats_.clear();
+}
+
+void SearchPanel::build_name_stats(const TraceModel& model, const std::vector<uint32_t>& results) {
+    name_stats_.clear();
+    for (uint32_t idx : results) {
+        const auto& ev = model.events()[idx];
+        auto& stats = name_stats_[ev.name_idx];
+        stats.count++;
+        stats.total_dur += ev.dur;
+    }
+    for (auto& [name_idx, stats] : name_stats_) {
+        stats.avg_dur = stats.count > 0 ? stats.total_dur / stats.count : 0.0;
+    }
 }
 
 void SearchPanel::on_model_changed() {
@@ -56,6 +70,7 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
             }
         }
         sorted_results_ = view.search_results();
+        build_name_stats(model, sorted_results_);
         needs_sort_ = true;
     }
 
@@ -87,7 +102,7 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
 
     // Results table
     if (!sorted_results_.empty() &&
-        ImGui::BeginTable("SearchResults", 3,
+        ImGui::BeginTable("SearchResults", 5,
                           ImGuiTableFlags_Sortable | ImGuiTableFlags_SortMulti | ImGuiTableFlags_RowBg |
                               ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY |
                               ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable,
@@ -95,6 +110,8 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_DefaultSort, 0.0f, 0);
         ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_None, 0.0f, 1);
+        ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_None, 0.0f, 3);
+        ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_None, 0.0f, 4);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_None, 0.0f, 2);
         ImGui::TableHeadersRow();
 
@@ -124,6 +141,22 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
                                 const auto& na = model.get_string(a.name_idx);
                                 const auto& nb = model.get_string(b.name_idx);
                                 cmp = na.compare(nb);
+                                break;
+                            }
+                            case 3: {  // Count
+                                auto it_a = name_stats_.find(a.name_idx);
+                                auto it_b = name_stats_.find(b.name_idx);
+                                uint32_t ca = it_a != name_stats_.end() ? it_a->second.count : 0;
+                                uint32_t cb = it_b != name_stats_.end() ? it_b->second.count : 0;
+                                cmp = sort_utils::three_way_cmp(ca, cb);
+                                break;
+                            }
+                            case 4: {  // Avg
+                                auto it_a = name_stats_.find(a.name_idx);
+                                auto it_b = name_stats_.find(b.name_idx);
+                                double aa = it_a != name_stats_.end() ? it_a->second.avg_dur : 0.0;
+                                double ab = it_b != name_stats_.end() ? it_b->second.avg_dur : 0.0;
+                                cmp = sort_utils::three_way_cmp(aa, ab);
                                 break;
                             }
                         }
@@ -170,6 +203,19 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
 
                 ImGui::TableNextColumn();
                 ImGui::TextUnformatted(dur_buf);
+
+                ImGui::TableNextColumn();
+                auto stats_it = name_stats_.find(ev.name_idx);
+                if (stats_it != name_stats_.end()) {
+                    ImGui::Text("%u", stats_it->second.count);
+                }
+
+                ImGui::TableNextColumn();
+                if (stats_it != name_stats_.end()) {
+                    char avg_buf[64];
+                    format_time(stats_it->second.avg_dur, avg_buf, sizeof(avg_buf));
+                    ImGui::TextUnformatted(avg_buf);
+                }
 
                 ImGui::TableNextColumn();
                 ImGui::TextUnformatted(name.c_str());
