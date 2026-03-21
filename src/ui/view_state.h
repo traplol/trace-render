@@ -87,6 +87,8 @@ public:
     static constexpr float kDefaultRulerHeight = 37.0f;
     static constexpr float kDefaultProcHeaderHeight = 36.0f;
     static constexpr float kDefaultScrollbarScale = 1.3f;
+    static constexpr float kDefaultFlameBarHeight = 20.0f;
+    static constexpr float kDefaultFlameBarGap = 1.0f;
 
     // --- Layout ---
     float track_height() const { return track_height_; }
@@ -103,6 +105,10 @@ public:
     void set_proc_header_height(float h) { proc_header_height_ = h; }
     float scrollbar_scale() const { return scrollbar_scale_; }
     void set_scrollbar_scale(float s) { scrollbar_scale_ = s; }
+    float flame_bar_height() const { return flame_bar_height_; }
+    void set_flame_bar_height(float h) { flame_bar_height_ = h; }
+    float flame_bar_gap() const { return flame_bar_gap_; }
+    void set_flame_bar_gap(float g) { flame_bar_gap_ = g; }
 
     void reset_layout_defaults() {
         track_height_ = kDefaultTrackHeight;
@@ -112,6 +118,8 @@ public:
         ruler_height_ = kDefaultRulerHeight;
         proc_header_height_ = kDefaultProcHeaderHeight;
         scrollbar_scale_ = kDefaultScrollbarScale;
+        flame_bar_height_ = kDefaultFlameBarHeight;
+        flame_bar_gap_ = kDefaultFlameBarGap;
     }
 
     // --- Rendering defaults ---
@@ -215,6 +223,8 @@ private:
     float ruler_height_ = kDefaultRulerHeight;
     float proc_header_height_ = kDefaultProcHeaderHeight;
     float scrollbar_scale_ = kDefaultScrollbarScale;
+    float flame_bar_height_ = kDefaultFlameBarHeight;
+    float flame_bar_gap_ = kDefaultFlameBarGap;
     std::array<float, 4> sel_border_color_ = kDefaultSelBorderColor;
     bool show_flows_ = kDefaultShowFlows;
     bool time_unit_ns_ = false;
