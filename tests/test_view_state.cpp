@@ -112,6 +112,79 @@ TEST(ViewState, NavigateToEventMinPadPreventsOverZoom) {
     EXPECT_DOUBLE_EQ(vs.view_end_ts(), 600.0);
 }
 
+TEST(ViewState, NavigateToEventNsModeScalesMinPad) {
+    ViewState vs;
+    vs.set_time_unit_ns(true);
+    TraceEvent ev;
+    ev.ts = 1000.0;
+    ev.dur = 0.05;  // 50ns = 0.05us
+
+    vs.navigate_to_event(10, ev);
+
+    // In ns mode, min_pad_us=100 is scaled to 100/1000=0.1us
+    // pad = max(0.05 * 0.5, 0.1) = 0.1
+    EXPECT_DOUBLE_EQ(vs.view_start_ts(), 1000.0 - 0.1);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts(), 1000.05 + 0.1);
+}
+
+TEST(ViewState, NavigateToEventNsModeWithLargerEvent) {
+    ViewState vs;
+    vs.set_time_unit_ns(true);
+    TraceEvent ev;
+    ev.ts = 500.0;
+    ev.dur = 2.0;  // 2us event in ns mode
+
+    vs.navigate_to_event(5, ev);
+
+    // pad = max(2.0 * 0.5, 0.1) = 1.0
+    EXPECT_DOUBLE_EQ(vs.view_start_ts(), 500.0 - 1.0);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts(), 502.0 + 1.0);
+}
+
+TEST(ViewState, NavigateToEventNsModeInstantEvent) {
+    ViewState vs;
+    vs.set_time_unit_ns(true);
+    TraceEvent ev;
+    ev.ts = 500.0;
+    ev.dur = 0.0;  // instant event
+
+    vs.navigate_to_event(3, ev);
+
+    // pad = max(0 * 0.5, 0.1) = 0.1 (scaled min_pad prevents zero-width viewport)
+    EXPECT_DOUBLE_EQ(vs.view_start_ts(), 499.9);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts(), 500.1);
+}
+
+TEST(ViewState, NavigateToEventNsModeCustomMinPad) {
+    ViewState vs;
+    vs.set_time_unit_ns(true);
+    TraceEvent ev;
+    ev.ts = 5000.0;
+    ev.dur = 0.01;
+
+    // Custom min_pad of 1000us gets scaled to 1.0us in ns mode
+    vs.navigate_to_event(7, ev, 2.0, 1000.0);
+
+    // pad = max(0.01 * 2.0, 1.0) = 1.0
+    EXPECT_DOUBLE_EQ(vs.view_start_ts(), 5000.0 - 1.0);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts(), 5000.01 + 1.0);
+}
+
+TEST(ViewState, NavigateToEventUsModeUnchanged) {
+    // Verify us mode (default) is not affected by the ns scaling
+    ViewState vs;
+    // time_unit_ns defaults to false
+    TraceEvent ev;
+    ev.ts = 1000.0;
+    ev.dur = 0.05;
+
+    vs.navigate_to_event(10, ev);
+
+    // pad = max(0.05 * 0.5, 100.0) = 100.0 (unchanged behavior)
+    EXPECT_DOUBLE_EQ(vs.view_start_ts(), 1000.0 - 100.0);
+    EXPECT_DOUBLE_EQ(vs.view_end_ts(), 1000.05 + 100.0);
+}
+
 // --- Range Selection ---
 
 TEST(ViewState, RangeSelectionDefaults) {
