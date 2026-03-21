@@ -6,15 +6,30 @@
 #include "imgui.h"
 #include <algorithm>
 #include <cstdio>
+#include <unordered_set>
 
 void SearchPanel::reset() {
     TRACE_FUNCTION_CAT("ui");
     search_buf_[0] = '\0';
     needs_search_ = false;
+    unique_by_name_ = true;
     sorted_results_.clear();
     needs_sort_ = false;
     scroll_to_top_ = false;
     name_stats_.clear();
+}
+
+std::vector<uint32_t> SearchPanel::filter_unique_by_name(const TraceModel& model,
+                                                         const std::vector<uint32_t>& results) {
+    std::unordered_set<uint32_t> seen;
+    std::vector<uint32_t> filtered;
+    for (uint32_t idx : results) {
+        const auto& ev = model.events()[idx];
+        if (seen.insert(ev.name_idx).second) {
+            filtered.push_back(idx);
+        }
+    }
+    return filtered;
 }
 
 void SearchPanel::build_name_stats(const TraceModel& model, const std::vector<uint32_t>& results) {
@@ -71,14 +86,26 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
         }
         sorted_results_ = view.search_results();
         build_name_stats(model, sorted_results_);
+        if (unique_by_name_) {
+            sorted_results_ = filter_unique_by_name(model, sorted_results_);
+        }
         needs_sort_ = true;
     }
 
-    ImGui::Text("%zu results", view.search_results().size());
+    if (ImGui::Checkbox("Unique by name", &unique_by_name_)) {
+        // Rebuild sorted_results_ from full results when toggling
+        sorted_results_ = view.search_results();
+        if (unique_by_name_) {
+            sorted_results_ = filter_unique_by_name(model, sorted_results_);
+        }
+        needs_sort_ = true;
+    }
 
-    // Navigation
+    ImGui::Text("%zu results", sorted_results_.size());
+
+    // Navigation (indexes into sorted_results_ which respects the unique filter)
     bool navigate = false;
-    if (!view.search_results().empty()) {
+    if (!sorted_results_.empty()) {
         ImGui::SameLine();
         if (ImGui::Button("<") && view.search_current() > 0) {
             view.set_search_current(view.search_current() - 1);
@@ -87,13 +114,13 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
         ImGui::SameLine();
         if (ImGui::Button(">")) {
             view.set_search_current(view.search_current() + 1);
-            if (view.search_current() >= (int32_t)view.search_results().size())
-                view.set_search_current((int32_t)view.search_results().size() - 1);
+            if (view.search_current() >= (int32_t)sorted_results_.size())
+                view.set_search_current((int32_t)sorted_results_.size() - 1);
             navigate = true;
         }
 
-        if (navigate && view.search_current() >= 0 && view.search_current() < (int32_t)view.search_results().size()) {
-            uint32_t ev_idx = view.search_results()[view.search_current()];
+        if (navigate && view.search_current() >= 0 && view.search_current() < (int32_t)sorted_results_.size()) {
+            uint32_t ev_idx = sorted_results_[view.search_current()];
             view.navigate_to_event(ev_idx, model.events()[ev_idx], 2.0, 1000.0);
         }
     }

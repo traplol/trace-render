@@ -87,3 +87,51 @@ TEST(SearchPanel, BuildNameStatsEmpty) {
 
     EXPECT_TRUE(panel.name_stats().empty());
 }
+
+TEST(SearchPanel, UniqueByNameDefaultOn) {
+    SearchPanel panel;
+    EXPECT_TRUE(panel.unique_by_name());
+}
+
+TEST(SearchPanel, FilterUniqueByNameKeepsOnePerName) {
+    TraceModel m = make_search_model();
+
+    // All 4 events: foo(0), foo(1), foo(2), bar(3)
+    std::vector<uint32_t> results = {0, 1, 2, 3};
+    auto filtered = SearchPanel::filter_unique_by_name(m, results);
+
+    // Should keep first foo (idx 0) and first bar (idx 3)
+    ASSERT_EQ(filtered.size(), 2u);
+    EXPECT_EQ(filtered[0], 0u);
+    EXPECT_EQ(filtered[1], 3u);
+}
+
+TEST(SearchPanel, FilterUniqueByNameEmpty) {
+    TraceModel m = make_search_model();
+    std::vector<uint32_t> results = {};
+    auto filtered = SearchPanel::filter_unique_by_name(m, results);
+    EXPECT_TRUE(filtered.empty());
+}
+
+TEST(SearchPanel, FilterUniqueByNameAllSameName) {
+    TraceModel m = make_search_model();
+
+    // Only foo events
+    std::vector<uint32_t> results = {0, 1, 2};
+    auto filtered = SearchPanel::filter_unique_by_name(m, results);
+
+    ASSERT_EQ(filtered.size(), 1u);
+    EXPECT_EQ(filtered[0], 0u);
+}
+
+TEST(SearchPanel, FilterUniqueByNameAllUnique) {
+    TraceModel m = make_search_model();
+
+    // One foo and one bar - already unique
+    std::vector<uint32_t> results = {0, 3};
+    auto filtered = SearchPanel::filter_unique_by_name(m, results);
+
+    ASSERT_EQ(filtered.size(), 2u);
+    EXPECT_EQ(filtered[0], 0u);
+    EXPECT_EQ(filtered[1], 3u);
+}
