@@ -79,11 +79,6 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
         return;
     }
 
-    ImGui::Text("Instances of \"%s\"", selected_name_.c_str());
-    ImGui::SameLine();
-    ImGui::Text("(%d / %zu)", instance_cursor_ + 1, instances_.size());
-
-    ImGui::SameLine();
     if (ImGui::Button("<##prev") && instance_cursor_ > 0) {
         navigate_to_instance(instance_cursor_ - 1, model, view);
     }
@@ -91,6 +86,10 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
     if (ImGui::Button(">##next") && instance_cursor_ < (int32_t)instances_.size() - 1) {
         navigate_to_instance(instance_cursor_ + 1, model, view);
     }
+    ImGui::SameLine();
+    ImGui::Text("(%d / %zu)", instance_cursor_ + 1, instances_.size());
+    ImGui::SameLine();
+    ImGui::TextUnformatted(selected_name_.c_str());
 
     if (ImGui::BeginTable("InstancesTable", 2,
                           ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
