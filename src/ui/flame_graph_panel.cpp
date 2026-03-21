@@ -449,7 +449,14 @@ void FlameGraphPanel::render_icicle(const TraceModel& model, ViewState& view, in
             }
         }
 
-        if (hoverable && mouse.x >= x0 && mouse.x < x1 && mouse.y >= y && mouse.y < y + BAR_H) {
+        float hit_x0 = x0, hit_x1 = x1;
+        if (entry.w < 3.0f) {
+            float mid = (x0 + x1) * 0.5f;
+            hit_x0 = mid - 1.5f;
+            hit_x1 = mid + 1.5f;
+        }
+
+        if (hoverable && mouse.x >= hit_x0 && mouse.x < hit_x1 && mouse.y >= y && mouse.y < y + BAR_H) {
             hovered_idx = entry.node_idx;
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
                 int32_t best = find_longest_instance(model, tree.pid, tree.tid, node.name_idx);
