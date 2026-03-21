@@ -62,6 +62,7 @@ void navigate_to_event(int32_t ev_idx, const TraceEvent& ev, double pad_factor =
 ```
 void render(const TraceModel&, ViewState&);
 DiagStats diag_stats;  // written each frame, read by DiagnosticsPanel
+static int32_t select_best_candidate(const std::vector<uint32_t>& candidates, const std::vector<TraceEvent>& events, const std::unordered_set<uint32_t>& hidden_cats, int clicked_depth, double click_time, double tolerance);
 ```
 
 ## detail_panel.h / detail_panel.cpp — selected-event details: timing, args, call stack, children table, range summary
