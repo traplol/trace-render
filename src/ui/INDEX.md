@@ -70,10 +70,13 @@ void render(const TraceModel&, ViewState&);
 void on_model_changed();
 ```
 
-## search_panel.h / search_panel.cpp — text search over event names; populates `ViewState::search_results`
+## search_panel.h / search_panel.cpp — text search over event names; populates `ViewState::search_results`; shows per-name Count and Avg duration
 ```
 void render(const TraceModel&, ViewState&);
 void on_model_changed();
+void build_name_stats(const TraceModel&, const std::vector<uint32_t>& results);
+const std::unordered_map<uint32_t, NameStats>& name_stats() const;
+// NameStats: count, total_dur, avg_dur
 ```
 
 ## filter_panel.h / filter_panel.cpp — hide/show processes, threads, categories via `ViewState::hidden_*`
