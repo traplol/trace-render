@@ -533,7 +533,7 @@ void App::save_settings() {
     j["counter_track_height"] = view_.counter_track_height();
     j["label_width"] = view_.label_width();
     j["show_flows"] = view_.show_flows();
-    j["time_unit_ns"] = view_.time_unit_ns();
+    if (!cli_time_unit_override_) j["time_unit_ns"] = view_.time_unit_ns();
     j["ruler_height"] = view_.ruler_height();
     j["proc_header_height"] = view_.proc_header_height();
     j["scrollbar_scale"] = view_.scrollbar_scale();
