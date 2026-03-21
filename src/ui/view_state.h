@@ -157,10 +157,14 @@ public:
     }
 
     // Select an event and zoom the viewport to show it.
+    // min_pad_us is specified in microseconds; when time_unit_ns_ is set,
+    // it is automatically scaled down by 1000x so the padding is appropriate
+    // for nanosecond-resolution traces.
     void navigate_to_event(int32_t ev_idx, const TraceEvent& ev, double pad_factor = 0.5, double min_pad_us = 100.0) {
         selected_event_idx_ = ev_idx;
         pending_scroll_event_idx_ = ev_idx;
-        double pad = std::max(ev.dur * pad_factor, min_pad_us);
+        double effective_min_pad = time_unit_ns_ ? min_pad_us / 1000.0 : min_pad_us;
+        double pad = std::max(ev.dur * pad_factor, effective_min_pad);
         view_start_ts_ = ev.ts - pad;
         view_end_ts_ = ev.end_ts() + pad;
     }
