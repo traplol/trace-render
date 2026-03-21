@@ -149,12 +149,13 @@ void App::update() {
         }
     }
 
-    // Set up dockspace over the entire viewport
+    // Set up dockspace over the entire viewport, reserving space for the status bar
+    float status_bar_h = ImGui::GetFrameHeight();
     {
         TRACE_SCOPE_CAT("App::dockspace_setup", "ui");
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
-        ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, viewport->WorkSize.y - status_bar_h));
         ImGui::SetNextWindowViewport(viewport->ID);
 
         ImGuiWindowFlags host_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
@@ -178,7 +179,8 @@ void App::update() {
 
             ImGui::DockBuilderRemoveNode(dockspace_id);
             ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-            ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
+            ImGui::DockBuilderSetNodeSize(dockspace_id,
+                                          ImVec2(viewport->WorkSize.x, viewport->WorkSize.y - status_bar_h));
 
             // Split: left panel (18%) for diagnostics, remainder for main content
             ImGuiID dock_main = dockspace_id;
