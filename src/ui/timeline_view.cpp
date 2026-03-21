@@ -222,7 +222,26 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
                             float x = track_left + (float)((ev.ts - view_start) * ppu);
                             float ey = y + ev.depth * track_height;
                             ImU32 col = ColorPalette::color_for_event(ev.cat_idx, ev.name_idx);
-                            dl->AddLine(ImVec2(x, ey), ImVec2(x, ey + track_height - 1), col, 2.0f);
+
+                            // Draw a diamond marker centered in the track row
+                            float cy = ey + track_height * 0.5f;
+                            float half_w = 5.0f;
+                            float half_h = (track_height - 2.0f) * 0.5f;
+                            ImVec2 diamond[4] = {
+                                ImVec2(x, cy - half_h),  // top
+                                ImVec2(x + half_w, cy),  // right
+                                ImVec2(x, cy + half_h),  // bottom
+                                ImVec2(x - half_w, cy),  // left
+                            };
+                            dl->AddConvexPolyFilled(diamond, 4, col);
+                            dl->AddPolyline(diamond, 4, ColorPalette::border_color(col), ImDrawFlags_Closed, 1.0f);
+
+                            if ((int32_t)ev_idx == sel_idx) {
+                                sel_rect_min_ = ImVec2(x - half_w - 2, ey - 2);
+                                sel_rect_max_ = ImVec2(x + half_w + 2, ey + track_height + 1);
+                                sel_rect_valid_ = true;
+                            }
+
                             diag_stats.instant_events++;
                             continue;
                         }
