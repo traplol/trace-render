@@ -103,9 +103,9 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
 
     ImGui::Text("%zu results", sorted_results_.size());
 
-    // Navigation
+    // Navigation (indexes into sorted_results_ which respects the unique filter)
     bool navigate = false;
-    if (!view.search_results().empty()) {
+    if (!sorted_results_.empty()) {
         ImGui::SameLine();
         if (ImGui::Button("<") && view.search_current() > 0) {
             view.set_search_current(view.search_current() - 1);
@@ -114,13 +114,13 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
         ImGui::SameLine();
         if (ImGui::Button(">")) {
             view.set_search_current(view.search_current() + 1);
-            if (view.search_current() >= (int32_t)view.search_results().size())
-                view.set_search_current((int32_t)view.search_results().size() - 1);
+            if (view.search_current() >= (int32_t)sorted_results_.size())
+                view.set_search_current((int32_t)sorted_results_.size() - 1);
             navigate = true;
         }
 
-        if (navigate && view.search_current() >= 0 && view.search_current() < (int32_t)view.search_results().size()) {
-            uint32_t ev_idx = view.search_results()[view.search_current()];
+        if (navigate && view.search_current() >= 0 && view.search_current() < (int32_t)sorted_results_.size()) {
+            uint32_t ev_idx = sorted_results_[view.search_current()];
             view.navigate_to_event(ev_idx, model.events()[ev_idx], 2.0, 1000.0);
         }
     }
