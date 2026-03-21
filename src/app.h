@@ -28,7 +28,10 @@ public:
     void shutdown();
     void open_file(const std::string& path);
     void open_buffer(std::vector<char> data, const std::string& filename);
-    void set_time_unit_ns(bool ns) { view_.set_time_unit_ns(ns); }
+    void set_time_unit_ns(bool ns) {
+        view_.set_time_unit_ns(ns);
+        cli_time_unit_override_ = true;
+    }
 
     bool has_trace() const { return has_trace_; }
 
@@ -56,6 +59,7 @@ private:
     int settings_tab_ = 0;
     bool dark_theme_ = true;
     bool vsync_ = true;
+    bool cli_time_unit_override_ = false;
     SDL_Window* window_ = nullptr;
 
     void finish_load();
