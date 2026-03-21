@@ -394,9 +394,11 @@ int32_t TimelineView::hit_test(float click_x, float click_y, ImVec2 area_min, Im
         std::vector<uint32_t> candidates;
         model.query_visible(thread, click_time - tolerance, click_time + tolerance, candidates);
 
+        const bool has_hidden_cats = !view.hidden_cats().empty();
         for (uint32_t idx : candidates) {
             const auto& ev = model.events()[idx];
             if (ev.is_end_event) continue;
+            if (has_hidden_cats && view.hidden_cats().count(ev.cat_idx)) continue;
             if (ev.depth != clicked_depth) continue;
             if (click_time >= ev.ts - tolerance && click_time <= ev.end_ts() + tolerance) {
                 if (ev.dur < best_dur) {
