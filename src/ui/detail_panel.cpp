@@ -12,6 +12,15 @@
 #include <cmath>
 #include <unordered_map>
 
+namespace {
+struct VisibleStackEntry {
+    uint32_t event_idx;  // first event in run (or the single event)
+    uint16_t count;      // 1 = normal entry, >1 = consolidated run
+    double total_dur;    // sum of durations across run
+    double total_self;   // sum of self times across run
+};
+}  // namespace
+
 void DetailPanel::reset() {
     TRACE_FUNCTION_CAT("ui");
     cached_range_start_ = 0.0;
@@ -497,6 +506,29 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                     }
                 }
 
+                // Consolidate consecutive same-name same-parent events into single entries
+                std::vector<VisibleStackEntry> entries;
+                entries.reserve(visible.size());
+                for (size_t vi = 0; vi < visible.size();) {
+                    uint32_t idx = visible[vi];
+                    const auto& frame = model.events()[idx];
+                    size_t run_end = vi + 1;
+                    while (run_end < visible.size()) {
+                        const auto& next = model.events()[visible[run_end]];
+                        if (next.name_idx != frame.name_idx || next.depth != frame.depth ||
+                            next.parent_idx != frame.parent_idx)
+                            break;
+                        run_end++;
+                    }
+                    double td = 0, ts = 0;
+                    for (size_t j = vi; j < run_end; j++) {
+                        td += model.events()[visible[j]].dur;
+                        ts += model.events()[visible[j]].self_time;
+                    }
+                    entries.push_back({idx, (uint16_t)(run_end - vi), td, ts});
+                    vi = run_end;
+                }
+
                 float arrow_sz = ImGui::GetFontSize();
                 float row_height = ImGui::GetTextLineHeightWithSpacing();
                 ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -505,63 +537,97 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
                 // Use clipper to only create ImGui widgets for on-screen rows
                 ImGuiListClipper clipper;
-                clipper.Begin((int)visible.size(), row_height);
+                clipper.Begin((int)entries.size(), row_height);
                 while (clipper.Step()) {
                     for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                        uint32_t idx = visible[i];
+                        const auto& entry = entries[i];
+                        uint32_t idx = entry.event_idx;
                         const auto& frame = model.events()[idx];
-
-                        bool has_children = stack_has_children_.count(idx) > 0;
-                        bool is_collapsed = stack_collapsed_.count(idx) > 0;
-
-                        char self_buf[64];
-                        double self = model.compute_self_time(idx);
-                        format_time(self, self_buf, sizeof(self_buf));
+                        bool is_consolidated = entry.count > 1;
 
                         int vis_depth = (int)frame.depth + depth_offset;
                         float indent = vis_depth * indent_per_level;
                         if (indent > 0) ImGui::Indent(indent);
 
-                        // Toggle arrow for nodes with children
-                        if (has_children) {
-                            ImVec2 cursor = ImGui::GetCursorScreenPos();
-                            char arrow_id[32];
-                            snprintf(arrow_id, sizeof(arrow_id), "##t%d", i);
-                            if (ImGui::InvisibleButton(arrow_id, ImVec2(arrow_sz, arrow_sz))) {
-                                if (is_collapsed)
-                                    stack_collapsed_.erase(idx);
-                                else
-                                    stack_collapsed_.insert(idx);
-                            }
-                            ImGuiDir dir = stack_collapsed_.count(idx) > 0 ? ImGuiDir_Right : ImGuiDir_Down;
-                            ImU32 arrow_col = ImGui::GetColorU32(ImGuiCol_Text);
-                            ImGui::RenderArrow(dl, cursor, arrow_col, dir, 1.0f);
-                            ImGui::SameLine();
-                        } else {
+                        if (is_consolidated) {
+                            // Consolidated entry — no tree arrow, just spacer
                             ImGui::Dummy(ImVec2(arrow_sz, arrow_sz));
                             ImGui::SameLine();
-                        }
 
-                        char id_buf[32];
-                        snprintf(id_buf, sizeof(id_buf), "##child%d", i);
-                        if (ImGui::Selectable(id_buf, false, ImGuiSelectableFlags_AllowOverlap)) {
-                            view.navigate_to_event(idx, frame);
+                            char id_buf[32];
+                            snprintf(id_buf, sizeof(id_buf), "##child%d", i);
+                            if (ImGui::Selectable(id_buf, false, ImGuiSelectableFlags_AllowOverlap)) {
+                                view.navigate_to_event(idx, frame);
+                            }
+                            bool row_hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
+                            ImGui::SameLine();
+
+                            ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "%s x%u",
+                                               model.get_string(frame.name_idx).c_str(), entry.count);
+                            ImGui::SameLine();
+
+                            char total_buf[64], avg_buf[64];
+                            format_time(entry.total_dur, total_buf, sizeof(total_buf));
+                            format_time(entry.total_dur / entry.count, avg_buf, sizeof(avg_buf));
+                            ImGui::TextDisabled("  total: %s  avg: %s", total_buf, avg_buf);
+
+                            if (row_hovered) {
+                                char avg_self_buf[64];
+                                format_time(entry.total_self / entry.count, avg_self_buf, sizeof(avg_self_buf));
+                                ImGui::SetTooltip("%s x%u\nTotal: %s | Avg: %s | Avg self: %s",
+                                                  model.get_string(frame.name_idx).c_str(), entry.count, total_buf,
+                                                  avg_buf, avg_self_buf);
+                            }
+                        } else {
+                            // Single entry — normal rendering with tree expand/collapse
+                            bool has_children = stack_has_children_.count(idx) > 0;
+                            bool is_collapsed = stack_collapsed_.count(idx) > 0;
+
+                            char self_buf[64];
+                            double self = model.compute_self_time(idx);
+                            format_time(self, self_buf, sizeof(self_buf));
+
+                            if (has_children) {
+                                ImVec2 cursor = ImGui::GetCursorScreenPos();
+                                char arrow_id[32];
+                                snprintf(arrow_id, sizeof(arrow_id), "##t%d", i);
+                                if (ImGui::InvisibleButton(arrow_id, ImVec2(arrow_sz, arrow_sz))) {
+                                    if (is_collapsed)
+                                        stack_collapsed_.erase(idx);
+                                    else
+                                        stack_collapsed_.insert(idx);
+                                }
+                                ImGuiDir dir = stack_collapsed_.count(idx) > 0 ? ImGuiDir_Right : ImGuiDir_Down;
+                                ImU32 arrow_col = ImGui::GetColorU32(ImGuiCol_Text);
+                                ImGui::RenderArrow(dl, cursor, arrow_col, dir, 1.0f);
+                                ImGui::SameLine();
+                            } else {
+                                ImGui::Dummy(ImVec2(arrow_sz, arrow_sz));
+                                ImGui::SameLine();
+                            }
+
+                            char id_buf[32];
+                            snprintf(id_buf, sizeof(id_buf), "##child%d", i);
+                            if (ImGui::Selectable(id_buf, false, ImGuiSelectableFlags_AllowOverlap)) {
+                                view.navigate_to_event(idx, frame);
+                            }
+                            bool row_hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
+                            ImGui::SameLine();
+                            ImGui::TextUnformatted(model.get_string(frame.name_idx).c_str());
+                            ImGui::SameLine();
+                            ImGui::TextDisabled("  self: %s", self_buf);
+
+                            if (row_hovered) {
+                                char wall_buf[64];
+                                format_time(frame.dur, wall_buf, sizeof(wall_buf));
+                                float self_pct = frame.dur > 0 ? (float)(self / frame.dur * 100.0) : 0.0f;
+                                ImGui::SetTooltip("%s\nWall: %s | Self: %s (%.1f%%)",
+                                                  model.get_string(frame.name_idx).c_str(), wall_buf, self_buf,
+                                                  self_pct);
+                            }
                         }
-                        bool row_hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
-                        ImGui::SameLine();
-                        ImGui::TextUnformatted(model.get_string(frame.name_idx).c_str());
-                        ImGui::SameLine();
-                        ImGui::TextDisabled("  self: %s", self_buf);
 
                         if (indent > 0) ImGui::Unindent(indent);
-
-                        if (row_hovered) {
-                            char wall_buf[64];
-                            format_time(frame.dur, wall_buf, sizeof(wall_buf));
-                            float self_pct = frame.dur > 0 ? (float)(self / frame.dur * 100.0) : 0.0f;
-                            ImGui::SetTooltip("%s\nWall: %s | Self: %s (%.1f%%)",
-                                              model.get_string(frame.name_idx).c_str(), wall_buf, self_buf, self_pct);
-                        }
                     }
                 }
 
@@ -574,8 +640,8 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                 std::unordered_map<int, float> first_y_at_depth;
                 std::unordered_map<int, float> last_y_at_depth;
 
-                for (int i = 0; i < (int)visible.size(); i++) {
-                    const auto& frame = model.events()[visible[i]];
+                for (int i = 0; i < (int)entries.size(); i++) {
+                    const auto& frame = model.events()[entries[i].event_idx];
                     int vis_depth = (int)frame.depth + depth_offset;
                     int parent_depth = vis_depth - 1;
                     float row_y = list_start_y + row_height * (i + 0.4f);
