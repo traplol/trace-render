@@ -433,6 +433,8 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                     }
                 }
             }
+            // Default all children with sub-children to collapsed
+            stack_collapsed_ = stack_has_children_;
         }
         int stack_count = (int)cached_call_stack_.size() + (int)cached_stack_children_.size();
         bool has_stack = (ev.depth > 0 || !cached_stack_children_.empty());
