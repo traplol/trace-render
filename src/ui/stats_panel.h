@@ -6,6 +6,8 @@
 #include <string>
 #include <nlohmann/json_fwd.hpp>
 
+struct SDL_Window;
+
 struct QueryTab {
     std::string title = "Query";
     std::string query;
@@ -72,6 +74,7 @@ struct QueryBuilderState {
 class StatsPanel {
 public:
     void render(const TraceModel& model, QueryDb& db, ViewState& view);
+    void set_window(SDL_Window* window) { window_ = window; }
 
     nlohmann::json save_tabs() const;
     void load_tabs(const nlohmann::json& j);
@@ -88,6 +91,8 @@ private:
     std::vector<QueryTab> tabs_;
     int active_tab_ = 0;
     float sql_height_ = 0.0f;  // draggable SQL editor height (0 = use default)
+
+    SDL_Window* window_ = nullptr;
 
     bool show_schema_ = false;
     bool show_builder_ = false;

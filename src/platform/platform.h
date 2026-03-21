@@ -27,8 +27,9 @@ void run_main_loop(void (*step)(), bool* running);
 std::string settings_path();  // empty = no persistence
 bool supports_vsync();
 
-// File dialog
+// File dialogs
 void open_file_dialog(SDL_Window* window);
+void save_file_dialog(SDL_Window* window, const std::string& default_name, const std::string& content);
 
 // File drop handling (called from SDL event loop)
 void handle_file_drop(const char* path);

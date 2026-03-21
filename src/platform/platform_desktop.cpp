@@ -12,6 +12,19 @@ static void file_dialog_callback(void* /*userdata*/, const char* const* filelist
     }
 }
 
+static std::string g_save_content;
+
+static void save_dialog_callback(void* /*userdata*/, const char* const* filelist, int /*filter*/) {
+    if (filelist && filelist[0]) {
+        SDL_IOStream* io = SDL_IOFromFile(filelist[0], "w");
+        if (io) {
+            SDL_WriteIO(io, g_save_content.data(), g_save_content.size());
+            SDL_CloseIO(io);
+        }
+        g_save_content.clear();
+    }
+}
+
 void platform::set_gl_attributes() {
     TRACE_FUNCTION_CAT("platform");
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
@@ -65,6 +78,17 @@ void platform::open_file_dialog(SDL_Window* window) {
         {"All Files", "*"},
     };
     SDL_ShowOpenFileDialog(file_dialog_callback, nullptr, window, filters, 2, nullptr, false);
+}
+
+void platform::save_file_dialog(SDL_Window* window, const std::string& default_name, const std::string& content) {
+    if (!window) return;
+    static const SDL_DialogFileFilter filters[] = {
+        {"CSV Files", "csv"},
+        {"TSV Files", "tsv"},
+        {"All Files", "*"},
+    };
+    g_save_content = content;
+    SDL_ShowSaveFileDialog(save_dialog_callback, nullptr, window, filters, 3, default_name.c_str());
 }
 
 void platform::handle_file_drop(const char* path) {

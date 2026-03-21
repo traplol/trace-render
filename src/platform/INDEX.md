@@ -13,6 +13,7 @@ void run_main_loop(void (*step)(), bool* running);
 std::string settings_path();
 bool supports_vsync();
 void open_file_dialog(SDL_Window*);
+void save_file_dialog(SDL_Window*, const std::string& default_name, const std::string& content);
 void handle_file_drop(const char* path);
 bool has_pending_file();
 PendingFile take_pending_file();
