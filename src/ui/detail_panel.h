@@ -1,5 +1,6 @@
 #pragma once
 #include "model/trace_model.h"
+#include "ui/event_browser.h"
 #include "ui/view_state.h"
 #include "ui/range_stats.h"
 #include <unordered_set>
@@ -19,49 +20,26 @@ private:
 
     void render_range_selection(const TraceModel& model, ViewState& view);
 
-    struct ChildInfo {
-        uint32_t event_idx;
-        uint32_t name_idx;
-        double dur;
-        float pct;
-    };
-
-    struct AggregatedChild {
-        uint32_t name_idx;
-        uint32_t count;
-        double total_dur;
-        double avg_dur;
-        double min_dur;
-        double max_dur;
-        float pct;             // total_dur as % of parent
-        uint32_t longest_idx;  // event_idx of longest instance
-    };
-
+    // Children tab
     int32_t cached_event_idx_ = -1;
     bool include_all_descendants_ = false;
     bool cached_descendants_flag_ = false;
-    bool children_dirty_ = false;
-    bool group_by_name_ = false;
-    bool cached_group_flag_ = false;
+    double self_time_ = 0.0;
+    float self_pct_ = 0.0f;
+    EventBrowser children_browser_;
+
+    void rebuild_children(const TraceModel& model, const TraceEvent& ev);
+
+    // Siblings tab
+    int32_t cached_siblings_event_idx_ = -1;
+    EventBrowser siblings_browser_{/*default_group_by_name=*/true};
+
+    void rebuild_siblings(const TraceModel& model, const TraceEvent& ev, uint32_t event_idx);
+
+    // Call stack tab
     int32_t cached_stack_event_idx_ = -1;
     std::vector<uint32_t> cached_call_stack_;
     std::vector<uint32_t> cached_stack_children_;
-    std::unordered_set<uint32_t> stack_collapsed_;     // collapsed event indices
-    std::unordered_set<uint32_t> stack_has_children_;  // events that have children in the tree
-    char filter_buf_[256] = {};
-    std::string active_filter_;
-    std::vector<ChildInfo> children_;
-    std::vector<size_t> filtered_children_;
-    std::vector<AggregatedChild> aggregated_;
-    std::vector<size_t> filtered_aggregated_;
-    double self_time_ = 0.0;
-    float self_pct_ = 0.0f;
-    bool scroll_children_to_top_ = false;
-    bool scroll_aggregated_to_top_ = false;
-
-    void rebuild_children(const TraceModel& model, const TraceEvent& ev);
-    void rebuild_aggregated(const TraceModel& model, double parent_dur);
-    void rebuild_filter(const TraceModel& model);
-    void render_children_table(const TraceModel& model, ViewState& view);
-    void render_aggregated_table(const TraceModel& model, ViewState& view);
+    std::unordered_set<uint32_t> stack_collapsed_;
+    std::unordered_set<uint32_t> stack_has_children_;
 };

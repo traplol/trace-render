@@ -65,7 +65,18 @@ DiagStats diag_stats;  // written each frame, read by DiagnosticsPanel
 static int32_t select_best_candidate(const std::vector<uint32_t>& candidates, const std::vector<TraceEvent>& events, const std::unordered_set<uint32_t>& hidden_cats, int clicked_depth, double click_time, double tolerance);
 ```
 
-## detail_panel.h / detail_panel.cpp — selected-event details: timing, args, call stack, children table, range summary
+## event_browser.h / event_browser.cpp — reusable sortable/filterable event list with group-by-name aggregation
+```
+explicit EventBrowser(bool default_group_by_name = false);
+void set_entries(std::vector<Entry> entries, double parent_dur, const TraceModel& model);
+void render(const char* id, const TraceModel& model, ViewState& view);
+size_t entry_count() const;
+void reset();
+// Entry: event_idx, name_idx, dur, pct
+// Aggregated: name_idx, count, total_dur, avg_dur, min_dur, max_dur, pct, longest_idx
+```
+
+## detail_panel.h / detail_panel.cpp — selected-event details: timing, args, call stack, children table, siblings table, range summary
 ```
 void render(const TraceModel&, ViewState&);
 void on_model_changed();
