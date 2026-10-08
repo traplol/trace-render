@@ -18,3 +18,8 @@ bool read_profile(std::string_view data, TraceModel& model, std::string& error);
 bool serialize_profile(const TraceModel& model, std::string& data, std::string& error);
 bool write_profile(const std::string& filepath, const TraceModel& model, std::string& error);
 ```
+
+## native_heap.h / native_heap.cpp — replays decoded native heap events into allocation and heap generations while preserving allocation origins and reporting incomplete coverage
+```
+void build_native_allocations(const std::vector<NativeHeapEvent>& events, ProfileData& profile, bool complete_event_stream);
+```

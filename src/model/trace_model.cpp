@@ -6,6 +6,7 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
     TRACE_FUNCTION_CAT("model");
 
     resolve_stack_frames();
+    memory_index_.build(profile_, stack_frames_, strings_);
     min_ts_ = 1e18;
     max_ts_ = -1e18;
 

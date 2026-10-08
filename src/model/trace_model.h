@@ -2,6 +2,7 @@
 #include "trace_event.h"
 #include "profile_data.h"
 #include "block_index.h"
+#include "memory_index.h"
 #include <vector>
 #include <string>
 #include <unordered_map>
@@ -162,6 +163,12 @@ public:
     // Resolved stack-frame indices, root to leaf. Empty for an invalid/missing sf chain.
     std::vector<uint32_t> build_sample_stack(uint32_t event_idx) const;
 
+    OutstandingMemory query_outstanding_memory(double ts,
+                                               std::optional<std::pair<double, double>> born_between = std::nullopt,
+                                               const std::string& process_id = {}) const {
+        return memory_index_.query(profile_, ts, born_between, process_id);
+    }
+
     // Compute self time for an event (wall time minus immediate children's durations).
     double compute_self_time(uint32_t event_idx) const;
 
@@ -181,6 +188,7 @@ public:
     void clear() {
         events_.clear();
         profile_ = {};
+        memory_index_.clear();
         stack_frames_.clear();
         strings_.clear();
         string_map_.clear();
@@ -201,6 +209,7 @@ public:
 private:
     void resolve_stack_frames();
     ProfileData profile_;
+    MemoryIndex memory_index_;
     std::vector<TraceEvent> events_;
     std::vector<StackFrame> stack_frames_;
     std::vector<std::string> strings_;
