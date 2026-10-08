@@ -104,7 +104,7 @@ std::string build_sql(const char* const* columns, int num_columns) const;
 std::string export_result(const QueryDb::QueryResult&, char delimiter);
 ```
 
-## flame_graph_panel.h / flame_graph_panel.cpp — separate measured/sample/sampled-span icicle charts per thread with a flat node pool; filterable sidebar, zoom, search highlighting, context menu
+## flame_graph_panel.h / flame_graph_panel.cpp — separate measured/sample/sampled-span icicle charts per thread with native function identities with a flat node pool; filterable sidebar, zoom, search highlighting, context menu
 ```
 void render(const TraceModel&, ViewState&);
 void on_model_changed();
@@ -163,7 +163,7 @@ bool settings_requested() const;
 void clear_settings_request();
 ```
 
-## range_stats.h / range_stats.cpp — separate measured, converted-span, and inclusive/exclusive sampled statistics for a time range
+## range_stats.h / range_stats.cpp — separate measured, converted-span, and inclusive/exclusive sampled statistics grouped by native function identity when available
 ```
 RangeStats compute_range_stats(const TraceModel&, double start_ts, double end_ts);
 double RangeEventSummary::avg_dur() const;

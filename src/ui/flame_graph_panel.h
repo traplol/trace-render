@@ -9,6 +9,7 @@
 struct FlameNode {
     uint32_t name_idx = 0;
     uint32_t cat_idx = 0;
+    uint64_t function_key = UINT64_MAX;
     double total_time = 0.0;
     double self_time = 0.0;
     uint32_t call_count = 0;
@@ -74,8 +75,9 @@ private:
     void render_icicle(const TraceModel& model, ViewState& view, int tree_idx);
 
     // Tree building helpers.
-    static uint32_t find_or_create_child(FlameTree& tree, uint32_t parent_idx, uint32_t name_idx, uint32_t cat_idx);
-    static uint32_t find_or_create_root(FlameTree& tree, uint32_t name_idx, uint32_t cat_idx);
+    static uint32_t find_or_create_child(FlameTree& tree, uint32_t parent_idx, uint32_t name_idx, uint32_t cat_idx,
+                                         uint64_t function_key);
+    static uint32_t find_or_create_root(FlameTree& tree, uint32_t name_idx, uint32_t cat_idx, uint64_t function_key);
     static uint32_t sort_children(FlameTree& tree, uint32_t first_child);
     static void compute_self_times(FlameTree& tree);
 };

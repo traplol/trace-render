@@ -5,6 +5,7 @@ Core data layer: in-memory trace representation, spatial block index, SQLite que
 ```
 Phase phase_from_char(char c);
 const char* event_kind_name(EventKind kind);
+uint64_t stack_function_key(const StackFrame& frame);
 double TraceEvent::end_ts() const;
 ```
 
@@ -35,6 +36,8 @@ const std::unordered_map<uint32_t, std::vector<uint32_t>>& name_to_events() cons
 // TraceModel — mutation methods
 uint32_t add_event(const TraceEvent& ev);
 void add_stack_frame(const StackFrame& frame);
+void set_stack_frame_symbol(uint32_t frame_idx, const std::string& name, const std::string& symbol_id, const std::string& source_file, uint32_t source_line, bool resolved);
+void add_symbol_warning(const std::string& warning);
 void set_profile(ProfileData profile);
 uint32_t add_args(std::string args_json);
 void add_flow_event(uint64_t id, uint32_t event_idx);
@@ -93,4 +96,4 @@ static ImU32 border_color(ImU32 fill);
 static ImU32 text_color(ImU32 bg);
 ```
 
-## profile_data.h — POD records for capture capabilities, quality, process and heap lifetimes, modules, allocation lifetimes, managed snapshots, and GC survival observations
+## profile_data.h — POD records for capture capabilities, quality, process and heap lifetimes, modules with optional recorded PDB paths, allocation lifetimes, managed snapshots, and GC survival observations

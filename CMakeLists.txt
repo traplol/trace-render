@@ -6,6 +6,28 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(FetchContent)
 
+# Native PDB reading is optional and uses an installed LLVM, never a fetched toolchain.
+option(TRACE_RENDER_NATIVE_PDB "Resolve native PDB symbols using LLVM" ON)
+if(TRACE_RENDER_NATIVE_PDB AND NOT EMSCRIPTEN)
+  find_package(LLVM 18.1 CONFIG QUIET)
+  if(LLVM_FOUND)
+    message(STATUS "Native PDB symbols: LLVM ${LLVM_PACKAGE_VERSION}")
+    llvm_map_components_to_libnames(TRACE_PDB_LIBS DebugInfoPDB)
+    # Keep LLVM's include tree out of other translation units, notably libstdc++ cxxabi users.
+    set_source_files_properties(src/symbols/native_symbol_resolver.cpp PROPERTIES
+      INCLUDE_DIRECTORIES "${LLVM_INCLUDE_DIRS}"
+      COMPILE_DEFINITIONS TRACE_RENDER_HAS_NATIVE_PDB=1)
+  else()
+    message(STATUS "Native PDB symbols unavailable; install LLVM 18.1 development files to enable")
+  endif()
+endif()
+
+function(enable_native_pdb target)
+  if(LLVM_FOUND AND TRACE_RENDER_NATIVE_PDB AND NOT EMSCRIPTEN)
+    target_link_libraries(${target} PRIVATE ${TRACE_PDB_LIBS})
+  endif()
+endfunction()
+
 # --- nlohmann/json ---
 FetchContent_Declare(json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
@@ -85,6 +107,7 @@ else()
 endif()
 add_executable(trace_render ${APP_SOURCES})
 target_include_directories(trace_render PRIVATE src)
+enable_native_pdb(trace_render)
 
 if(EMSCRIPTEN)
   target_link_libraries(trace_render PRIVATE
@@ -140,6 +163,7 @@ if(NOT EMSCRIPTEN)
     file(GLOB TEST_SOURCES tests/*.cpp)
     add_executable(trace_render_tests EXCLUDE_FROM_ALL ${TEST_SOURCES} ${LIB_SOURCES})
     target_include_directories(trace_render_tests PRIVATE src)
+    enable_native_pdb(trace_render_tests)
     target_link_libraries(trace_render_tests PRIVATE
       GTest::gtest_main
       imgui_lib

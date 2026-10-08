@@ -68,30 +68,33 @@ void FlameGraphPanel::update_cache_keys(const ViewState& view, size_t event_coun
 // ---------------------------------------------------------------------------
 
 uint32_t FlameGraphPanel::find_or_create_child(FlameTree& tree, uint32_t parent_idx, uint32_t name_idx,
-                                               uint32_t cat_idx) {
+                                               uint32_t cat_idx, uint64_t function_key) {
     for (uint32_t c = tree.nodes[parent_idx].first_child; c != UINT32_MAX; c = tree.nodes[c].next_sibling) {
-        if (tree.nodes[c].name_idx == name_idx && tree.nodes[c].cat_idx == cat_idx) return c;
+        if (tree.nodes[c].function_key == function_key && tree.nodes[c].cat_idx == cat_idx) return c;
     }
     uint32_t idx = (uint32_t)tree.nodes.size();
     tree.nodes.push_back({});
     auto& n = tree.nodes[idx];
     n.name_idx = name_idx;
     n.cat_idx = cat_idx;
+    n.function_key = function_key;
     n.parent = parent_idx;
     n.next_sibling = tree.nodes[parent_idx].first_child;
     tree.nodes[parent_idx].first_child = idx;
     return idx;
 }
 
-uint32_t FlameGraphPanel::find_or_create_root(FlameTree& tree, uint32_t name_idx, uint32_t cat_idx) {
+uint32_t FlameGraphPanel::find_or_create_root(FlameTree& tree, uint32_t name_idx, uint32_t cat_idx,
+                                              uint64_t function_key) {
     for (uint32_t c = tree.first_root; c != UINT32_MAX; c = tree.nodes[c].next_sibling) {
-        if (tree.nodes[c].name_idx == name_idx && tree.nodes[c].cat_idx == cat_idx) return c;
+        if (tree.nodes[c].function_key == function_key && tree.nodes[c].cat_idx == cat_idx) return c;
     }
     uint32_t idx = (uint32_t)tree.nodes.size();
     tree.nodes.push_back({});
     auto& n = tree.nodes[idx];
     n.name_idx = name_idx;
     n.cat_idx = cat_idx;
+    n.function_key = function_key;
     n.next_sibling = tree.first_root;
     tree.first_root = idx;
     return idx;
@@ -150,7 +153,12 @@ void FlameGraphPanel::rebuild(const TraceModel& model, const ViewState& view) {
     const auto& hidden_tids = view.hidden_tids();
     const auto& hidden_cats = view.hidden_cats();
 
-    std::vector<std::pair<uint32_t, uint32_t>> path;  // scratch: (name_idx, cat_idx)
+    struct Function {
+        uint32_t name;
+        uint32_t category;
+        uint64_t key;
+    };
+    std::vector<Function> path;
 
     for (const auto& proc : model.processes()) {
         if (hidden_pids.count(proc.pid)) continue;
@@ -175,10 +183,11 @@ void FlameGraphPanel::rebuild(const TraceModel& model, const ViewState& view) {
                         contribution = std::max(0.0, ev.sample_cpu_time);
                         for (uint32_t f : model.build_sample_stack(ev_idx)) {
                             const auto& frame = model.stack_frames()[f];
-                            if (!hidden_cats.count(frame.cat_idx)) path.push_back({frame.name_idx, frame.cat_idx});
+                            if (!hidden_cats.count(frame.cat_idx))
+                                path.push_back({frame.name_idx, frame.cat_idx, stack_function_key(frame)});
                         }
                         if (ev.stack_frame_idx < 0 && !hidden_cats.count(ev.cat_idx))
-                            path.push_back({ev.name_idx, ev.cat_idx});
+                            path.push_back({ev.name_idx, ev.cat_idx, ev.name_idx});
                     } else {
                         if (ev.ph != Phase::Complete && ev.ph != Phase::DurationBegin) continue;
                         if (ev.dur <= 0 || hidden_cats.count(ev.cat_idx)) continue;
@@ -188,15 +197,15 @@ void FlameGraphPanel::rebuild(const TraceModel& model, const ViewState& view) {
                         for (int32_t p = (int32_t)ev_idx; p >= 0; p = model.events()[p].parent_idx) {
                             const auto& frame = model.events()[p];
                             if (frame.kind == kind && !hidden_cats.count(frame.cat_idx))
-                                path.push_back({frame.name_idx, frame.cat_idx});
+                                path.push_back({frame.name_idx, frame.cat_idx, frame.name_idx});
                         }
                         std::reverse(path.begin(), path.end());
                     }
                     if (path.empty()) continue;
                     uint32_t cur = UINT32_MAX;
-                    for (const auto& [name, cat] : path) {
-                        cur = cur == UINT32_MAX ? find_or_create_root(tree, name, cat)
-                                                : find_or_create_child(tree, cur, name, cat);
+                    for (const auto& [name, cat, key] : path) {
+                        cur = cur == UINT32_MAX ? find_or_create_root(tree, name, cat, key)
+                                                : find_or_create_child(tree, cur, name, cat, key);
                         auto& node = tree.nodes[cur];
                         if (node.event_idx == UINT32_MAX || ev.dur > model.events()[node.event_idx].dur)
                             node.event_idx = ev_idx;

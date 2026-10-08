@@ -75,6 +75,8 @@ SQL exposes `kind`, `sample_count`, `sample_weight`, `weight_unit`, `estimated_c
 
 TraceRender also opens versioned `.trprofile` files through the normal file loader. These preserve the imported CPU observations, resolved names and source locations, allocation lifetimes, managed snapshots, and capture-quality metadata without requiring the original capture or symbol files. The production writer is `write_profile()` in `src/parser/profile_io.h`. File-menu saving and `.diagsession` decoding are separate integration work. See [the version 1 format](docs/profile-format.md).
 
+Native CPU and allocation frames can share [local PDB resolution through LLVM 18.1](docs/native-symbols.md). Matching PDB GUID/age is required; missing symbols keep module offsets. Saved resolutions reopen without PDBs. Native flame and range views group by function identity, so unrelated functions with the same display name remain separate.
+
 The committed fixtures in `tests/fixtures/` use invented functions and timestamps:
 
 - `sampled_stacks.json` contains `main -> work` at 100 us with 250 us weight and `main` at 10,000 us with 500 us weight on thread 11. The root has two inclusive samples, one exclusive sample, and 750 us estimated CPU. Thread 12 has a separate unweighted observation. The gaps contribute no CPU time. Tests import both field orders.

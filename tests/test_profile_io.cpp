@@ -346,3 +346,14 @@ TEST(ProfileIo, ChromeImportCanBeSavedAndReopenedWithTransitionsCountersAndFlows
     EXPECT_LT(restored.events().back().stack_frame_idx, 0);
     EXPECT_EQ(restored.get_string(restored.events().back().stack_frame_id), "unknown");
 }
+
+TEST(ProfileIo, ReadsVersionOneModulesBeforeOptionalPdbPathWasAdded) {
+    auto document = nlohmann::json::parse(encode(representative_profile()).substr(PROFILE_MAGIC.size()));
+    for (auto& module : document["profile"]["modules"]) module.erase("pdb_path");
+    auto data = std::string(PROFILE_MAGIC) + document.dump();
+    TraceParser parser;
+    TraceModel model;
+    ASSERT_TRUE(parser.parse_buffer(data.data(), data.size(), model)) << parser.error_message();
+    ASSERT_EQ(model.profile().modules.size(), 2u);
+    EXPECT_TRUE(model.profile().modules[0].pdb_path.empty());
+}

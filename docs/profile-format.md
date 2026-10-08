@@ -52,7 +52,7 @@ The `profile` object contains:
 | `quality` | `incomplete_capture`, `sampled_cpu`, `sampled_allocations`, `unresolved_symbols`, optional decimal-string `lost_events`, and a string-array `warnings` |
 | `process_instances` | `id`, `pid`, optional `start_ts` and `end_ts` |
 | `heap_instances` | `id`, `process_id`, optional `start_ts` and `end_ts` |
-| `modules` | `id`, `process_id`, `name`, `path`, `build_id`, `load_address`, `size_bytes`, optional `load_ts` and `unload_ts` |
+| `modules` | `id`, `process_id`, `name`, `path`, `build_id`, optional `pdb_path`, `load_address`, `size_bytes`, optional `load_ts` and `unload_ts` |
 | `allocations` | Allocation lifetimes described below |
 | `managed_snapshots` | Snapshot totals and type summaries described below |
 | `managed_survival` | GC observations described below |
@@ -72,3 +72,5 @@ A null `allocated_ts` means the allocation start was not observed. A null `freed
 Each managed snapshot has `id`, `process_id`, `ts`, optional `live_bytes` and `object_count`, and `types`. Each type summary has `type_id`, `name`, exact `object_count`, and exact `size_bytes`. Snapshot type totals describe observed live objects; differences are not allocation activity.
 
 Each managed survival record has `allocation_id`, `ts`, `survived`, and optional `address`. It references a managed allocation, records the GC observation time, and can retain an address after relocation. `survived: false` is an observation of collection, not an exact free time. Object references and retention graphs are outside version 1.
+
+Native module `build_id` uses the recorded PDB GUID and decimal age as `GUID/age`. The optional `pdb_path` records the RSDS path; it defaults to empty when reading earlier version 1 profiles. Symbol lookup searches its basename only within supplied local directories. It never trusts the recorded path as proof of the captured build.

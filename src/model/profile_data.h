@@ -29,6 +29,7 @@ struct ProfileModule {
     uint64_t size_bytes = 0;
     std::optional<double> load_ts;
     std::optional<double> unload_ts;
+    std::string pdb_path;  // recorded RSDS path; only its basename is searched in supplied directories
 };
 
 enum class AllocationKind : uint8_t { Native, Managed };

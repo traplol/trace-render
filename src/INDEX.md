@@ -1,5 +1,5 @@
 # src/
-Top-level app shell and self-tracing helpers. Subdirs: `model/` `parser/` `platform/` `ui/`
+Top-level app shell and self-tracing helpers. Subdirs: `model/` `parser/` `platform/` `symbols/` `ui/`
 
 ## app.h — `App`: owns all subsystems, drives the frame loop
 ```

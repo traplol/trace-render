@@ -209,6 +209,7 @@ bool serialize_profile(const TraceModel& model, std::string& data, std::string& 
                                           {"name", m.name},
                                           {"path", m.path},
                                           {"build_id", m.build_id},
+                                          {"pdb_path", m.pdb_path},
                                           {"load_address", std::to_string(m.load_address)},
                                           {"size_bytes", std::to_string(m.size_bytes)},
                                           {"load_ts", time_value(m.load_ts)},
@@ -325,6 +326,7 @@ bool read_profile(std::string_view data, TraceModel& model, std::string& error) 
                                  u64(item.at("size_bytes")),
                                  optional_time(item.at("load_ts")),
                                  optional_time(item.at("unload_ts"))};
+            module.pdb_path = item.value("pdb_path", std::string{});
             reference(module.process_id, processes, "process");
             time_range(module.load_ts, module.unload_ts);
             require(module.size_bytes <= UINT64_MAX - module.load_address, "module address range overflows");

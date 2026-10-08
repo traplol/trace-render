@@ -93,6 +93,13 @@ struct StackFrame {
     bool symbol_resolved = false;
 };
 
+// Native profiles carry function identities; Chrome samples retain name-based grouping.
+inline uint64_t stack_function_key(const StackFrame& frame) {
+    if (frame.symbol_id != UINT32_MAX && frame.symbol_id != 0) return (UINT64_C(1) << 32) | frame.symbol_id;
+    if (frame.module_id != UINT32_MAX) return (UINT64_C(2) << 32) | frame.id_idx;
+    return frame.name_idx;
+}
+
 struct TraceEvent {
     uint32_t name_idx = 0;
     uint32_t cat_idx = 0;

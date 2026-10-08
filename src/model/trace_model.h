@@ -80,6 +80,9 @@ public:
     // --- Mutation methods for building the model ---
     void set_profile(ProfileData profile) { profile_ = std::move(profile); }
     void add_stack_frame(const StackFrame& frame) { stack_frames_.push_back(frame); }
+    void set_stack_frame_symbol(uint32_t frame_idx, const std::string& name, const std::string& symbol_id,
+                                const std::string& source_file, uint32_t source_line, bool resolved);
+    void add_symbol_warning(const std::string& warning);
     uint32_t add_event(const TraceEvent& ev) {
         uint32_t idx = (uint32_t)events_.size();
         events_.push_back(ev);

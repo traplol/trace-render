@@ -333,3 +333,20 @@ int32_t TraceModel::find_next_sibling(uint32_t event_idx) const {
     }
     return -1;
 }
+
+void TraceModel::set_stack_frame_symbol(uint32_t frame_idx, const std::string& name, const std::string& symbol_id,
+                                        const std::string& source_file, uint32_t source_line, bool resolved) {
+    if (frame_idx >= stack_frames_.size()) return;
+    auto& frame = stack_frames_[frame_idx];
+    frame.name_idx = intern_string(name);
+    frame.symbol_id = intern_string(symbol_id);
+    frame.source_file = intern_string(source_file);
+    frame.source_line = source_line;
+    frame.symbol_resolved = resolved;
+}
+
+void TraceModel::add_symbol_warning(const std::string& warning) {
+    profile_.quality.unresolved_symbols = true;
+    auto& warnings = profile_.quality.warnings;
+    if (std::find(warnings.begin(), warnings.end(), warning) == warnings.end()) warnings.push_back(warning);
+}
