@@ -1,0 +1,66 @@
+[
+  {
+    "filename": "native-cpu-obs.diagsession",
+    "kind": "cpu",
+    "process_id": 1712,
+    "url": "https://github.com/user-attachments/files/23281548/Report20251101-0025.diagsession.zip",
+    "outer_member": "Report20251101-0025.diagsession",
+    "source": "https://github.com/obsproject/obs-studio/issues/12758#issuecomment-3475952776",
+    "producer_version": "17.14.36607.1",
+    "expected": {
+      "etl_records": 142376,
+      "cpu_samples": 25232,
+      "correlated_stacks": 4475,
+      "target_stacks": 2007
+    },
+    "size": 2981218,
+    "sha256": "9bc636cacad326af33798dd9bff6a0aec6a15dcd36b22068eada43deb3151125",
+    "resources": {
+      "46e3f621-38af-4057-b862-09b4dc3d65f0/70143dfa-7867-40a6-b3a2-82c4d905e312.counters": 14616,
+      "ab9d42e4-aced-4723-ba52-a28ebcb1df3e/sc.user_aux.etl": 16187392,
+      "metadata.xml": 1106,
+      "[Content_Types].xml": 312
+    }
+  },
+  {
+    "filename": "native-memory-cscn.diagsession",
+    "kind": "memory",
+    "process_id": 25260,
+    "url": "https://media.githubusercontent.com/media/CecilFoubert/Project-6---Group-4---CSCN73060-SEC-1/110abc0288a609a343392836d619f38061c293ef/PROJ2CODE/Crash_Test_InClass.diagsession",
+    "source": "https://github.com/CecilFoubert/Project-6---Group-4---CSCN73060-SEC-1/blob/110abc0288a609a343392836d619f38061c293ef/PROJ2CODE/Crash_Test_InClass.diagsession",
+    "producer_version": "17.8.34329.2",
+    "expected": {
+      "etl_records": 1714268,
+      "allocations": 311635,
+      "frees": 307133,
+      "realloc_summaries": 1,
+      "allocation_stacks": 311636,
+      "snapshot_allocation_and_stack_checks": 22798,
+      "reused_addresses": 1324,
+      "maximum_address_generations": 16926,
+      "final_live_count": 4502,
+      "final_live_bytes": 1068330
+    },
+    "size": 49023829,
+    "sha256": "9d23e331bd78f2e1772981662d10aa2f92810b91539504f199687748f58a062d",
+    "resources": {
+      "1a4f5a63-0e89-4b47-a0e4-273c5cfc6f4b/snapshot1.dmp": 19784058,
+      "51b49e56-21f2-40f1-ba20-8625cf7c59ea/snapshot3.heapstate": 176608,
+      "545e3aa0-7f67-433d-b27f-9202db2a7481/snapshot4.dmp": 19764235,
+      "9c4f217d-f36c-4fdc-a65e-04a8d63c76c8/snapshot0.dmp": 13031974,
+      "cbb43dda-2aef-494a-b58b-c48c69ef5118/snapshot5.dmp": 19764235,
+      "a9466d61-252e-4921-b7c2-3bfa7bdb38fb/snapshot4.heapstate": 176608,
+      "bd121209-dcc5-4bac-b024-ae6249eba430/snapshot3.dmp": 19764235,
+      "505f6d74-181e-4775-8637-7cf922017fcc/snapshot2.dmp": 19780010,
+      "da23bc6f-fc64-441a-bcd3-a4405527f480/90878473-288a-4809-9486-8bc810ceca0a.counters": 1487922,
+      "3dd04439-5f6b-40be-85c2-2d6db5ea32d3/snapshot2.heapstate": 177048,
+      "117a10e9-ed94-4f27-80de-89a772a6110b/snapshot5.heapstate": 176608,
+      "7ff8f1e1-ddfd-4104-89c3-505bd4b079a4/snapshot1.heapstate": 176792,
+      "c1600821-2aef-4c0b-88f2-e09754d90302/snapshot0.heapstate": 34136,
+      "108e09c4-7b53-4333-b2d4-761493788be5/sc.user_aux.etl": 129564672,
+      "e41401dc-4abc-41f7-b58f-8356c9af9f8c/tmpFFAE.tmp": 2815,
+      "metadata.xml": 4579,
+      "[Content_Types].xml": 516
+    }
+  }
+]

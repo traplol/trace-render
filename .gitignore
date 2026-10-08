@@ -14,3 +14,4 @@ src/ui/.timeline_view.cpp.swp
 
 .harness/
 test_data/
+__pycache__/
