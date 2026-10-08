@@ -1,5 +1,6 @@
 #pragma once
 #include "trace_event.h"
+#include "profile_data.h"
 #include "block_index.h"
 #include <vector>
 #include <string>
@@ -48,6 +49,7 @@ struct CounterSeries {
     uint32_t pid = 0;
     std::string name;
     std::vector<std::pair<double, double>> points;  // (timestamp, value)
+    std::string unit;
     double min_val = 0.0;
     double max_val = 0.0;
 };
@@ -56,6 +58,7 @@ class TraceModel {
 public:
     // --- Const accessors ---
     const std::vector<TraceEvent>& events() const { return events_; }
+    const ProfileData& profile() const { return profile_; }
     const std::vector<StackFrame>& stack_frames() const { return stack_frames_; }
     const std::vector<std::string>& strings() const { return strings_; }
     const std::unordered_map<std::string, uint32_t>& string_map() const { return string_map_; }
@@ -75,6 +78,7 @@ public:
     int total_threads() const { return cached_total_threads_; }
 
     // --- Mutation methods for building the model ---
+    void set_profile(ProfileData profile) { profile_ = std::move(profile); }
     void add_stack_frame(const StackFrame& frame) { stack_frames_.push_back(frame); }
     uint32_t add_event(const TraceEvent& ev) {
         uint32_t idx = (uint32_t)events_.size();
@@ -173,6 +177,7 @@ public:
 
     void clear() {
         events_.clear();
+        profile_ = {};
         stack_frames_.clear();
         strings_.clear();
         string_map_.clear();
@@ -192,6 +197,7 @@ public:
 
 private:
     void resolve_stack_frames();
+    ProfileData profile_;
     std::vector<TraceEvent> events_;
     std::vector<StackFrame> stack_frames_;
     std::vector<std::string> strings_;

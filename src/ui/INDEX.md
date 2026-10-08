@@ -127,7 +127,7 @@ float current_rss_mb() const;
 DiagStats stats;  // fields: visible_slices, drawn_slices, merged_slices, merge_runs, labels_drawn, tracks_visible, instant_events
 ```
 
-## source_panel.h / source_panel.cpp — shows source file for selected event; supports path prefix remapping
+## source_panel.h / source_panel.cpp — shows saved stack-frame or event-argument source locations for the selected event with path prefix remapping
 ```
 bool extract_source_location(const TraceModel&, const TraceEvent&, std::string& file, int& line);
 std::string remap_source_path(const std::string& trace_path, const std::string& strip_prefix, const std::string& local_base);

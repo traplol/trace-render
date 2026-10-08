@@ -14,6 +14,14 @@ using json = nlohmann::json;
 // Try common field names for source file and line in event args
 bool extract_source_location(const TraceModel& model, const TraceEvent& ev, std::string& file, int& line) {
     TRACE_FUNCTION_CAT("ui");
+    if (ev.stack_frame_idx >= 0 && (size_t)ev.stack_frame_idx < model.stack_frames().size()) {
+        const auto& frame = model.stack_frames()[ev.stack_frame_idx];
+        if (frame.source_file != 0) {
+            file = model.get_string(frame.source_file);
+            line = (int)frame.source_line;
+            return !file.empty();
+        }
+    }
     if (ev.args_idx == UINT32_MAX || ev.args_idx >= model.args().size()) return false;
 
     try {

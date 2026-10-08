@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 
 enum class Phase : char {
     DurationBegin = 'B',
@@ -84,6 +85,12 @@ struct StackFrame {
     uint32_t parent_id = UINT32_MAX;
     int32_t parent_idx = -1;
     bool valid = true;
+    uint32_t module_id = UINT32_MAX;  // interned ProfileModule::id
+    uint32_t symbol_id = UINT32_MAX;  // optional function identity, distinct from display name
+    std::optional<uint64_t> address;
+    uint32_t source_file = 0;
+    uint32_t source_line = 0;  // zero means unavailable
+    bool symbol_resolved = false;
 };
 
 struct TraceEvent {
@@ -95,11 +102,12 @@ struct TraceEvent {
     uint32_t pid = 0;
     uint32_t tid = 0;
     uint64_t id = 0;
-    uint32_t args_idx = UINT32_MAX;  // index into args storage, UINT32_MAX = no args
-    uint8_t depth = 0;               // nesting depth within thread
-    bool is_end_event = false;       // true for matched 'E' events (don't render)
-    int32_t parent_idx = -1;         // index of parent event (-1 if root or no parent)
-    double self_time = 0.0;          // measured/estimated span time minus immediate children
+    uint32_t process_instance_id = UINT32_MAX;  // interned ProfileProcess::id
+    uint32_t args_idx = UINT32_MAX;             // index into args storage, UINT32_MAX = no args
+    uint8_t depth = 0;                          // nesting depth within thread
+    bool is_end_event = false;                  // true for matched 'E' events (don't render)
+    int32_t parent_idx = -1;                    // index of parent event (-1 if root or no parent)
+    double self_time = 0.0;                     // measured/estimated span time minus immediate children
     EventKind kind = EventKind::Measured;
     uint32_t stack_frame_id = UINT32_MAX;  // interned sf, preserved even if unresolved
     int32_t stack_frame_idx = -1;

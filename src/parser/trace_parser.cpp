@@ -1,4 +1,5 @@
 #include "trace_parser.h"
+#include "profile_io.h"
 #include "tracing.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -526,6 +527,14 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
         file.close();
     }
 
+    if (content.compare(0, 9, "TRPROFILE") == 0) {
+        if (on_progress_) on_progress_("Parsing profile", 0.0f);
+        bool ok = read_profile(content, model, error_message_);
+        if (ok && on_progress_) on_progress_("Done", 1.0f);
+        return ok;
+    }
+
+    error_message_.clear();
     model.clear();
     // Intern empty string at index 0
     model.intern_string("");
@@ -562,6 +571,14 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
 bool TraceParser::parse_buffer(const char* data, size_t size, TraceModel& model) {
     TRACE_FUNCTION_CAT("parser");
 
+    if (std::string_view(data, size).substr(0, 9) == "TRPROFILE") {
+        if (on_progress_) on_progress_("Parsing profile", 0.0f);
+        bool ok = read_profile(std::string_view(data, size), model, error_message_);
+        if (ok && on_progress_) on_progress_("Done", 1.0f);
+        return ok;
+    }
+
+    error_message_.clear();
     model.clear();
     model.intern_string("");
 

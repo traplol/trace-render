@@ -152,6 +152,21 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
         }
     }
 
+    // Memory-only profiles still define a timeline without fabricating duration events.
+    auto include_time = [this](std::optional<double> time) {
+        if (!time) return;
+        min_ts_ = std::min(min_ts_, *time);
+        max_ts_ = std::max(max_ts_, *time);
+    };
+    include_time(profile_.capture_start_ts);
+    include_time(profile_.capture_end_ts);
+    for (const auto& allocation : profile_.allocations) {
+        include_time(allocation.allocated_ts);
+        include_time(allocation.freed_ts);
+    }
+    for (const auto& snapshot : profile_.managed_snapshots) include_time(snapshot.ts);
+    for (const auto& observation : profile_.managed_survival) include_time(observation.ts);
+
     // Compute counter series min/max
     {
         for (auto& cs : counter_series_) {

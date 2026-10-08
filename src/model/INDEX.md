@@ -1,14 +1,14 @@
 # src/model/
 Core data layer: in-memory trace representation, spatial block index, SQLite query DB, color palette.
 
-## trace_event.h — event phases, metric kinds, events, and sampled stack frames
+## trace_event.h — event phases, metric kinds, process lifetime references, and sampled stack frames with module and source identities
 ```
 Phase phase_from_char(char c);
 const char* event_kind_name(EventKind kind);
 double TraceEvent::end_ts() const;
 ```
 
-## trace_model.h / trace_model.cpp — central model: flat event array, string pool, process/thread hierarchy, counters, flows, name-to-events index, stable nesting, and validated sampled ancestry
+## trace_model.h / trace_model.cpp — central model: flat event array, string pool, process/thread hierarchy, counters, flows, name-to-events index, stable nesting, validated sampled ancestry, and profile metadata with memory observations
 ```
 // ProcessInfo
 const ThreadInfo* find_thread(uint32_t tid) const;
@@ -16,6 +16,7 @@ ThreadInfo* find_thread(uint32_t tid);
 ThreadInfo& get_or_create_thread(uint32_t tid);
 // TraceModel — const accessors
 const std::vector<TraceEvent>& events() const;
+const ProfileData& profile() const;
 const std::vector<StackFrame>& stack_frames() const;
 const std::vector<std::string>& strings() const;
 const std::unordered_map<std::string, uint32_t>& string_map() const;
@@ -34,6 +35,7 @@ const std::unordered_map<uint32_t, std::vector<uint32_t>>& name_to_events() cons
 // TraceModel — mutation methods
 uint32_t add_event(const TraceEvent& ev);
 void add_stack_frame(const StackFrame& frame);
+void set_profile(ProfileData profile);
 uint32_t add_args(std::string args_json);
 void add_flow_event(uint64_t id, uint32_t event_idx);
 CounterSeries& find_or_create_counter_series(uint32_t pid, const std::string& name);
@@ -90,3 +92,5 @@ static ImU32 color_for_category(uint32_t cat_idx);
 static ImU32 border_color(ImU32 fill);
 static ImU32 text_color(ImU32 bg);
 ```
+
+## profile_data.h — POD records for capture capabilities, quality, process and heap lifetimes, modules, allocation lifetimes, managed snapshots, and GC survival observations
