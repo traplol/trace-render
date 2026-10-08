@@ -173,7 +173,7 @@ TEST_F(TraceModelTest, BuildIndexComputesTimeRange) {
     EXPECT_DOUBLE_EQ(model.max_ts(), 1200.0);
 }
 
-TEST_F(TraceModelTest, BuildIndexDeduplicatesSameNameAndTimestamp) {
+TEST_F(TraceModelTest, BuildIndexPreservesSameNameAndTimestamp) {
     auto& proc = model.get_or_create_process(1);
     auto& thread = proc.get_or_create_thread(1);
 
@@ -200,7 +200,7 @@ TEST_F(TraceModelTest, BuildIndexDeduplicatesSameNameAndTimestamp) {
     model.add_event(ev2);
     thread.event_indices.push_back(1);
 
-    // Third event with different timestamp (should not be deduped)
+    // Third event with a different timestamp.
     TraceEvent ev3;
     ev3.ph = Phase::Complete;
     ev3.name_idx = name_idx;
@@ -213,11 +213,13 @@ TEST_F(TraceModelTest, BuildIndexDeduplicatesSameNameAndTimestamp) {
 
     model.build_index();
 
-    // Should have 2 events: the longer duplicate and the distinct one
-    EXPECT_EQ(thread.event_indices.size(), 2u);
-    // First should be the longer-duration duplicate (index 1, dur=80)
+    // Equal names/timestamps can be recursion; retain both, longest first.
+    ASSERT_EQ(thread.event_indices.size(), 3u);
     EXPECT_DOUBLE_EQ(model.events()[thread.event_indices[0]].dur, 80.0);
-    EXPECT_DOUBLE_EQ(model.events()[thread.event_indices[1]].ts, 300.0);
+    EXPECT_EQ(thread.event_indices[1], 0u);
+    EXPECT_EQ(model.events()[0].parent_idx, 1);
+    EXPECT_DOUBLE_EQ(model.events()[1].self_time, 30.0);
+    EXPECT_DOUBLE_EQ(model.events()[thread.event_indices[2]].ts, 300.0);
 }
 
 TEST_F(TraceModelTest, BuildIndexSortsProcessesAndThreads) {

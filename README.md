@@ -46,6 +46,40 @@ A fast, native Chrome trace viewer built with C++ and [Dear ImGui](https://githu
 
 Supports event phases: X (complete), B/E (duration begin/end), i (instant), C (counter), s/t/f (flow), M (metadata), b/e/n (async), N/O/D (object), P (sample), R (mark).
 
+### Sampled CPU profiles
+
+`P` records are point observations. A top-level `stackFrames` object maps string IDs to frames with `name`, optional `category`, and optional `parent`. An event's `sf` identifies the leaf. Integer IDs also work. `stackFrames` may appear before or after `traceEvents`.
+
+```json
+{
+  "traceEvents": [
+    {"ph": "P", "name": "cpu", "ts": 100, "pid": 7, "tid": 11,
+     "sf": "leaf", "weight": 250, "weightUnit": "us"}
+  ],
+  "stackFrames": {
+    "root": {"name": "main", "category": "cpu"},
+    "leaf": {"name": "work", "category": "cpu", "parent": "root"}
+  }
+}
+```
+
+Each `P` record counts as one sample. TraceRender keeps the raw `weight`; it does **not** assume an unqualified weight measures time. `weightUnit` is a TraceRender extension for converters that supply CPU-time weights. It accepts `ns`, `us`, `ms`, or `s` and normalizes estimates to microseconds. This unit is independent of the timestamp `-ns` option. Missing, negative, or unsupported time weights leave estimated CPU time unavailable. Zero is a valid explicit time weight. The interval to the next sample never becomes execution time, and `dur` on a `P` record is ignored. The Chrome format defines samples as zero-duration observations and supports `sf` ancestry. [Chrome trace format](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU)
+
+Missing frame IDs, invalid frame definitions, missing ancestors, and cycles leave the entire stack unresolved. The observation, timestamp, process/thread identity, raw reference, and weight remain available under the event's supplied name. Valid samples use the leaf frame's name for navigation. Duplicate frame IDs use the last definition. Inline `stack` program-counter arrays and the separate top-level `samples` format are not imported by this implementation.
+
+Converted `B`/`E` or `X` records with the category token `sampleEvent` are sampled spans. Their supplied intervals are estimated sampled CPU time, and their original sample count is unavailable. In mixed B/E streams, mark both transitions with `sampleEvent` so measured and sampled pairs stay independent. This matches [PerfView's Chromium exporter](https://github.com/microsoft/perfview/blob/main/src/TraceEvent/Stacks/ChromiumStackSourceWriter.cs). Unmarked duration records retain measured-event semantics. Equal timestamps and intervals retain input order; same-name recursive frames remain distinct.
+
+The flame graph creates separate measured, sample, and sampled-span trees per thread. Sample-tree widths represent sample counts, with inclusive/exclusive counts and available CPU estimates in tooltips. Time-weight coverage is shown when some samples lack estimates. Range selection includes observations in `[start, end)` and clips span intervals. Per-function range counts include a recursive function once per observation; flame trees preserve each recursive stack position. Search averages use only measured events. Details, instances, and timeline tooltips label estimates explicitly.
+
+SQL exposes `kind`, `sample_count`, `sample_weight`, `weight_unit`, `estimated_cpu_time`, `estimated_self_cpu_time`, and the raw `sf`. `dur` and `self_time` are NULL for sampled records. Original sample counts are NULL for converted spans. CPU estimates for raw samples belong to the observed leaf; the flame and range views calculate inclusive ancestry. Group queries by `kind` to keep observations and converted spans separate. Existing duration queries continue to select measured events.
+
+The committed fixtures in `tests/fixtures/` use invented functions and timestamps:
+
+- `sampled_stacks.json` contains `main -> work` at 100 us with 250 us weight and `main` at 10,000 us with 500 us weight on thread 11. The root has two inclusive samples, one exclusive sample, and 750 us estimated CPU. Thread 12 has a separate unweighted observation. The gaps contribute no CPU time. Tests import both field orders.
+- `perfview_spans.json` contains a recursive outer frame from 0 to 10 us and two inner spans from 0 to 5 and 5 to 10 us. The outer estimate is 10 us inclusive and zero self; no original sample counts are inferred.
+
+Direct `.diagsession` loading, ETL/PDB decoding, Windows conversion, and heap inspection are outside this importer.
+
 ## Building
 
 ### Desktop
@@ -125,7 +159,7 @@ src/
   tracing.h                      Self-profiling tracer (Chrome JSON output)
 
   model/
-    trace_event.h                TraceEvent struct (~40 bytes), Phase enum
+    trace_event.h                TraceEvent, StackFrame, Phase and EventKind
     trace_model.h / .cpp         Events, string pool, processes/threads, indexes
     block_index.h                256-event block spatial index for range queries
     color_palette.h              48-color hash-based category coloring
@@ -168,7 +202,7 @@ src/
 ### Key Design Decisions
 
 - **SAX parser** (not DOM) — Streams events without building a JSON tree, handles large traces (100MB+)
-- **String-interned events** — Names and categories stored once in a pool, events reference by index (~40 bytes per event)
+- **String-interned events** — Names and categories stored once in a pool, events reference by index
 - **Block-based spatial index** — Fast visible-range queries with O(log N + K) performance using 256-event blocks with monotonic max_end_ts propagation
 - **Pre-computed derived data** — Parent indices, self times, nesting depths, and category sets computed once during `build_index()`, not per-frame
 - **ImDrawList rendering** — Direct draw commands for thousands of slices at 60fps, bypassing ImGui widget overhead
@@ -196,7 +230,7 @@ All fetched automatically via CMake FetchContent:
 ./scripts/run_tests.sh
 ```
 
-Uses Google Test with 15 test files covering: parser, trace model, spatial index, time formatting, viewport state, search, timeline hit testing, trace events, counter tracks, source path remapping, SQL queries, CSV/TSV export, self-profiling tracer, flame graph, and panel reset lifecycle.
+Uses Google Test covering: parser, trace model, spatial index, time formatting, viewport state, search, timeline hit testing, trace events, counter tracks, source path remapping, SQL queries, CSV/TSV export, self-profiling tracer, flame graph, sampled profiles and mixed metrics, and panel reset lifecycle.
 
 ## Generating Test Traces
 

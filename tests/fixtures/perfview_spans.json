@@ -1,0 +1,16 @@
+{
+  "otherData": {"name": "synthetic PerfView-style export", "exporter": "fixture"},
+  "traceEvents": [
+    {"name":"recurse","cat":"sampleEvent","ph":"B","ts":0,"pid":2,"tid":3,"sf":1},
+    {"name":"recurse","cat":"sampleEvent","ph":"B","ts":0,"pid":2,"tid":3,"sf":2},
+    {"name":"recurse","cat":"sampleEvent","ph":"E","ts":5,"pid":2,"tid":3,"sf":2},
+    {"name":"recurse","cat":"sampleEvent","ph":"B","ts":5,"pid":2,"tid":3,"sf":2},
+    {"name":"recurse","cat":"sampleEvent","ph":"E","ts":10,"pid":2,"tid":3,"sf":2},
+    {"name":"recurse","cat":"sampleEvent","ph":"E","ts":10,"pid":2,"tid":3,"sf":1}
+  ],
+  "displayTimeUnit": "ms",
+  "stackFrames": {
+    "1": {"name":"recurse","category":"managed"},
+    "2": {"name":"recurse","category":"managed","parent":1}
+  }
+}

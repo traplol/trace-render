@@ -1,5 +1,6 @@
 #include "timeline_view.h"
 #include "format_time.h"
+#include "event_metrics.h"
 #include "tracing.h"
 #include "model/color_palette.h"
 #include "imgui.h"
@@ -217,7 +218,7 @@ void TimelineView::render_tracks(ImDrawList* dl, ImVec2 area_min, ImVec2 area_ma
                         if (ev.is_end_event) continue;
                         diag_stats.visible_slices++;
 
-                        if (ev.ph == Phase::Instant) {
+                        if (ev.ph == Phase::Instant || ev.ph == Phase::Sample) {
                             float x = track_left + (float)((ev.ts - view_start) * ppu);
                             float ey = y + ev.depth * track_height;
                             ImU32 col = ColorPalette::color_for_event(ev.cat_idx, ev.name_idx);
@@ -839,16 +840,21 @@ void TimelineView::render(const TraceModel& model, ViewState& view) {
             ImGui::TextUnformatted(model.get_string(ev.cat_idx).c_str());
 
             // Duration and self time
-            if (ev.dur > 0) {
-                format_time((double)ev.dur, time_buf, sizeof(time_buf));
-                ImGui::TextDisabled("Duration:");
+            if (ev.dur > 0 || ev.kind == EventKind::Sample) {
+                ImGui::TextUnformatted(event_kind_name(ev.kind));
+                if (ev.kind == EventKind::Sample)
+                    ImGui::Text("Samples: 1");
+                else if (ev.kind == EventKind::SampledSpan)
+                    ImGui::TextDisabled("Original sample count unavailable");
+                format_event_metric(ev, time_buf, sizeof(time_buf));
+                ImGui::TextDisabled(ev.kind == EventKind::Measured ? "Duration:" : "Estimate:");
                 ImGui::SameLine();
                 ImGui::Text("%s", time_buf);
 
                 if (ev.self_time >= 0 && ev.self_time < ev.dur) {
                     format_time(ev.self_time, time_buf, sizeof(time_buf));
                     float self_pct = (float)(ev.self_time / ev.dur * 100.0);
-                    ImGui::TextDisabled("Self Time:");
+                    ImGui::TextDisabled(ev.kind == EventKind::Measured ? "Self Time:" : "Estimated self CPU:");
                     ImGui::SameLine();
                     ImGui::Text("%s (%.1f%%)", time_buf, self_pct);
                 }

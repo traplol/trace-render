@@ -7,6 +7,10 @@
 #include <algorithm>
 #include <cstdio>
 
+static double flame_width(const FlameTree& tree, const FlameNode& node) {
+    return tree.kind == EventKind::Sample ? node.sample_count : node.total_time;
+}
+
 void FlameGraphPanel::reset() {
     TRACE_FUNCTION_CAT("ui");
     trees_.clear();
@@ -24,22 +28,6 @@ void FlameGraphPanel::reset() {
 
 void FlameGraphPanel::on_model_changed() {
     reset();
-}
-
-int32_t FlameGraphPanel::find_longest_instance(const TraceModel& model, uint32_t pid, uint32_t tid, uint32_t name_idx) {
-    TRACE_FUNCTION_CAT("ui");
-    const auto* thread = model.find_thread(pid, tid);
-    if (!thread) return -1;
-    int32_t best = -1;
-    double best_dur = -1.0;
-    for (uint32_t ei : thread->event_indices) {
-        const auto& ev = model.events()[ei];
-        if (ev.name_idx == name_idx && ev.dur > 0 && ev.dur > best_dur) {
-            best_dur = ev.dur;
-            best = static_cast<int32_t>(ei);
-        }
-    }
-    return best;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,8 +108,9 @@ uint32_t FlameGraphPanel::sort_children(FlameTree& tree, uint32_t first_child) {
     }
     if (kids.size() <= 1) return first_child;
 
-    std::sort(kids.begin(), kids.end(),
-              [&](uint32_t a, uint32_t b) { return tree.nodes[a].total_time > tree.nodes[b].total_time; });
+    std::sort(kids.begin(), kids.end(), [&](uint32_t a, uint32_t b) {
+        return flame_width(tree, tree.nodes[a]) > flame_width(tree, tree.nodes[b]);
+    });
     for (size_t i = 0; i + 1 < kids.size(); i++) {
         tree.nodes[kids[i]].next_sibling = kids[i + 1];
     }
@@ -138,11 +127,15 @@ void FlameGraphPanel::compute_self_times(FlameTree& tree) {
         for (uint32_t c = node.first_child; c != UINT32_MAX; c = tree.nodes[c].next_sibling) {
             children_total += tree.nodes[c].total_time;
         }
-        // Nodes with call_count == 0 are pure context parents; their total comes from children.
-        if (node.call_count == 0) {
+        // Context-only parents derive their time from their children.
+        if (node.call_count == 0 && node.span_count == 0 && node.sample_count == 0) {
             node.total_time = children_total;
         }
         node.self_time = std::max(0.0, node.total_time - children_total);
+        uint32_t child_samples = 0;
+        for (uint32_t c = node.first_child; c != UINT32_MAX; c = tree.nodes[c].next_sibling)
+            child_samples += tree.nodes[c].sample_count;
+        node.self_samples = node.sample_count - std::min(node.sample_count, child_samples);
     }
 }
 
@@ -165,71 +158,81 @@ void FlameGraphPanel::rebuild(const TraceModel& model, const ViewState& view) {
         for (const auto& thread : proc.threads) {
             if (hidden_tids.count(thread.tid)) continue;
 
-            FlameTree tree;
-            tree.pid = proc.pid;
-            tree.tid = thread.tid;
-            tree.thread_name = thread.name;
+            for (EventKind kind : {EventKind::Measured, EventKind::Sample, EventKind::SampledSpan}) {
+                FlameTree tree;
+                tree.kind = kind;
+                tree.pid = proc.pid;
+                tree.tid = thread.tid;
+                tree.thread_name = thread.name;
 
-            for (uint32_t ev_idx : thread.event_indices) {
-                const auto& ev = model.events()[ev_idx];
-                if (ev.is_end_event) continue;
-                if (ev.ph != Phase::Complete && ev.ph != Phase::DurationBegin) continue;
-                if (ev.dur <= 0.0) continue;
-                if (hidden_cats.count(ev.cat_idx)) continue;
-
-                if (has_range && (ev.end_ts() <= range_start || ev.ts >= range_end)) continue;
-
-                double contribution = ev.dur;
-                if (has_range) {
-                    contribution = std::min(ev.end_ts(), range_end) - std::max(ev.ts, range_start);
-                    if (contribution <= 0.0) continue;
-                }
-
-                // Build call-stack path (root first) by walking parent chain.
-                path.clear();
-                path.push_back({ev.name_idx, ev.cat_idx});
-                int32_t p = ev.parent_idx;
-                while (p >= 0) {
-                    const auto& pev = model.events()[p];
-                    if (!pev.is_end_event && !hidden_cats.count(pev.cat_idx)) {
-                        path.push_back({pev.name_idx, pev.cat_idx});
+                for (uint32_t ev_idx : thread.event_indices) {
+                    const auto& ev = model.events()[ev_idx];
+                    if (ev.is_end_event || ev.kind != kind) continue;
+                    path.clear();
+                    double contribution = 0;
+                    if (kind == EventKind::Sample) {
+                        if (has_range && (ev.ts < range_start || ev.ts >= range_end)) continue;
+                        contribution = std::max(0.0, ev.sample_cpu_time);
+                        for (uint32_t f : model.build_sample_stack(ev_idx)) {
+                            const auto& frame = model.stack_frames()[f];
+                            if (!hidden_cats.count(frame.cat_idx)) path.push_back({frame.name_idx, frame.cat_idx});
+                        }
+                        if (ev.stack_frame_idx < 0 && !hidden_cats.count(ev.cat_idx))
+                            path.push_back({ev.name_idx, ev.cat_idx});
+                    } else {
+                        if (ev.ph != Phase::Complete && ev.ph != Phase::DurationBegin) continue;
+                        if (ev.dur <= 0 || hidden_cats.count(ev.cat_idx)) continue;
+                        contribution = ev.dur;
+                        if (has_range) contribution = std::min(ev.end_ts(), range_end) - std::max(ev.ts, range_start);
+                        if (contribution <= 0) continue;
+                        for (int32_t p = (int32_t)ev_idx; p >= 0; p = model.events()[p].parent_idx) {
+                            const auto& frame = model.events()[p];
+                            if (frame.kind == kind && !hidden_cats.count(frame.cat_idx))
+                                path.push_back({frame.name_idx, frame.cat_idx});
+                        }
+                        std::reverse(path.begin(), path.end());
                     }
-                    p = pev.parent_idx;
+                    if (path.empty()) continue;
+                    uint32_t cur = UINT32_MAX;
+                    for (const auto& [name, cat] : path) {
+                        cur = cur == UINT32_MAX ? find_or_create_root(tree, name, cat)
+                                                : find_or_create_child(tree, cur, name, cat);
+                        auto& node = tree.nodes[cur];
+                        if (node.event_idx == UINT32_MAX || ev.dur > model.events()[node.event_idx].dur)
+                            node.event_idx = ev_idx;
+                        if (kind == EventKind::Sample) {
+                            ++node.sample_count;
+                            node.total_time += contribution;
+                            if (ev.sample_cpu_time >= 0) ++node.weighted_samples;
+                        }
+                    }
+                    if (kind != EventKind::Sample) {
+                        tree.nodes[cur].total_time += contribution;
+                        if (kind == EventKind::Measured)
+                            ++tree.nodes[cur].call_count;
+                        else
+                            ++tree.nodes[cur].span_count;
+                    }
                 }
-                std::reverse(path.begin(), path.end());
-
-                // Merge into flat tree.
-                uint32_t cur = find_or_create_root(tree, path[0].first, path[0].second);
-                for (size_t i = 1; i < path.size(); i++) {
-                    cur = find_or_create_child(tree, cur, path[i].first, path[i].second);
+                if (tree.nodes.empty()) continue;
+                compute_self_times(tree);
+                for (size_t i = 0; i < tree.nodes.size(); ++i)
+                    tree.nodes[i].first_child = sort_children(tree, tree.nodes[i].first_child);
+                tree.first_root = sort_children(tree, tree.first_root);
+                for (uint32_t r = tree.first_root; r != UINT32_MAX; r = tree.nodes[r].next_sibling) {
+                    tree.root_total_time += tree.nodes[r].total_time;
+                    tree.root_sample_count += tree.nodes[r].sample_count;
                 }
-                tree.nodes[cur].total_time += contribution;
-                tree.nodes[cur].call_count++;
-            }
-
-            if (tree.nodes.empty()) continue;
-
-            compute_self_times(tree);
-
-            // Sort children at every level by total_time descending.
-            for (size_t i = 0; i < tree.nodes.size(); i++) {
-                tree.nodes[i].first_child = sort_children(tree, tree.nodes[i].first_child);
-            }
-            tree.first_root = sort_children(tree, tree.first_root);
-
-            tree.root_total_time = 0.0;
-            for (uint32_t r = tree.first_root; r != UINT32_MAX; r = tree.nodes[r].next_sibling) {
-                tree.root_total_time += tree.nodes[r].total_time;
-            }
-
-            if (tree.root_total_time > 0.0) {
-                trees_.push_back(std::move(tree));
+                if (tree.root_total_time > 0 || tree.root_sample_count > 0) trees_.push_back(std::move(tree));
             }
         }
     }
 
-    std::sort(trees_.begin(), trees_.end(),
-              [](const FlameTree& a, const FlameTree& b) { return a.root_total_time > b.root_total_time; });
+    std::sort(trees_.begin(), trees_.end(), [](const FlameTree& a, const FlameTree& b) {
+        if (a.kind != b.kind) return a.kind < b.kind;
+        return a.kind == EventKind::Sample ? a.root_sample_count > b.root_sample_count
+                                           : a.root_total_time > b.root_total_time;
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +258,7 @@ void FlameGraphPanel::render(const TraceModel& model, ViewState& view) {
     }
 
     if (trees_.empty()) {
-        ImGui::TextDisabled("No duration events to display.");
+        ImGui::TextDisabled("No duration events or samples to display.");
         ImGui::End();
         return;
     }
@@ -280,11 +283,15 @@ void FlameGraphPanel::render(const TraceModel& model, ViewState& view) {
         if (thread_filter_[0] != '\0' && !contains_case_insensitive(tree.thread_name, thread_filter_)) continue;
 
         char time_buf[64];
-        format_time(tree.root_total_time, time_buf, sizeof(time_buf));
+        if (tree.kind == EventKind::Sample)
+            snprintf(time_buf, sizeof(time_buf), "%u samples", tree.root_sample_count);
+        else
+            format_time(tree.root_total_time, time_buf, sizeof(time_buf));
 
         bool is_selected = (selected_tree_ == i);
         char label[256];
-        snprintf(label, sizeof(label), "%s\n%s", tree.thread_name.c_str(), time_buf);
+        snprintf(label, sizeof(label), "%s - %s\n%s###tree%d", tree.thread_name.c_str(), event_kind_name(tree.kind),
+                 time_buf, i);
         if (ImGui::Selectable(label, is_selected, 0, ImVec2(0, ImGui::GetTextLineHeight() * 2 + 4))) {
             selected_tree_ = i;
         }
@@ -325,7 +332,14 @@ void FlameGraphPanel::render_icicle(const TraceModel& model, ViewState& view, in
     uint32_t zoom = zoom_root_[tree_idx];
     bool zoomed = (zoom != UINT32_MAX);
 
-    double zoom_total = zoomed ? tree.node(zoom).total_time : tree.root_total_time;
+    double zoom_total = zoomed                           ? flame_width(tree, tree.node(zoom))
+                        : tree.kind == EventKind::Sample ? tree.root_sample_count
+                                                         : tree.root_total_time;
+    ImGui::TextDisabled("%s", tree.kind == EventKind::Sample
+                                  ? "Width: samples. CPU estimates use supplied time weights."
+                              : tree.kind == EventKind::SampledSpan
+                                  ? "Width: estimated sampled CPU time. Original sample count unavailable."
+                                  : "Width: measured duration.");
     if (zoom_total <= 0.0) return;
 
     // Breadcrumb bar: walk from zoom node to root.
@@ -371,7 +385,7 @@ void FlameGraphPanel::render_icicle(const TraceModel& model, ViewState& view, in
     uint32_t seed = zoomed ? tree.node(zoom).first_child : tree.first_root;
     float cx = 0.0f;
     for (uint32_t c = seed; c != UINT32_MAX; c = tree.node(c).next_sibling) {
-        float cw = (float)(tree.node(c).total_time / zoom_total) * canvas_w;
+        float cw = (float)(flame_width(tree, tree.node(c)) / zoom_total) * canvas_w;
         if (cw >= 0.5f) queue.push_back({c, 0, cx, cw});
         cx += cw;
     }
@@ -380,7 +394,7 @@ void FlameGraphPanel::render_icicle(const TraceModel& model, ViewState& view, in
         auto [ni, depth, x_off, x_w] = queue[qi];
         float child_x = x_off;
         for (uint32_t c = tree.node(ni).first_child; c != UINT32_MAX; c = tree.node(c).next_sibling) {
-            float cw = (float)(tree.node(c).total_time / zoom_total) * canvas_w;
+            float cw = (float)(flame_width(tree, tree.node(c)) / zoom_total) * canvas_w;
             if (cw >= 0.5f) queue.push_back({c, depth + 1, child_x, cw});
             child_x += cw;
         }
@@ -456,7 +470,7 @@ void FlameGraphPanel::render_icicle(const TraceModel& model, ViewState& view, in
         if (hoverable && mouse.x >= hit_x0 && mouse.x < hit_x1 && mouse.y >= y && mouse.y < y + BAR_H) {
             hovered_idx = entry.node_idx;
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-                int32_t best = find_longest_instance(model, tree.pid, tree.tid, node.name_idx);
+                int32_t best = (int32_t)node.event_idx;
                 if (best >= 0) view.set_selected_event_idx(best);
             }
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
@@ -479,13 +493,21 @@ void FlameGraphPanel::render_icicle(const TraceModel& model, ViewState& view, in
         const auto& cat = model.get_string(node.cat_idx);
         if (!cat.empty()) ImGui::TextDisabled("Category: %s", cat.c_str());
         ImGui::Separator();
-        ImGui::Text("Total: %s (%.1f%%)", tbuf, (float)(node.total_time / zoom_total * 100.0));
-        ImGui::Text("Self:  %s", sbuf);
-        ImGui::Text("Calls: %u", node.call_count);
-        if (node.call_count > 1) {
-            char abuf[64];
-            format_time(node.total_time / node.call_count, abuf, sizeof(abuf));
-            ImGui::Text("Avg:   %s", abuf);
+        if (tree.kind == EventKind::Sample) {
+            ImGui::Text("Samples: %u inclusive, %u exclusive", node.sample_count, node.self_samples);
+            if (node.weighted_samples > 0) {
+                ImGui::Text("Estimated CPU: %s | Self: %s", tbuf, sbuf);
+                ImGui::Text("Time weights available: %u / %u samples", node.weighted_samples, node.sample_count);
+            } else
+                ImGui::TextDisabled("Estimated CPU time unavailable.");
+        } else {
+            ImGui::Text("%s: %s (%.1f%%)", tree.kind == EventKind::SampledSpan ? "Estimated CPU" : "Total duration",
+                        tbuf, (float)(node.total_time / zoom_total * 100.0));
+            ImGui::Text("Self: %s", sbuf);
+            if (tree.kind == EventKind::Measured)
+                ImGui::Text("Calls: %u", node.call_count);
+            else
+                ImGui::Text("Sampled spans: %u; original sample count unavailable", node.span_count);
         }
         ImGui::EndTooltip();
     }
@@ -511,7 +533,7 @@ void FlameGraphPanel::render_icicle(const TraceModel& model, ViewState& view, in
                 view.hide_cat(ctx.cat_idx);
             }
             if (ImGui::MenuItem("Show in Instances")) {
-                int32_t best = find_longest_instance(model, tree.pid, tree.tid, ctx.name_idx);
+                int32_t best = (int32_t)ctx.event_idx;
                 if (best >= 0) view.set_selected_event_idx(best);
             }
         }

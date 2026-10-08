@@ -243,6 +243,11 @@ void StatsPanel::render_schema_popup(QueryDb& db) {
                  "SELECT category, COUNT(*) as count, SUM(dur) as total_dur\n"
                  "FROM events WHERE dur > 0\n"
                  "GROUP BY category ORDER BY total_dur DESC"},
+                {"Sampled CPU by leaf",
+                 "SELECT name, kind, SUM(sample_count) AS samples, COUNT(estimated_cpu_time) AS weighted_records,\n"
+                 "SUM(estimated_cpu_time) AS estimated_cpu_time\n"
+                 "FROM events WHERE kind != 'Measured'\n"
+                 "GROUP BY name, kind ORDER BY estimated_cpu_time DESC"},
                 {"Counter Summary",
                  "SELECT name, pid, COUNT(*) as points,\n"
                  "  MIN(value) as min_val, MAX(value) as max_val, AVG(value) as avg_val\n"
@@ -528,13 +533,30 @@ void StatsPanel::render_tab(QueryTab& tab, const TraceModel& model, QueryDb& db,
 static const char* TABLE_NAMES[] = {"events", "processes", "threads", "counters"};
 static const int NUM_TABLES = 4;
 
-static const char* EVENTS_COLS[] = {"id", "name", "category", "phase", "ts", "dur", "end_ts", "pid", "tid", "depth"};
+static const char* EVENTS_COLS[] = {"id",
+                                    "name",
+                                    "category",
+                                    "phase",
+                                    "ts",
+                                    "dur",
+                                    "end_ts",
+                                    "pid",
+                                    "tid",
+                                    "depth",
+                                    "kind",
+                                    "self_time",
+                                    "sample_count",
+                                    "sample_weight",
+                                    "weight_unit",
+                                    "estimated_cpu_time",
+                                    "estimated_self_cpu_time",
+                                    "sf"};
 static const char* PROCESSES_COLS[] = {"pid", "name"};
 static const char* THREADS_COLS[] = {"tid", "pid", "name"};
 static const char* COUNTERS_COLS[] = {"pid", "name", "ts", "value"};
 
 static const char* const* TABLE_COLS[] = {EVENTS_COLS, PROCESSES_COLS, THREADS_COLS, COUNTERS_COLS};
-static const int TABLE_COL_COUNTS[] = {10, 2, 3, 4};
+static const int TABLE_COL_COUNTS[] = {(int)(sizeof(EVENTS_COLS) / sizeof(EVENTS_COLS[0])), 2, 3, 4};
 
 static const char* AGG_NAMES[] = {"(none)", "COUNT", "SUM", "AVG", "MIN", "MAX"};
 static const int NUM_AGGS = 6;

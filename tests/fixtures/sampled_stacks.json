@@ -1,0 +1,11 @@
+{
+  "traceEvents": [
+    {"name": "cpu", "ph": "P", "ts": 100, "pid": 7, "tid": 11, "sf": "leaf", "weight": 250, "weightUnit": "us"},
+    {"name": "cpu", "ph": "P", "ts": 10000, "pid": 7, "tid": 11, "sf": "root", "weight": 0.5, "weightUnit": "ms"},
+    {"name": "cpu", "ph": "P", "ts": 20000, "pid": 7, "tid": 12, "sf": "leaf"}
+  ],
+  "stackFrames": {
+    "root": {"name": "main", "category": "cpu"},
+    "leaf": {"name": "work", "category": "cpu", "parent": "root"}
+  }
+}

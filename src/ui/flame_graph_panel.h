@@ -12,16 +12,23 @@ struct FlameNode {
     double total_time = 0.0;
     double self_time = 0.0;
     uint32_t call_count = 0;
+    uint32_t span_count = 0;
+    uint32_t sample_count = 0;
+    uint32_t self_samples = 0;
+    uint32_t weighted_samples = 0;
+    uint32_t event_idx = UINT32_MAX;
     uint32_t first_child = UINT32_MAX;  // index into FlameTree::nodes
     uint32_t next_sibling = UINT32_MAX;
     uint32_t parent = UINT32_MAX;
 };
 
 struct FlameTree {
+    EventKind kind = EventKind::Measured;
     uint32_t pid = 0;
     uint32_t tid = 0;
     std::string thread_name;
     double root_total_time = 0.0;
+    uint32_t root_sample_count = 0;
     uint32_t first_root = UINT32_MAX;  // index into nodes
     std::vector<FlameNode> nodes;
 
@@ -36,10 +43,6 @@ public:
     // Exposed for testing.
     void rebuild(const TraceModel& model, const ViewState& view);
     const std::vector<FlameTree>& trees() const { return trees_; }
-
-    // Find the event with the longest duration matching name_idx within a thread.
-    // Returns -1 if no match found.
-    static int32_t find_longest_instance(const TraceModel& model, uint32_t pid, uint32_t tid, uint32_t name_idx);
 
 private:
     // NOTE: update reset() when adding cached fields

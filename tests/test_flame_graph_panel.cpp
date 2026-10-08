@@ -537,10 +537,10 @@ TEST(FlameGraph, HiddenParentCategoryPreservesChild) {
 }
 
 // ---------------------------------------------------------------------------
-// find_longest_instance tests
+// Representative events used by flame graph navigation
 // ---------------------------------------------------------------------------
 
-TEST(FlameGraph, FindLongestInstanceSelectsMaxDuration) {
+TEST(FlameGraph, RepresentativeEventRespectsDurationAndRange) {
     TraceModel m;
     uint32_t nf = m.intern_string("func");
     uint32_t cat = m.intern_string("c");
@@ -564,11 +564,19 @@ TEST(FlameGraph, FindLongestInstanceSelectsMaxDuration) {
     push(100, 50);  // idx 1: longest
     push(200, 30);  // idx 2: medium
 
-    int32_t best = FlameGraphPanel::find_longest_instance(m, 1, 1, nf);
-    EXPECT_EQ(best, 1);  // should pick the 50us instance, not the first
+    FlameGraphPanel panel;
+    ViewState view;
+    panel.rebuild(m, view);
+    ASSERT_EQ(panel.trees().size(), 1u);
+    EXPECT_EQ(panel.trees()[0].node(panel.trees()[0].first_root).event_idx, 1u);
+
+    view.set_range_selection(200, 230);
+    panel.rebuild(m, view);
+    ASSERT_EQ(panel.trees().size(), 1u);
+    EXPECT_EQ(panel.trees()[0].node(panel.trees()[0].first_root).event_idx, 2u);
 }
 
-TEST(FlameGraph, FindLongestInstanceScopedToThread) {
+TEST(FlameGraph, RepresentativeEventScopedToThread) {
     TraceModel m;
     uint32_t nf = m.intern_string("func");
     uint32_t cat = m.intern_string("c");
@@ -607,47 +615,12 @@ TEST(FlameGraph, FindLongestInstanceScopedToThread) {
         proc.find_thread(2)->event_indices.push_back(m.add_event(e));
     }
 
-    // Searching thread 1 should find the short one (idx 0), not the long one from thread 2
-    int32_t best_t1 = FlameGraphPanel::find_longest_instance(m, 1, 1, nf);
-    EXPECT_EQ(best_t1, 0);
-
-    // Searching thread 2 should find the long one (idx 1)
-    int32_t best_t2 = FlameGraphPanel::find_longest_instance(m, 1, 2, nf);
-    EXPECT_EQ(best_t2, 1);
-}
-
-TEST(FlameGraph, FindLongestInstanceNoMatch) {
-    TraceModel m;
-    uint32_t nf = m.intern_string("func");
-    uint32_t nother = m.intern_string("other");
-    uint32_t cat = m.intern_string("c");
-    auto& t = m.get_or_create_process(1).get_or_create_thread(1);
-
-    TraceEvent e;
-    e.name_idx = nother;
-    e.cat_idx = cat;
-    e.ph = Phase::Complete;
-    e.ts = 0;
-    e.dur = 50;
-    e.pid = 1;
-    e.tid = 1;
-    e.parent_idx = -1;
-    e.self_time = 50;
-    t.event_indices.push_back(m.add_event(e));
-
-    // No event with name "func" in this thread
-    int32_t best = FlameGraphPanel::find_longest_instance(m, 1, 1, nf);
-    EXPECT_EQ(best, -1);
-}
-
-TEST(FlameGraph, FindLongestInstanceInvalidThread) {
-    TraceModel m;
-    uint32_t nf = m.intern_string("func");
-    m.get_or_create_process(1).get_or_create_thread(1);
-
-    // Non-existent thread
-    int32_t best = FlameGraphPanel::find_longest_instance(m, 1, 99, nf);
-    EXPECT_EQ(best, -1);
+    FlameGraphPanel panel;
+    panel.rebuild(m, ViewState{});
+    ASSERT_EQ(panel.trees().size(), 2u);
+    for (const auto& tree : panel.trees()) {
+        EXPECT_EQ(tree.node(tree.first_root).event_idx, tree.tid == 1 ? 0u : 1u);
+    }
 }
 
 // Regression: context-parent chain where no intermediate node is a direct leaf.

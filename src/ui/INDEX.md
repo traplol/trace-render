@@ -58,20 +58,20 @@ void zoom_to_fit(double min_ts, double max_ts);
 void navigate_to_event(int32_t ev_idx, const TraceEvent& ev, double pad_factor = 0.5, double min_pad_us = 100.0);  // min_pad_us scaled by 1/1000 when time_unit_ns
 ```
 
-## timeline_view.h / timeline_view.cpp — main timeline: ruler, tracks, event boxes, zoom/pan, range selection
+## timeline_view.h / timeline_view.cpp — timeline with duration slices, sample markers, metric-aware tooltips, zoom/pan, and range selection
 ```
 void render(const TraceModel&, ViewState&);
 DiagStats diag_stats;  // written each frame, read by DiagnosticsPanel
 static int32_t select_best_candidate(const std::vector<uint32_t>& candidates, const std::vector<TraceEvent>& events, const std::unordered_set<uint32_t>& hidden_cats, int clicked_depth, double click_time, double tolerance);
 ```
 
-## detail_panel.h / detail_panel.cpp — selected-event details: timing, args, call stack, children table, range summary
+## detail_panel.h / detail_panel.cpp — measured and sampled event details, ancestry, children, arguments, and separate range metrics
 ```
 void render(const TraceModel&, ViewState&);
 void on_model_changed();
 ```
 
-## search_panel.h / search_panel.cpp — text search over event names; populates `ViewState::search_results`; shows per-name Count and Avg duration; "Unique by name" checkbox (default on) deduplicates results
+## search_panel.h / search_panel.cpp — text search over event names; populates `ViewState::search_results`; shows separate measured-event/sample/span counts and measured averages; "Unique by name" checkbox (default on) deduplicates results
 ```
 void render(const TraceModel&, ViewState&);
 void on_model_changed();
@@ -80,7 +80,7 @@ const std::unordered_map<uint32_t, NameStats>& name_stats() const;
 bool unique_by_name() const;
 void set_unique_by_name(bool);
 static std::vector<uint32_t> filter_unique_by_name(const TraceModel&, const std::vector<uint32_t>& results);
-// NameStats: count, total_dur, avg_dur
+// NameStats: count (measured), sample_count, sampled_span_count, total_dur, avg_dur
 ```
 
 ## filter_panel.h / filter_panel.cpp — hide/show processes, threads, categories via `ViewState::hidden_*`
@@ -88,7 +88,7 @@ static std::vector<uint32_t> filter_unique_by_name(const TraceModel&, const std:
 void render(const TraceModel&, ViewState&);
 ```
 
-## stats_panel.h / stats_panel.cpp — SQL editor + result table + visual query builder; tabs serialized to JSON; CSV/TSV export
+## stats_panel.h / stats_panel.cpp — SQL editor, sampled CPU preset, result table, and query builder with metric columns; tabs serialized to JSON; CSV/TSV export
 ```
 void render(const TraceModel&, QueryDb&, ViewState&);
 void set_window(SDL_Window*);
@@ -104,18 +104,17 @@ std::string build_sql(const char* const* columns, int num_columns) const;
 std::string export_result(const QueryDb::QueryResult&, char delimiter);
 ```
 
-## flame_graph_panel.h / flame_graph_panel.cpp — per-thread icicle charts with flat node pool; filterable sidebar, zoom, search highlighting, context menu
+## flame_graph_panel.h / flame_graph_panel.cpp — separate measured/sample/sampled-span icicle charts per thread with a flat node pool; filterable sidebar, zoom, search highlighting, context menu
 ```
 void render(const TraceModel&, ViewState&);
 void on_model_changed();
 void rebuild(const TraceModel&, const ViewState&);
 const std::vector<FlameTree>& trees() const;
-static int32_t find_longest_instance(const TraceModel&, uint32_t pid, uint32_t tid, uint32_t name_idx);
-// FlameNode: name_idx, cat_idx, total_time, self_time, call_count, first_child, next_sibling, parent (all indices)
-// FlameTree: pid, tid, thread_name, root_total_time, first_root, nodes (flat pool)
+// FlameNode: name_idx, cat_idx, total_time, self_time, call_count, span_count, sample_count, self_samples, weighted_samples, event_idx, first_child, next_sibling, parent
+// FlameTree: kind, pid, tid, thread_name, root_total_time, root_sample_count, first_root, nodes (flat pool)
 ```
 
-## instance_panel.h / instance_panel.cpp — lists all instances of the selected function; keyboard navigation
+## instance_panel.h / instance_panel.cpp — lists instances with metric kind and measured duration or CPU estimate; keyboard navigation
 ```
 void render(const TraceModel&, ViewState&);
 void on_model_changed();
@@ -164,7 +163,7 @@ bool settings_requested() const;
 void clear_settings_request();
 ```
 
-## range_stats.h / range_stats.cpp — per-name stats (count, total/min/max/avg dur) for events in a time range
+## range_stats.h / range_stats.cpp — separate measured, converted-span, and inclusive/exclusive sampled statistics for a time range
 ```
 RangeStats compute_range_stats(const TraceModel&, double start_ts, double end_ts);
 double RangeEventSummary::avg_dur() const;
@@ -197,4 +196,9 @@ bool contains_case_insensitive(const std::string& haystack, const std::string& n
 ## sort_utils.h — three-way comparator for ImGui table sort callbacks
 ```
 template <typename T> int sort_utils::three_way_cmp(const T& a, const T& b);  // -1 / 0 / 1
+```
+
+## event_metrics.h - formats measured durations and explicitly labelled CPU estimates for tables and tooltips
+```
+void format_event_metric(const TraceEvent& ev, char* buf, size_t size);
 ```

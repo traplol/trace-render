@@ -41,7 +41,15 @@ void QueryDb::load(const TraceModel& model, std::function<void(float)> on_progre
             end_ts REAL,
             pid INTEGER,
             tid INTEGER,
-            depth INTEGER
+            depth INTEGER,
+            kind TEXT,
+            self_time REAL,
+            sample_count INTEGER,
+            sample_weight REAL,
+            weight_unit TEXT,
+            estimated_cpu_time REAL,
+            estimated_self_cpu_time REAL,
+            sf TEXT
         )
     )",
                  nullptr, nullptr, nullptr);
@@ -80,7 +88,7 @@ void QueryDb::load(const TraceModel& model, std::function<void(float)> on_progre
     // Events
     {
         sqlite3_stmt* stmt = nullptr;
-        sqlite3_prepare_v2(db_, "INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?)", -1, &stmt, nullptr);
+        sqlite3_prepare_v2(db_, "INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", -1, &stmt, nullptr);
 
         uint32_t event_count = (uint32_t)model.events().size();
         for (uint32_t i = 0; i < event_count; i++) {
@@ -97,14 +105,35 @@ void QueryDb::load(const TraceModel& model, std::function<void(float)> on_progre
             sqlite3_bind_text(stmt, 3, cat.c_str(), -1, SQLITE_TRANSIENT);
             sqlite3_bind_text(stmt, 4, phase_str, -1, SQLITE_TRANSIENT);
             sqlite3_bind_double(stmt, 5, ev.ts);
-            sqlite3_bind_double(stmt, 6, ev.dur);
+            if (ev.kind == EventKind::Measured)
+                sqlite3_bind_double(stmt, 6, ev.dur);
+            else
+                sqlite3_bind_null(stmt, 6);
             sqlite3_bind_double(stmt, 7, ev.end_ts());
             sqlite3_bind_int(stmt, 8, ev.pid);
             sqlite3_bind_int(stmt, 9, ev.tid);
             sqlite3_bind_int(stmt, 10, ev.depth);
+            sqlite3_bind_text(stmt, 11, event_kind_name(ev.kind), -1, SQLITE_STATIC);
+            if (ev.kind == EventKind::Measured) sqlite3_bind_double(stmt, 12, ev.self_time);
+            if (ev.kind == EventKind::Sample) {
+                sqlite3_bind_int(stmt, 13, 1);
+                if (ev.sample_weight >= 0) sqlite3_bind_double(stmt, 14, ev.sample_weight);
+                const auto& unit = model.get_string(ev.sample_weight_unit);
+                if (!unit.empty()) sqlite3_bind_text(stmt, 15, unit.c_str(), -1, SQLITE_TRANSIENT);
+                if (ev.sample_cpu_time >= 0) {
+                    sqlite3_bind_double(stmt, 16, ev.sample_cpu_time);
+                    sqlite3_bind_double(stmt, 17, ev.sample_cpu_time);
+                }
+            } else if (ev.kind == EventKind::SampledSpan) {
+                sqlite3_bind_double(stmt, 16, ev.dur);
+                sqlite3_bind_double(stmt, 17, ev.self_time);
+            }
+            if (ev.stack_frame_id != UINT32_MAX)
+                sqlite3_bind_text(stmt, 18, model.get_string(ev.stack_frame_id).c_str(), -1, SQLITE_TRANSIENT);
 
             sqlite3_step(stmt);
             sqlite3_reset(stmt);
+            sqlite3_clear_bindings(stmt);
 
             if (on_progress && (i & 0xFFFF) == 0 && event_count > 0) {
                 on_progress((float)i / (float)event_count);

@@ -64,6 +64,28 @@ inline Phase phase_from_char(char c) {
     }
 }
 
+enum class EventKind : uint8_t { Measured, Sample, SampledSpan };
+
+inline const char* event_kind_name(EventKind kind) {
+    switch (kind) {
+        case EventKind::Sample:
+            return "CPU sample";
+        case EventKind::SampledSpan:
+            return "Sampled span";
+        default:
+            return "Measured";
+    }
+}
+
+struct StackFrame {
+    uint32_t id_idx = UINT32_MAX;
+    uint32_t name_idx = 0;
+    uint32_t cat_idx = 0;
+    uint32_t parent_id = UINT32_MAX;
+    int32_t parent_idx = -1;
+    bool valid = true;
+};
+
 struct TraceEvent {
     uint32_t name_idx = 0;
     uint32_t cat_idx = 0;
@@ -77,7 +99,13 @@ struct TraceEvent {
     uint8_t depth = 0;               // nesting depth within thread
     bool is_end_event = false;       // true for matched 'E' events (don't render)
     int32_t parent_idx = -1;         // index of parent event (-1 if root or no parent)
-    double self_time = 0.0;          // wall time minus immediate children's durations
+    double self_time = 0.0;          // measured/estimated span time minus immediate children
+    EventKind kind = EventKind::Measured;
+    uint32_t stack_frame_id = UINT32_MAX;  // interned sf, preserved even if unresolved
+    int32_t stack_frame_idx = -1;
+    double sample_weight = -1.0;      // raw weight; negative means unavailable
+    uint32_t sample_weight_unit = 0;  // interned explicit weightUnit, if supplied
+    double sample_cpu_time = -1.0;    // estimated microseconds; negative means unavailable
 
     double end_ts() const { return ts + dur; }
 };

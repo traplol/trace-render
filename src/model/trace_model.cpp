@@ -1,152 +1,110 @@
 #include "trace_model.h"
 #include "tracing.h"
-#include <stack>
 #include <algorithm>
 
 void TraceModel::build_index(std::function<void(float)> on_progress) {
     TRACE_FUNCTION_CAT("model");
 
-    size_t total_threads = 0;
-    for (const auto& proc : processes_) {
-        total_threads += proc.threads.size();
-    }
-    size_t threads_done = 0;
+    resolve_stack_frames();
+    min_ts_ = 1e18;
+    max_ts_ = -1e18;
 
-    // Progress weighting: SortEvents ~20%, MatchBEPairs ~5%, ProcessThreads ~75%
+    // Rebuild from input order, including E records removed by a previous build.
+    for (auto& proc : processes_)
+        for (auto& thread : proc.threads) thread.event_indices.clear();
+    for (uint32_t i = 0; i < events_.size(); ++i) {
+        auto& ev = events_[i];
+        ev.parent_idx = -1;
+        ev.depth = 0;
+        ev.self_time = 0;
+        ev.is_end_event = false;
+        if (ev.ph == Phase::Sample) {
+            ev.kind = EventKind::Sample;
+            ev.dur = 0;  // Observations never cover the interval to the next sample.
+        }
+        if (ev.ph != Phase::Metadata && ev.ph != Phase::Counter)
+            get_or_create_process(ev.pid).get_or_create_thread(ev.tid).event_indices.push_back(i);
+    }
+
+    size_t total_threads = 0;
+    for (const auto& proc : processes_) total_threads += proc.threads.size();
+    size_t threads_done = 0;
     if (on_progress) on_progress(0.0f);
 
-    // Sort events within each thread by timestamp, then by duration descending
-    // so that parent events (longer duration) come before children at the same ts.
-    // Uses key extraction for cache-friendly sorting: copy (ts, dur, index) into a
-    // contiguous array, sort that, then write sorted indices back.
-    {
-        struct SortKey {
-            double ts;
-            double dur;
-            uint32_t idx;
-        };
-        std::vector<SortKey> keys;
-        for (auto& proc : processes_) {
-            for (auto& thread : proc.threads) {
-                size_t n = thread.event_indices.size();
-                if (n <= 1) continue;
-                keys.resize(n);
-                for (size_t i = 0; i < n; i++) {
-                    uint32_t idx = thread.event_indices[i];
-                    keys[i] = {events_[idx].ts, events_[idx].dur, idx};
-                }
-                std::sort(keys.begin(), keys.end(), [](const SortKey& a, const SortKey& b) {
-                    if (a.ts != b.ts) return a.ts < b.ts;
-                    return a.dur > b.dur;
-                });
-                for (size_t i = 0; i < n; i++) {
-                    thread.event_indices[i] = keys[i].idx;
+    std::vector<int32_t> begin_parent(events_.size(), -1);
+    for (auto& proc : processes_) {
+        for (auto& thread : proc.threads) {
+            auto& indices = thread.event_indices;
+            // Pair transitions in timestamp/input order before sorting by duration.
+            std::sort(indices.begin(), indices.end(), [this](uint32_t a, uint32_t b) {
+                if (events_[a].ts != events_[b].ts) return events_[a].ts < events_[b].ts;
+                return a < b;
+            });
+            std::vector<uint32_t> measured_begins, sampled_begins;
+            for (uint32_t idx : indices) {
+                auto& ev = events_[idx];
+                auto& begins = ev.kind == EventKind::SampledSpan ? sampled_begins : measured_begins;
+                if (ev.ph == Phase::DurationBegin) {
+                    if (!begins.empty()) begin_parent[idx] = (int32_t)begins.back();
+                    begins.push_back(idx);
+                } else if (ev.ph == Phase::DurationEnd && !begins.empty()) {
+                    auto& begin = events_[begins.back()];
+                    begin.dur = std::max(0.0, ev.ts - begin.ts);
+                    ev.is_end_event = true;
+                    begins.pop_back();
                 }
             }
-        }
-    }
+            indices.erase(
+                std::remove_if(indices.begin(), indices.end(), [this](uint32_t i) { return events_[i].is_end_event; }),
+                indices.end());
 
-    if (on_progress) on_progress(0.20f);
+            // Equal intervals retain input order, including repeated recursive frames.
+            std::sort(indices.begin(), indices.end(), [this](uint32_t a, uint32_t b) {
+                if (events_[a].ts != events_[b].ts) return events_[a].ts < events_[b].ts;
+                if (events_[a].dur != events_[b].dur) return events_[a].dur > events_[b].dur;
+                return a < b;
+            });
 
-    // Match B/E pairs and compute duration
-    {
-        for (auto& proc : processes_) {
-            for (auto& thread : proc.threads) {
-                std::stack<uint32_t> begin_stack;
-                for (uint32_t idx : thread.event_indices) {
-                    auto& ev = events_[idx];
-                    if (ev.ph == Phase::DurationBegin) {
-                        begin_stack.push(idx);
-                    } else if (ev.ph == Phase::DurationEnd) {
-                        if (!begin_stack.empty()) {
-                            auto& begin_ev = events_[begin_stack.top()];
-                            begin_ev.dur = ev.ts - begin_ev.ts;
-                            ev.is_end_event = true;
-                            begin_stack.pop();
-                        }
-                    }
+            std::vector<uint32_t> measured_stack, sampled_stack;
+            thread.max_depth = 0;
+            for (uint32_t idx : indices) {
+                auto& ev = events_[idx];
+                if (ev.kind == EventKind::Sample) continue;
+                auto& stack = ev.kind == EventKind::SampledSpan ? sampled_stack : measured_stack;
+                while (!stack.empty()) {
+                    const auto& parent = events_[stack.back()];
+                    if (parent.end_ts() <= ev.ts || parent.end_ts() < ev.end_ts())
+                        stack.pop_back();
+                    else
+                        break;
+                }
+                if (ev.ph == Phase::DurationBegin && begin_parent[idx] >= 0) {
+                    ev.parent_idx = begin_parent[idx];
+                }
+                if (!stack.empty()) {
+                    // A B root cannot become a child of a different B merely because
+                    // their zero-length boundary intervals coincide.
+                    if ((ev.ph != Phase::DurationBegin || events_[stack.back()].ph != Phase::DurationBegin) &&
+                        (ev.parent_idx < 0 || events_[stack.back()].depth >= events_[ev.parent_idx].depth))
+                        ev.parent_idx = (int32_t)stack.back();
+                }
+                if (ev.parent_idx >= 0) ev.depth = (uint8_t)std::min(255, (int)events_[ev.parent_idx].depth + 1);
+                thread.max_depth = std::max(thread.max_depth, ev.depth);
+                ev.self_time = std::max(0.0, ev.dur);
+                if (ev.dur > 0) stack.push_back(idx);
+            }
+            // Only actual immediate children subtract time. Samples use a separate
+            // ancestry and must never subtract from measured spans.
+            for (uint32_t idx : indices) {
+                const auto& ev = events_[idx];
+                if (ev.parent_idx >= 0 && ev.dur > 0) {
+                    auto& parent = events_[ev.parent_idx];
+                    parent.self_time = std::max(0.0, parent.self_time - ev.dur);
                 }
             }
-        }
-    }
-
-    // Remove end events, dedup, compute depth/self-time, build spatial index
-    {
-        for (auto& proc : processes_) {
-            for (auto& thread : proc.threads) {
-                // Remove matched end events
-                thread.event_indices.erase(std::remove_if(thread.event_indices.begin(), thread.event_indices.end(),
-                                                          [this](uint32_t idx) {
-                                                              const auto& ev = events_[idx];
-                                                              return ev.is_end_event || ev.ph == Phase::Metadata;
-                                                          }),
-                                           thread.event_indices.end());
-
-                // Deduplicate events with the same name and timestamp (keep longer duration)
-                if (thread.event_indices.size() > 1) {
-                    std::vector<uint32_t> deduped;
-                    deduped.reserve(thread.event_indices.size());
-                    deduped.push_back(thread.event_indices[0]);
-                    for (size_t i = 1; i < thread.event_indices.size(); i++) {
-                        uint32_t prev_idx = deduped.back();
-                        uint32_t cur_idx = thread.event_indices[i];
-                        const auto& prev = events_[prev_idx];
-                        const auto& cur = events_[cur_idx];
-                        if (cur.name_idx == prev.name_idx && cur.ts == prev.ts) {
-                            if (cur.dur > prev.dur) {
-                                deduped.back() = cur_idx;
-                            }
-                        } else {
-                            deduped.push_back(cur_idx);
-                        }
-                    }
-                    thread.event_indices = std::move(deduped);
-                }
-
-                // Compute nesting depth and parent indices using a stack
-                std::vector<std::pair<double, uint32_t>> depth_stack;
-                uint8_t max_depth = 0;
-                for (uint32_t idx : thread.event_indices) {
-                    auto& ev = events_[idx];
-                    while (!depth_stack.empty() && depth_stack.back().first <= ev.ts) {
-                        depth_stack.pop_back();
-                    }
-                    ev.depth = (uint8_t)depth_stack.size();
-                    if (ev.depth > max_depth) max_depth = ev.depth;
-                    ev.parent_idx = depth_stack.empty() ? -1 : (int32_t)depth_stack.back().second;
-                    if (ev.dur > 0) {
-                        depth_stack.push_back({ev.end_ts(), idx});
-                    }
-                }
-                thread.max_depth = max_depth;
-
-                // Compute self times: wall time minus immediate children's durations
-                for (uint32_t idx : thread.event_indices) {
-                    auto& ev = events_[idx];
-                    if (ev.dur <= 0) continue;
-                    double children_total = 0.0;
-                    for (auto it =
-                             std::lower_bound(thread.event_indices.begin(), thread.event_indices.end(), idx,
-                                              [this](uint32_t a, uint32_t b) { return events_[a].ts < events_[b].ts; });
-                         it != thread.event_indices.end(); ++it) {
-                        const auto& child = events_[*it];
-                        if (child.ts >= ev.end_ts()) break;
-                        if (child.depth != ev.depth + 1) continue;
-                        if (child.ts < ev.ts) continue;
-                        if (child.end_ts() > ev.end_ts()) continue;
-                        if (child.dur > 0) children_total += child.dur;
-                    }
-                    ev.self_time = ev.dur - children_total;
-                }
-
-                // Build spatial index
-                thread.block_index.build(thread.event_indices, events_);
-
-                threads_done++;
-                if (on_progress && total_threads > 0) {
-                    on_progress(0.25f + 0.75f * (float)threads_done / (float)total_threads);
-                }
-            }
+            thread.block_index.build(indices, events_);
+            ++threads_done;
+            if (on_progress && total_threads > 0) on_progress((float)threads_done / total_threads);
         }
     }
 
@@ -169,6 +127,8 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
         categories_.clear();
         name_to_events_.clear();
         std::unordered_set<uint32_t> cat_set;
+        for (const auto& frame : stack_frames_)
+            if (frame.valid) cat_set.insert(frame.cat_idx);
         for (uint32_t i = 0; i < (uint32_t)events_.size(); i++) {
             const auto& ev = events_[i];
             if (ev.ph == Phase::Metadata || ev.is_end_event) continue;
@@ -176,7 +136,7 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
             double end = ev.dur > 0 ? ev.end_ts() : ev.ts;
             if (end > max_ts_) max_ts_ = end;
             cat_set.insert(ev.cat_idx);
-            if (ev.ph != Phase::Counter && ev.dur > 0) {
+            if (ev.ph != Phase::Counter && (ev.dur > 0 || ev.kind == EventKind::Sample)) {
                 name_to_events_[ev.name_idx].push_back(i);
             }
         }
@@ -185,8 +145,10 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
                   [this](uint32_t a, uint32_t b) { return strings_[a] < strings_[b]; });
         // Sort each name's event list by timestamp
         for (auto& [name_idx, indices] : name_to_events_) {
-            std::sort(indices.begin(), indices.end(),
-                      [this](uint32_t a, uint32_t b) { return events_[a].ts < events_[b].ts; });
+            std::sort(indices.begin(), indices.end(), [this](uint32_t a, uint32_t b) {
+                if (events_[a].ts != events_[b].ts) return events_[a].ts < events_[b].ts;
+                return a < b;
+            });
         }
     }
 
@@ -215,6 +177,61 @@ void TraceModel::build_index(std::function<void(float)> on_progress) {
         cached_total_threads_ = 0;
         for (const auto& proc : processes_) cached_total_threads_ += (int)proc.threads.size();
     }
+}
+
+void TraceModel::resolve_stack_frames() {
+    std::unordered_map<uint32_t, uint32_t> by_id;
+    for (uint32_t i = 0; i < stack_frames_.size(); ++i) by_id[stack_frames_[i].id_idx] = i;
+    for (auto& frame : stack_frames_) {
+        frame.parent_idx = -1;
+        if (frame.parent_id != UINT32_MAX) {
+            auto it = by_id.find(frame.parent_id);
+            if (it == by_id.end())
+                frame.valid = false;
+            else
+                frame.parent_idx = (int32_t)it->second;
+        }
+    }
+    // Iterative three-state walk detects cycles and missing ancestors without
+    // recursion or quadratic walks through shared ancestry.
+    std::vector<uint8_t> state(stack_frames_.size(), 0);
+    std::vector<uint32_t> path;
+    for (uint32_t i = 0; i < stack_frames_.size(); ++i) {
+        if (state[i] == 2) continue;
+        path.clear();
+        int32_t current = (int32_t)i;
+        while (current >= 0 && state[current] == 0 && stack_frames_[current].valid) {
+            state[current] = 1;
+            path.push_back(current);
+            current = stack_frames_[current].parent_idx;
+        }
+        bool valid = current < 0 || (state[current] == 2 && stack_frames_[current].valid);
+        for (uint32_t idx : path) {
+            stack_frames_[idx].valid = valid;
+            state[idx] = 2;
+        }
+        if (path.empty()) state[i] = 2;
+    }
+    for (auto& ev : events_) {
+        ev.stack_frame_idx = -1;
+        auto it = by_id.find(ev.stack_frame_id);
+        if (it == by_id.end() || !stack_frames_[it->second].valid) continue;
+        ev.stack_frame_idx = (int32_t)it->second;
+        if (ev.ph == Phase::Sample) {
+            const auto& leaf = stack_frames_[it->second];
+            ev.name_idx = leaf.name_idx;
+            if (leaf.cat_idx != 0) ev.cat_idx = leaf.cat_idx;
+        }
+    }
+}
+
+std::vector<uint32_t> TraceModel::build_sample_stack(uint32_t event_idx) const {
+    std::vector<uint32_t> path;
+    if (event_idx >= events_.size()) return path;
+    for (int32_t i = events_[event_idx].stack_frame_idx; i >= 0; i = stack_frames_[i].parent_idx)
+        path.push_back((uint32_t)i);
+    std::reverse(path.begin(), path.end());
+    return path;
 }
 
 int32_t TraceModel::find_parent_event(uint32_t event_idx) const {

@@ -1,5 +1,6 @@
 #include "instance_panel.h"
 #include "format_time.h"
+#include "event_metrics.h"
 #include "sort_utils.h"
 #include "tracing.h"
 #include "imgui.h"
@@ -91,14 +92,16 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
     ImGui::SameLine();
     ImGui::TextUnformatted(selected_name_.c_str());
 
-    if (ImGui::BeginTable("InstancesTable", 2,
+    if (ImGui::BeginTable("InstancesTable", 3,
                           ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
                               ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
                           ImVec2(0, 0))) {
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_None, 0.0f, 0);
-        ImGui::TableSetupColumn(
-            "Duration", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending, 0.0f, 1);
+        ImGui::TableSetupColumn("Duration / estimated CPU",
+                                ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending, 0.0f,
+                                1);
+        ImGui::TableSetupColumn("Kind", ImGuiTableColumnFlags_NoSort);
         ImGui::TableHeadersRow();
 
         {
@@ -178,8 +181,10 @@ void InstancePanel::render(const TraceModel& model, ViewState& view) {
                 }
 
                 ImGui::TableNextColumn();
-                format_time(ev.dur, buf, sizeof(buf));
+                format_event_metric(ev, buf, sizeof(buf));
                 ImGui::TextUnformatted(buf);
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(event_kind_name(ev.kind));
             }
         }
 

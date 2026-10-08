@@ -1,13 +1,14 @@
 # src/model/
 Core data layer: in-memory trace representation, spatial block index, SQLite query DB, color palette.
 
-## trace_event.h — `Phase` enum and `TraceEvent` struct (fundamental event unit)
+## trace_event.h — event phases, metric kinds, events, and sampled stack frames
 ```
 Phase phase_from_char(char c);
+const char* event_kind_name(EventKind kind);
 double TraceEvent::end_ts() const;
 ```
 
-## trace_model.h / trace_model.cpp — central model: flat event array, string pool, process/thread hierarchy, counters, flows, name-to-events index
+## trace_model.h / trace_model.cpp — central model: flat event array, string pool, process/thread hierarchy, counters, flows, name-to-events index, stable nesting, and validated sampled ancestry
 ```
 // ProcessInfo
 const ThreadInfo* find_thread(uint32_t tid) const;
@@ -15,6 +16,7 @@ ThreadInfo* find_thread(uint32_t tid);
 ThreadInfo& get_or_create_thread(uint32_t tid);
 // TraceModel — const accessors
 const std::vector<TraceEvent>& events() const;
+const std::vector<StackFrame>& stack_frames() const;
 const std::vector<std::string>& strings() const;
 const std::unordered_map<std::string, uint32_t>& string_map() const;
 const std::vector<std::string>& args() const;
@@ -31,6 +33,7 @@ const std::vector<uint32_t>& categories() const;
 const std::unordered_map<uint32_t, std::vector<uint32_t>>& name_to_events() const;
 // TraceModel — mutation methods
 uint32_t add_event(const TraceEvent& ev);
+void add_stack_frame(const StackFrame& frame);
 uint32_t add_args(std::string args_json);
 void add_flow_event(uint64_t id, uint32_t event_idx);
 CounterSeries& find_or_create_counter_series(uint32_t pid, const std::string& name);
@@ -44,6 +47,7 @@ ProcessInfo& get_or_create_process(uint32_t pid);
 void build_index(std::function<void(float)> on_progress = nullptr);
 int32_t find_parent_event(uint32_t event_idx) const;
 std::vector<uint32_t> build_call_stack(uint32_t event_idx) const;
+std::vector<uint32_t> build_sample_stack(uint32_t event_idx) const;
 double compute_self_time(uint32_t event_idx) const;
 int32_t find_longest_child(uint32_t event_idx) const;
 int32_t find_prev_sibling(uint32_t event_idx) const;
@@ -61,7 +65,7 @@ void query(double start_ts, double end_ts, const std::vector<uint32_t>& event_in
 size_t find_first_block(double start_ts) const;
 ```
 
-## query_db.h / query_db.cpp — SQLite DB populated from `TraceModel`; sync + async query execution
+## query_db.h / query_db.cpp — SQLite DB with separate measured duration and sampled CPU columns; sync + async query execution
 ```
 void load(const TraceModel&, std::function<void(float)> on_progress = nullptr);
 QueryResult execute(const std::string& sql);

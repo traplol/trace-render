@@ -120,6 +120,8 @@ static const char* phase_name(Phase ph) {
             return "Flow End (f)";
         case Phase::Metadata:
             return "Metadata (M)";
+        case Phase::Sample:
+            return "CPU sample (P)";
         default:
             return "Unknown";
     }
@@ -178,7 +180,8 @@ void DetailPanel::render_range_selection(const TraceModel& model, ViewState& vie
         return;
     }
 
-    ImGui::Text("Events in range: %u", range_stats_.total_events);
+    ImGui::Text("Measured events: %u | Sampled spans: %u | Samples: %u", range_stats_.total_events,
+                range_stats_.total_sampled_spans, range_stats_.total_samples);
 
     if (ImGui::SmallButton("Zoom to Range")) {
         view.zoom_to_fit(view.range_start_ts(), view.range_end_ts());
@@ -190,20 +193,62 @@ void DetailPanel::render_range_selection(const TraceModel& model, ViewState& vie
 
     ImGui::Separator();
 
+    if (!range_stats_.sample_summaries.empty()) {
+        ImGui::TextDisabled("Samples: inclusive/exclusive counts and estimates from explicit time weights.");
+        if (ImGui::BeginTable("RangeSamples", 6,
+                              ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY,
+                              ImVec2(0, 200))) {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            for (const char* label :
+                 {"Function", "Incl. samples", "Excl. samples", "Est. CPU", "Est. self CPU", "Time weights"})
+                ImGui::TableSetupColumn(label);
+            ImGui::TableHeadersRow();
+            ImGuiListClipper clipper;
+            clipper.Begin((int)range_stats_.sample_summaries.size());
+            while (clipper.Step())
+                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+                    const auto& summary = range_stats_.sample_summaries[i];
+                    ImGui::PushID(i);
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    if (ImGui::Selectable(model.get_string(summary.name_idx).c_str()))
+                        view.navigate_to_event(summary.event_idx, model.events()[summary.event_idx]);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", summary.inclusive_samples);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u", summary.exclusive_samples);
+                    char buf[64];
+                    for (double time : {summary.estimated_cpu_time, summary.estimated_self_cpu_time}) {
+                        ImGui::TableNextColumn();
+                        if (summary.weighted_samples > 0) {
+                            format_time(time, buf, sizeof(buf));
+                            ImGui::TextUnformatted(buf);
+                        } else
+                            ImGui::TextDisabled("Unavailable");
+                    }
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%u / %u", summary.weighted_samples, summary.inclusive_samples);
+                    ImGui::PopID();
+                }
+            ImGui::EndTable();
+        }
+    }
+
     if (range_stats_.summaries.empty()) {
-        ImGui::TextDisabled("No duration events in range.");
+        if (range_stats_.sample_summaries.empty()) ImGui::TextDisabled("No duration events or samples in range.");
         return;
     }
 
-    if (ImGui::BeginTable("RangeTable", 5,
+    if (ImGui::BeginTable("RangeTable", 6,
                           ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV |
                               ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
                           ImVec2(0, ImGui::GetContentRegionAvail().y))) {
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_None, 0.0f);
-        ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_None, 0.0f);
-        ImGui::TableSetupColumn("Total", ImGuiTableColumnFlags_None, 0.0f);
-        ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_None, 0.0f);
+        ImGui::TableSetupColumn("Kind", ImGuiTableColumnFlags_None, 0.0f);
+        ImGui::TableSetupColumn("Events / spans", ImGuiTableColumnFlags_None, 0.0f);
+        ImGui::TableSetupColumn("Duration / est. CPU", ImGuiTableColumnFlags_None, 0.0f);
+        ImGui::TableSetupColumn("Avg per event / span", ImGuiTableColumnFlags_None, 0.0f);
         ImGui::TableSetupColumn("%", ImGuiTableColumnFlags_None, 0.0f);
         ImGui::TableHeadersRow();
 
@@ -228,6 +273,8 @@ void DetailPanel::render_range_selection(const TraceModel& model, ViewState& vie
                     ImGui::SetTooltip("%s", model.get_string(s.name_idx).c_str());
 
                 ImGui::TableNextColumn();
+                ImGui::TextUnformatted(event_kind_name(s.kind));
+                ImGui::TableNextColumn();
                 ImGui::Text("%u", s.count);
 
                 ImGui::TableNextColumn();
@@ -241,7 +288,7 @@ void DetailPanel::render_range_selection(const TraceModel& model, ViewState& vie
                 ImGui::TableNextColumn();
                 float pct =
                     range_stats_.range_duration > 0 ? (float)(s.total_dur / range_stats_.range_duration * 100.0) : 0.0f;
-                render_heat_bar(pct);
+                if (s.kind == EventKind::Measured) render_heat_bar(pct);
             }
         }
 
@@ -290,14 +337,14 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
 
     if (ev.dur > 0) {
         format_time((double)ev.dur, time_buf, sizeof(time_buf));
-        ImGui::Text("Wall Time: %s", time_buf);
+        ImGui::Text("%s: %s", ev.kind == EventKind::SampledSpan ? "Estimated sampled CPU" : "Wall Time", time_buf);
 
         double child_time = ev.dur - self_time_;
         float child_pct = (float)(child_time / ev.dur * 100.0);
 
         // Self time with heat bar
         format_time(self_time_, time_buf, sizeof(time_buf));
-        ImGui::Text("Self Time: %s", time_buf);
+        ImGui::Text("%s: %s", ev.kind == EventKind::SampledSpan ? "Estimated self CPU" : "Self Time", time_buf);
         ImGui::SameLine();
         ImGui::PushStyleColor(ImGuiCol_PlotHistogram, heat_color(self_pct_));
         ImGui::ProgressBar(self_pct_ / 100.0f, ImVec2(100, ImGui::GetTextLineHeight()), "");
@@ -308,7 +355,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
         // Child time with heat bar
         if (child_time > 0) {
             format_time(child_time, time_buf, sizeof(time_buf));
-            ImGui::Text("Child Time: %s", time_buf);
+            ImGui::Text("%s: %s", ev.kind == EventKind::SampledSpan ? "Estimated child CPU" : "Child Time", time_buf);
             ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_PlotHistogram, heat_color(child_pct));
             ImGui::ProgressBar(child_pct / 100.0f, ImVec2(100, ImGui::GetTextLineHeight()), "");
@@ -333,6 +380,39 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
     if (ev.id != 0) {
         ImGui::Text("ID: 0x%llx", (unsigned long long)ev.id);
     }
+
+    if (ev.kind == EventKind::Sample) {
+        ImGui::Text("Samples: 1");
+        if (ev.sample_weight >= 0)
+            ImGui::Text("Supplied weight: %g %s", ev.sample_weight, model.get_string(ev.sample_weight_unit).c_str());
+        if (ev.sample_cpu_time >= 0) {
+            format_time(ev.sample_cpu_time, time_buf, sizeof(time_buf));
+            ImGui::Text("Estimated CPU: %s", time_buf);
+        } else
+            ImGui::TextDisabled("Estimated CPU time unavailable. No time weight supplied.");
+        if (cached_stack_event_idx_ != view.selected_event_idx()) {
+            cached_stack_event_idx_ = view.selected_event_idx();
+            cached_call_stack_ = model.build_sample_stack(view.selected_event_idx());
+        }
+        ImGui::SeparatorText("Sampled stack, root to leaf");
+        if (cached_call_stack_.empty()) ImGui::TextDisabled("Stack reference missing or invalid.");
+        for (size_t i = 0; i < cached_call_stack_.size(); ++i) {
+            const auto& frame = model.stack_frames()[cached_call_stack_[i]];
+            ImGui::Text("%zu  %s", i, model.get_string(frame.name_idx).c_str());
+        }
+        if (ev.args_idx != UINT32_MAX && ImGui::CollapsingHeader("Arguments")) {
+            try {
+                render_json_value(nlohmann::json::parse(model.args()[ev.args_idx]));
+            } catch (...) {
+                ImGui::TextUnformatted(model.args()[ev.args_idx].c_str());
+            }
+        }
+        ImGui::End();
+        return;
+    }
+    if (ev.kind == EventKind::SampledSpan)
+        ImGui::TextWrapped(
+            "Times below estimate sampled CPU. Counts describe spans; original sample count is unavailable.");
 
     if (const auto* th = model.find_thread(ev.pid, ev.tid)) {
         ImGui::Text("Depth: %d / %d", ev.depth, th->max_depth);
@@ -423,8 +503,8 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                     for (uint32_t idx : thread->event_indices) {
                         const auto& child = model.events()[idx];
                         if (child.ts >= ev.end_ts()) break;
-                        if (child.depth > ev.depth && child.ts >= ev.ts && child.end_ts() <= ev.end_ts() &&
-                            child.dur > 0) {
+                        if (child.kind == ev.kind && child.depth > ev.depth && child.ts >= ev.ts &&
+                            child.end_ts() <= ev.end_ts() && child.dur > 0) {
                             cached_stack_children_.push_back(idx);
                             if (child.parent_idx >= 0) {
                                 stack_has_children_.insert((uint32_t)child.parent_idx);
@@ -480,7 +560,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                     char wall_buf[64];
                     format_time(frame.dur, wall_buf, sizeof(wall_buf));
                     float self_pct = frame.dur > 0 ? (float)(self / frame.dur * 100.0) : 0.0f;
-                    ImGui::SetTooltip("%s\nWall: %s | Self: %s (%.1f%%)", model.get_string(frame.name_idx).c_str(),
+                    ImGui::SetTooltip("%s\nTime: %s | Self: %s (%.1f%%)", model.get_string(frame.name_idx).c_str(),
                                       wall_buf, self_buf, self_pct);
                 }
             }
@@ -630,7 +710,7 @@ void DetailPanel::render(const TraceModel& model, ViewState& view) {
                                 char wall_buf[64];
                                 format_time(frame.dur, wall_buf, sizeof(wall_buf));
                                 float self_pct = frame.dur > 0 ? (float)(self / frame.dur * 100.0) : 0.0f;
-                                ImGui::SetTooltip("%s\nWall: %s | Self: %s (%.1f%%)",
+                                ImGui::SetTooltip("%s\nTime: %s | Self: %s (%.1f%%)",
                                                   model.get_string(frame.name_idx).c_str(), wall_buf, self_buf,
                                                   self_pct);
                             }
@@ -914,21 +994,17 @@ void DetailPanel::render_children_table(const TraceModel& model, ViewState& view
 void DetailPanel::rebuild_children(const TraceModel& model, const TraceEvent& ev) {
     TRACE_FUNCTION_CAT("ui");
     children_.clear();
-    double immediate_children_total = 0.0;
 
     if (const auto* thread = model.find_thread(ev.pid, ev.tid)) {
         for (uint32_t idx : thread->event_indices) {
             const auto& child = model.events()[idx];
+            if (child.kind != ev.kind) continue;
             if (child.depth <= ev.depth) {
                 if (child.ts > ev.end_ts()) break;
                 continue;
             }
             if (child.ts < ev.ts || child.end_ts() > ev.end_ts()) continue;
             if (child.dur <= 0) continue;
-
-            if (child.depth == ev.depth + 1) {
-                immediate_children_total += child.dur;
-            }
 
             if (include_all_descendants_ || child.depth == ev.depth + 1) {
                 float pct = (float)(child.dur / ev.dur * 100.0);
@@ -939,7 +1015,7 @@ void DetailPanel::rebuild_children(const TraceModel& model, const TraceEvent& ev
         }
     }
 
-    self_time_ = ev.dur - immediate_children_total;
+    self_time_ = ev.self_time;
     self_pct_ = (float)(self_time_ / ev.dur * 100.0);
 }
 

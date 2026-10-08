@@ -1,5 +1,6 @@
 #include "search_panel.h"
 #include "format_time.h"
+#include "event_metrics.h"
 #include "sort_utils.h"
 #include "string_utils.h"
 #include "tracing.h"
@@ -37,8 +38,14 @@ void SearchPanel::build_name_stats(const TraceModel& model, const std::vector<ui
     for (uint32_t idx : results) {
         const auto& ev = model.events()[idx];
         auto& stats = name_stats_[ev.name_idx];
-        stats.count++;
-        stats.total_dur += ev.dur;
+        if (ev.kind == EventKind::Sample)
+            ++stats.sample_count;
+        else if (ev.kind == EventKind::SampledSpan)
+            ++stats.sampled_span_count;
+        else {
+            ++stats.count;
+            stats.total_dur += ev.dur;
+        }
     }
     for (auto& [name_idx, stats] : name_stats_) {
         stats.avg_dur = stats.count > 0 ? stats.total_dur / stats.count : 0.0;
@@ -136,9 +143,9 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
                           ImVec2(0, 0))) {
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_DefaultSort, 0.0f, 0);
-        ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_None, 0.0f, 1);
-        ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_None, 0.0f, 3);
-        ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_None, 0.0f, 4);
+        ImGui::TableSetupColumn("Duration / estimated CPU", ImGuiTableColumnFlags_None, 0.0f, 1);
+        ImGui::TableSetupColumn("Measured events / samples / spans", ImGuiTableColumnFlags_None, 0.0f, 3);
+        ImGui::TableSetupColumn("Avg measured duration", ImGuiTableColumnFlags_None, 0.0f, 4);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_None, 0.0f, 2);
         ImGui::TableHeadersRow();
 
@@ -212,7 +219,7 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
                 char time_buf[64];
                 char dur_buf[64];
                 format_time(ev.ts, time_buf, sizeof(time_buf));
-                format_time(ev.dur, dur_buf, sizeof(dur_buf));
+                format_event_metric(ev, dur_buf, sizeof(dur_buf));
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
@@ -234,11 +241,12 @@ void SearchPanel::render(const TraceModel& model, ViewState& view) {
                 ImGui::TableNextColumn();
                 auto stats_it = name_stats_.find(ev.name_idx);
                 if (stats_it != name_stats_.end()) {
-                    ImGui::Text("%u", stats_it->second.count);
+                    const auto& stats = stats_it->second;
+                    ImGui::Text("%u / %u / %u", stats.count, stats.sample_count, stats.sampled_span_count);
                 }
 
                 ImGui::TableNextColumn();
-                if (stats_it != name_stats_.end()) {
+                if (stats_it != name_stats_.end() && stats_it->second.count > 0) {
                     char avg_buf[64];
                     format_time(stats_it->second.avg_dur, avg_buf, sizeof(avg_buf));
                     ImGui::TextUnformatted(avg_buf);

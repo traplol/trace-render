@@ -5,6 +5,8 @@
 
 struct NameStats {
     uint32_t count = 0;
+    uint32_t sample_count = 0;
+    uint32_t sampled_span_count = 0;
     double total_dur = 0.0;
     double avg_dur = 0.0;
 };

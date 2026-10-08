@@ -56,6 +56,7 @@ class TraceModel {
 public:
     // --- Const accessors ---
     const std::vector<TraceEvent>& events() const { return events_; }
+    const std::vector<StackFrame>& stack_frames() const { return stack_frames_; }
     const std::vector<std::string>& strings() const { return strings_; }
     const std::unordered_map<std::string, uint32_t>& string_map() const { return string_map_; }
     const std::vector<std::string>& args() const { return args_; }
@@ -74,6 +75,7 @@ public:
     int total_threads() const { return cached_total_threads_; }
 
     // --- Mutation methods for building the model ---
+    void add_stack_frame(const StackFrame& frame) { stack_frames_.push_back(frame); }
     uint32_t add_event(const TraceEvent& ev) {
         uint32_t idx = (uint32_t)events_.size();
         events_.push_back(ev);
@@ -150,6 +152,9 @@ public:
     // Returns event indices ordered from root (index 0) to the given event (last element).
     std::vector<uint32_t> build_call_stack(uint32_t event_idx) const;
 
+    // Resolved stack-frame indices, root to leaf. Empty for an invalid/missing sf chain.
+    std::vector<uint32_t> build_sample_stack(uint32_t event_idx) const;
+
     // Compute self time for an event (wall time minus immediate children's durations).
     double compute_self_time(uint32_t event_idx) const;
 
@@ -168,6 +173,7 @@ public:
 
     void clear() {
         events_.clear();
+        stack_frames_.clear();
         strings_.clear();
         string_map_.clear();
         args_.clear();
@@ -185,7 +191,9 @@ public:
     }
 
 private:
+    void resolve_stack_frames();
     std::vector<TraceEvent> events_;
+    std::vector<StackFrame> stack_frames_;
     std::vector<std::string> strings_;
     std::unordered_map<std::string, uint32_t> string_map_;
     std::vector<std::string> args_;

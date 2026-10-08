@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <sstream>
+#include <cmath>
 
 using json = nlohmann::json;
 
@@ -19,12 +20,17 @@ struct SaxHandler : json::json_sax_t {
         InTraceEvents,
         InEvent,
         InArgs,
+        InStackFrames,
+        InStackFrame,
         Skipping,
     };
 
     State state = State::TopLevel;
+    State skip_return_state = State::TopLevel;
     int skip_depth = 0;
     std::string current_key;
+    StackFrame current_frame{};
+    bool frame_has_name = false;
 
     // Current event being assembled
     TraceEvent current_event{};
@@ -40,7 +46,31 @@ struct SaxHandler : json::json_sax_t {
 
     SaxHandler(TraceModel& m, std::function<void(const char*, float)>& prog) : model(m), on_progress(prog) {}
 
+    void skip_value() {
+        skip_return_state = state;
+        state = State::Skipping;
+        skip_depth = 1;
+    }
+
     void finish_event() {
+        if (current_event.ph == Phase::Sample) {
+            current_event.kind = EventKind::Sample;
+            current_event.dur = 0;
+            if (current_event.sample_weight >= 0) {
+                const auto& unit = model.get_string(current_event.sample_weight_unit);
+                double scale = unit == "us"   ? 1
+                               : unit == "ns" ? 0.001
+                               : unit == "ms" ? 1000
+                               : unit == "s"  ? 1000000
+                                              : -1;
+                double cpu = current_event.sample_weight * scale;
+                if (scale > 0 && std::isfinite(cpu)) current_event.sample_cpu_time = cpu;
+            }
+        } else if ((current_event.ph == Phase::DurationBegin || current_event.ph == Phase::DurationEnd ||
+                    current_event.ph == Phase::Complete) &&
+                   ("," + model.get_string(current_event.cat_idx) + ",").find(",sampleEvent,") != std::string::npos) {
+            current_event.kind = EventKind::SampledSpan;
+        }
         event_count++;
         if (on_progress && (event_count & 0xFFFF) == 0 && estimated_events > 0) {
             float p = std::min(0.99f, (float)event_count / (float)estimated_events);
@@ -83,15 +113,8 @@ struct SaxHandler : json::json_sax_t {
 
         model.add_event(current_event);
 
-        // Add to thread (skip counter events - they render as separate tracks)
-        if (current_event.ph != Phase::Counter) {
-            auto& proc = model.get_or_create_process(current_event.pid);
-            auto& thread = proc.get_or_create_thread(current_event.tid);
-            thread.event_indices.push_back(ev_idx);
-        } else {
-            // Ensure process exists for counter tracks
-            model.get_or_create_process(current_event.pid);
-        }
+        // Duration/sample thread indexes are populated once by build_index().
+        if (current_event.ph == Phase::Counter) model.get_or_create_process(current_event.pid);
     }
 
     void handle_metadata() {
@@ -158,6 +181,8 @@ struct SaxHandler : json::json_sax_t {
             return true;
         }
         if (state == State::Skipping) return true;
+        if (state == State::InStackFrame && (current_key == "parent" || current_key == "name"))
+            current_frame.valid = false;
         return true;
     }
 
@@ -168,6 +193,8 @@ struct SaxHandler : json::json_sax_t {
             return true;
         }
         if (state == State::Skipping) return true;
+        if (state == State::InStackFrame && (current_key == "parent" || current_key == "name"))
+            current_frame.valid = false;
         return true;
     }
 
@@ -194,6 +221,13 @@ struct SaxHandler : json::json_sax_t {
             return true;
         }
         if (state == State::Skipping) return true;
+        if (state == State::InStackFrame) {
+            if (current_key == "parent")
+                current_frame.parent_id = model.intern_string(raw);
+            else if (current_key == "name")
+                current_frame.valid = false;
+            return true;
+        }
         if (state == State::InEvent) {
             if (current_key == "ts")
                 current_event.ts = val / time_divisor;
@@ -205,6 +239,10 @@ struct SaxHandler : json::json_sax_t {
                 current_event.tid = (uint32_t)val;
             else if (current_key == "id")
                 current_event.id = (uint64_t)val;
+            else if (current_key == "sf")
+                current_event.stack_frame_id = model.intern_string(raw);
+            else if (current_key == "weight" && std::isfinite(val) && val >= 0)
+                current_event.sample_weight = val;
         }
         return true;
     }
@@ -227,6 +265,16 @@ struct SaxHandler : json::json_sax_t {
             return true;
         }
         if (state == State::Skipping) return true;
+        if (state == State::InStackFrame) {
+            if (current_key == "name") {
+                current_frame.name_idx = model.intern_string(val);
+                frame_has_name = true;
+            } else if (current_key == "category")
+                current_frame.cat_idx = model.intern_string(val);
+            else if (current_key == "parent")
+                current_frame.parent_id = model.intern_string(val);
+            return true;
+        }
         if (state == State::InEvent) {
             if (current_key == "name") {
                 current_event.name_idx = model.intern_string(val);
@@ -234,6 +282,10 @@ struct SaxHandler : json::json_sax_t {
                 current_event.cat_idx = model.intern_string(val);
             } else if (current_key == "ph") {
                 if (!val.empty()) current_event.ph = phase_from_char(val[0]);
+            } else if (current_key == "sf") {
+                current_event.stack_frame_id = model.intern_string(val);
+            } else if (current_key == "weightUnit") {
+                current_event.sample_weight_unit = model.intern_string(val);
             } else if (current_key == "id") {
                 // Hex string id like "0x1234"
                 if (val.size() > 2 && val[0] == '0' && (val[1] == 'x' || val[1] == 'X')) {
@@ -262,6 +314,17 @@ struct SaxHandler : json::json_sax_t {
             state = State::InTopObject;
             return true;
         }
+        if (state == State::InTopObject && current_key == "stackFrames") {
+            state = State::InStackFrames;
+            return true;
+        }
+        if (state == State::InStackFrames) {
+            current_frame = StackFrame{};
+            current_frame.id_idx = model.intern_string(current_key);
+            frame_has_name = false;
+            state = State::InStackFrame;
+            return true;
+        }
         if (state == State::InTraceEvents) {
             state = State::InEvent;
             current_event = TraceEvent{};
@@ -281,10 +344,10 @@ struct SaxHandler : json::json_sax_t {
             current_args_json += "{";
             return true;
         }
-        if (state == State::InEvent) {
-            // Unknown object field - skip it
-            state = State::Skipping;
-            skip_depth = 1;
+        if (state == State::InEvent || state == State::InTopObject || state == State::InStackFrame) {
+            if (state == State::InStackFrame && (current_key == "parent" || current_key == "name"))
+                current_frame.valid = false;
+            skip_value();
             return true;
         }
         return true;
@@ -293,7 +356,17 @@ struct SaxHandler : json::json_sax_t {
     bool end_object() override {
         if (state == State::Skipping) {
             skip_depth--;
-            if (skip_depth == 0) state = State::InEvent;
+            if (skip_depth == 0) state = skip_return_state;
+            return true;
+        }
+        if (state == State::InStackFrame) {
+            current_frame.valid = current_frame.valid && frame_has_name;
+            model.add_stack_frame(current_frame);
+            state = State::InStackFrames;
+            return true;
+        }
+        if (state == State::InStackFrames) {
+            state = State::InTopObject;
             return true;
         }
         if (state == State::InArgs) {
@@ -337,9 +410,11 @@ struct SaxHandler : json::json_sax_t {
             current_args_json += "[";
             return true;
         }
-        if (state == State::InEvent || state == State::InTopObject) {
-            state = State::Skipping;
-            skip_depth = 1;
+        if (state == State::InEvent || state == State::InTopObject || state == State::InStackFrame ||
+            state == State::InStackFrames) {
+            if (state == State::InStackFrame && (current_key == "parent" || current_key == "name"))
+                current_frame.valid = false;
+            skip_value();
             return true;
         }
         return true;
@@ -349,7 +424,7 @@ struct SaxHandler : json::json_sax_t {
         TRACE_FUNCTION_CAT("parser");
         if (state == State::Skipping) {
             skip_depth--;
-            if (skip_depth == 0) state = State::InEvent;
+            if (skip_depth == 0) state = skip_return_state;
             return true;
         }
         if (state == State::InArgs) {
