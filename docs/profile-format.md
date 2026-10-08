@@ -4,7 +4,7 @@ The `.trprofile` file begins with the ten ASCII bytes `TRPROFILE\n`, followed by
 
 `serialize_profile()` and `write_profile()` write this format. `read_profile()` validates a complete file and only replaces the destination model after a successful read. `TraceParser` uses that reader in the desktop file-loading path. The source `.diagsession`, binaries, and PDBs are provenance, not dependencies when reopening. Source code itself is not embedded; the Source panel uses saved paths and the existing path-remapping settings.
 
-All documented tables and fields are present, including empty arrays, empty strings, and explicit nulls. JSON member order has no meaning. An unsupported version, missing required field, bad reference, invalid unit, or malformed record returns an error naming the affected table. Unknown extra fields have no effect in version 1. Changes that alter existing meanings require another version; readers must reject versions they do not understand.
+Writers include all documented tables and fields, including empty arrays, empty strings, and explicit nulls. JSON member order has no meaning. An unsupported version, missing required field, bad reference, invalid unit, or malformed record returns an error naming the affected table. The optional `allocation_history_gaps` quality field defaults to false in older version 1 files. Unknown extra fields have no effect in version 1. Changes that alter existing meanings require another version; readers must reject versions they do not understand.
 
 ## Numeric and identity rules
 
@@ -49,7 +49,7 @@ The `profile` object contains:
 | `source_format`, `source_name`, `converter` | Import provenance strings |
 | `capture_start_ts`, `capture_end_ts` | Known coverage boundaries or null |
 | `capabilities` | Booleans for `native_cpu_samples`, `managed_cpu_samples`, `native_allocation_history`, `managed_allocation_history`, `managed_heap_snapshots`, and `managed_survival` |
-| `quality` | `incomplete_capture`, `sampled_cpu`, `sampled_allocations`, `unresolved_symbols`, optional decimal-string `lost_events`, and a string-array `warnings` |
+| `quality` | `incomplete_capture`, `sampled_cpu`, `sampled_allocations`, `unresolved_symbols`, optional decimal-string `lost_events`, a string-array `warnings`, and optional `allocation_history_gaps` |
 | `process_instances` | `id`, `pid`, optional `start_ts` and `end_ts` |
 | `heap_instances` | `id`, `process_id`, optional `start_ts` and `end_ts` |
 | `modules` | `id`, `process_id`, `name`, `path`, `build_id`, optional `pdb_path`, `load_address`, `size_bytes`, optional `load_ts` and `unload_ts` |
@@ -75,7 +75,7 @@ A moved realloc represented by `Alloc(new)`, `Free(old)`, and a summary retains 
 
 `TraceModel::query_outstanding_memory(T, born_between, process_id)` derives native totals from an index rebuilt by `build_index()`. An exact lifetime contributes when `allocated_ts <= T < freed_ts`. Known live-at-end records contribute through the capture end, inclusive. Queries outside a known capture interval return an error. The optional birth range is `[start, end)` and selects allocations born in that range which are outstanding at `T`; it is not a difference of two outstanding totals. Allocations without a birth timestamp cannot satisfy the range and are counted separately as omitted unknown births.
 
-Results separate known bytes/counts from uncertain candidates. Unknown ends or births remain uncertain, and reported event loss or allocation sampling makes all candidate totals uncertain. The incomplete flag and capture warnings remain visible even when individual recorded lifetimes are known. The known list can be partial when recording starts after heap creation. Uncertain candidates are not a claim that those bytes are still allocated. Summation overflow returns an error and empty totals.
+Results separate known bytes/counts from uncertain candidates. Unknown ends or births remain uncertain. Reported event loss, allocation sampling, or `allocation_history_gaps` makes all candidate totals uncertain. The gap flag records missing relevant events within the history, including lost buffers without a known event count or skipped unsupported heap records. Recorded allocation/free facts remain stored. The incomplete flag and capture warnings remain visible even when individual recorded lifetimes are known. A late start can leave the initial heap unknown without setting the internal-gap flag; the known list is then partial. Uncertain candidates are not a claim that those bytes are still allocated. Summation overflow returns an error and empty totals.
 
 Each query also groups by the original allocation stack and by function within a process lifetime. Function identity uses the module-scoped symbol, then module/address, then the opaque frame ID; display names never identify a native function. Function totals include each allocation once per function in its callpath, even under recursion. Exclusive totals charge only the allocating leaf. Missing stacks form an explicit unattributed group. These results describe recorded outstanding allocations, including deliberate retention, without classifying leaks or inferring retaining references.
 

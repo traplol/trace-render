@@ -2,6 +2,7 @@
 #include "model/trace_model.h"
 #include "parser/native_heap.h"
 #include "parser/profile_io.h"
+#include <nlohmann/json.hpp>
 #include <limits>
 
 namespace {
@@ -176,8 +177,8 @@ TEST(NativeMemory, MissingAllocationEndDoesNotBecomeAnExactFreeAtAddressReuse) {
     EXPECT_FALSE(profile.allocations[0].freed_ts);
     auto model = model_for(std::move(profile));
     auto result = model.query_outstanding_memory(10);
-    EXPECT_EQ(result.total.known.bytes, 20u);
-    EXPECT_EQ(result.total.uncertain.bytes, 10u);
+    EXPECT_EQ(result.total.known.bytes, 0u);
+    EXPECT_EQ(result.total.uncertain.bytes, 30u);
     EXPECT_TRUE(result.incomplete);
 }
 
@@ -197,11 +198,39 @@ TEST(NativeMemory, SeparateHeapsOwnTheSameAddressAndUnobservedDestructionIsNotAn
     EXPECT_EQ(profile.heaps[0].end_ts, 3);
     auto model = model_for(std::move(profile));
     auto earlier = model.query_outstanding_memory(2);
-    EXPECT_EQ(earlier.total.known.bytes, 20u);
-    EXPECT_EQ(earlier.total.uncertain.bytes, 10u);
-    expect_total(model, 3, 20, 1);
-    expect_total(model, 4, 50, 2);
-    expect_total(model, 5, 20, 1);
+    EXPECT_EQ(earlier.total.known.bytes, 0u);
+    EXPECT_EQ(earlier.total.uncertain.bytes, 30u);
+    EXPECT_EQ(model.query_outstanding_memory(3).total.uncertain.bytes, 20u);
+    EXPECT_EQ(model.query_outstanding_memory(4).total.uncertain.bytes, 50u);
+    EXPECT_EQ(model.query_outstanding_memory(5).total.uncertain.bytes, 20u);
+}
+
+TEST(NativeMemory, InternalHistoryGapsRoundTripWithoutInventingLostEventCounts) {
+    auto profile = capture();
+    profile.quality.lost_events = 0;  // A lost buffer need not supply a lost-event count.
+    build_native_allocations({event(NativeHeapEventKind::Create, 0), event(NativeHeapEventKind::Allocate, 1, 100, 10),
+                              event(NativeHeapEventKind::Free, 5, 100)},
+                             profile, false);
+    EXPECT_TRUE(profile.quality.allocation_history_gaps);
+    EXPECT_EQ(profile.allocations[0].end_state, AllocationEnd::Freed);
+    EXPECT_EQ(profile.allocations[0].freed_ts, 5);
+    auto model = model_for(std::move(profile));
+    std::string saved, error;
+    ASSERT_TRUE(serialize_profile(model, saved, error)) << error;
+    ASSERT_TRUE(read_profile(saved, model, error)) << error;
+    EXPECT_TRUE(model.profile().quality.allocation_history_gaps);
+    EXPECT_EQ(model.profile().quality.lost_events, 0u);
+    auto result = model.query_outstanding_memory(3);
+    EXPECT_EQ(result.total.known.count, 0u);
+    EXPECT_EQ(result.total.uncertain.bytes, 10u);
+    EXPECT_TRUE(result.incomplete);
+
+    // Older v1 files did not have this optional quality field.
+    auto document = nlohmann::json::parse(saved.substr(10));
+    document["profile"]["quality"].erase("allocation_history_gaps");
+    ASSERT_TRUE(read_profile("TRPROFILE\n" + document.dump(), model, error)) << error;
+    EXPECT_FALSE(model.profile().quality.allocation_history_gaps);
+    EXPECT_EQ(model.query_outstanding_memory(3).total.known.bytes, 10u);
 }
 
 TEST(NativeMemory, UnpairedMovedReallocAndMissingCoverageEndDoNotClaimLiveness) {

@@ -12,7 +12,7 @@ bool time_unit_ns() const;
 void set_time_unit_ns(bool ns);
 ```
 
-## profile_io.h / profile_io.cpp — reads and writes version 1 profiles with validated identities, CPU observations, allocation lifetimes, managed observations, capture metadata, and optional recorded PDB paths
+## profile_io.h / profile_io.cpp — reads and writes version 1 profiles with validated identities, CPU observations, allocation lifetimes, managed observations, optional recorded PDB paths, and backward-compatible allocation-gap quality metadata
 ```
 bool read_profile(std::string_view data, TraceModel& model, std::string& error);
 bool serialize_profile(const TraceModel& model, std::string& data, std::string& error);

@@ -34,6 +34,20 @@ Verification prints one PASS line per capture and writes
 version, event counts, timestamps, stack correlation, and the native snapshot
 oracle. Run normal Python without `-O`, since the proof uses assertions.
 
+Run the production native memory importer regression after building the C++ tests:
+
+```sh
+TRACE_NATIVE_MEMORY_FIXTURE="$PWD/test_data/diagsession/native-memory-cscn.diagsession" \
+  ./build/trace_render_tests --gtest_filter='NativeMemoryFixture.*'
+```
+
+The opt-in test opens the original capture with the application importer and reads
+the six saved heapstate resources independently. It compares every outstanding
+allocation's address, size, birth time and stack, stack-group and cohort totals,
+and the same outstanding queries after a `.trprofile` save/reopen. Without the
+environment variable, the large external-fixture test reports skipped; the
+synthetic lifetime/query regressions run in the normal suite.
+
 [Dissect ETL](https://github.com/fox-it/dissect.etl) is AGPL-3.0 tooling used only
 for independent inspection here. It is not an application dependency; no Dissect
 source is copied into TraceRender. Its optional manifest decoder misreads pointer

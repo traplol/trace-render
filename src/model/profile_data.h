@@ -88,6 +88,7 @@ struct ProfileQuality {
     bool unresolved_symbols = false;
     std::optional<uint64_t> lost_events;
     std::vector<std::string> warnings;
+    bool allocation_history_gaps = false;  // missing relevant events inside the recorded history
 };
 
 struct ProfileData {

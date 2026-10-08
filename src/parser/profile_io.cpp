@@ -186,6 +186,7 @@ bool serialize_profile(const TraceModel& model, std::string& data, std::string& 
                             {{"incomplete_capture", q.incomplete_capture},
                              {"sampled_cpu", q.sampled_cpu},
                              {"sampled_allocations", q.sampled_allocations},
+                             {"allocation_history_gaps", q.allocation_history_gaps},
                              {"unresolved_symbols", q.unresolved_symbols},
                              {"lost_events", integer_value(q.lost_events)},
                              {"warnings", q.warnings}}}};
@@ -293,9 +294,10 @@ bool read_profile(std::string_view data, TraceModel& model, std::string& error) 
             c.at("native_allocation_history").get<bool>(), c.at("managed_allocation_history").get<bool>(),
             c.at("managed_heap_snapshots").get<bool>(),    c.at("managed_survival").get<bool>()};
         const auto& q = p.at("quality");
-        profile.quality = {q.at("incomplete_capture").get<bool>(),  q.at("sampled_cpu").get<bool>(),
-                           q.at("sampled_allocations").get<bool>(), q.at("unresolved_symbols").get<bool>(),
-                           optional_u64(q.at("lost_events")),       q.at("warnings").get<std::vector<std::string>>()};
+        profile.quality = {q.at("incomplete_capture").get<bool>(),   q.at("sampled_cpu").get<bool>(),
+                           q.at("sampled_allocations").get<bool>(),  q.at("unresolved_symbols").get<bool>(),
+                           optional_u64(q.at("lost_events")),        q.at("warnings").get<std::vector<std::string>>(),
+                           q.value("allocation_history_gaps", false)};
         std::unordered_set<std::string> processes, heaps, modules, frames, allocations, snapshots;
         std::unordered_map<std::string, size_t> managed_allocations;
         std::unordered_map<std::string, std::string> heap_processes;

@@ -37,6 +37,7 @@ void MemoryIndex::clear() {
 void MemoryIndex::build(const ProfileData& profile, const std::vector<StackFrame>& frames,
                         const std::vector<std::string>& strings) {
     clear();
+    if (!profile.capabilities.native_allocation_history) return;
     std::unordered_map<std::string, int32_t> frame_ids;
     std::map<std::tuple<int, uint32_t, uint32_t, uint64_t>, int32_t> functions;
     frame_functions_.resize(frames.size(), -1);
@@ -105,7 +106,8 @@ OutstandingMemory MemoryIndex::query(const ProfileData& profile, double ts,
 
     OutstandingMemory result;
     result.incomplete = profile.quality.incomplete_capture;
-    const bool uncertain_coverage = profile.quality.lost_events.value_or(0) > 0 || profile.quality.sampled_allocations;
+    const bool uncertain_coverage = profile.quality.allocation_history_gaps ||
+                                    profile.quality.lost_events.value_or(0) > 0 || profile.quality.sampled_allocations;
     result.incomplete |= uncertain_coverage;
     std::map<std::pair<std::string, int32_t>, size_t> stacks, functions;
     for (const auto& block : blocks_) {

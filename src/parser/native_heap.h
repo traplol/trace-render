@@ -22,7 +22,7 @@ struct NativeHeapEvent {
     std::string stack_frame_id;
 };
 
-// Appends native allocations/heaps once per capture. False coverage leaves
-// unfinished allocations unknown. Missing initial heaps are reported separately.
+// Appends native allocations/heaps once per capture. False coverage records
+// internal gaps and leaves unfinished ends unknown. Late starts are reported separately.
 void build_native_allocations(const std::vector<NativeHeapEvent>& events, ProfileData& profile,
                               bool complete_event_stream);

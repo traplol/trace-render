@@ -25,6 +25,8 @@ void release(AllocationLifetime& allocation, double ts) {
 void build_native_allocations(const std::vector<NativeHeapEvent>& events, ProfileData& profile,
                               bool complete_event_stream) {
     if (events.empty()) return;
+    complete_event_stream = complete_event_stream && !profile.quality.allocation_history_gaps &&
+                            !profile.quality.sampled_allocations && profile.quality.lost_events.value_or(0) == 0;
     profile.capabilities.native_allocation_history = true;
     const size_t first_allocation = profile.allocations.size();
     std::unordered_map<std::string, const ProfileProcess*> processes;
@@ -52,12 +54,14 @@ void build_native_allocations(const std::vector<NativeHeapEvent>& events, Profil
         auto process_it = processes.find(event.process_id);
         if (process_it == processes.end()) {
             warning(profile, "Native heap events without a process lifetime were omitted.");
+            complete_event_stream = false;
             continue;
         }
         const auto& process = *process_it->second;
         if ((process.start_ts && event.ts_us < *process.start_ts) ||
             (process.end_ts && event.ts_us > *process.end_ts)) {
             warning(profile, "Native heap events outside their process lifetime were omitted.");
+            complete_event_stream = false;
             continue;
         }
         auto& heaps = process_heaps[event.process_id];
@@ -67,6 +71,7 @@ void build_native_allocations(const std::vector<NativeHeapEvent>& events, Profil
             // but does not supply an exact release timestamp for its allocations.
             profile.heaps[heap_it->second.index].end_ts = event.ts_us;
             warning(profile, "A native heap handle was reused without an observed destruction.");
+            complete_event_stream = false;
             heaps.erase(heap_it);
             heap_it = heaps.end();
         }
@@ -88,6 +93,7 @@ void build_native_allocations(const std::vector<NativeHeapEvent>& events, Profil
             if (active != heap.active.end()) {
                 warning(profile,
                         "Native allocation addresses were reused without observed frees; prior ends are unknown.");
+                complete_event_stream = false;
                 heap.active.erase(active);
             }
             AllocationLifetime allocation;
@@ -138,8 +144,10 @@ void build_native_allocations(const std::vector<NativeHeapEvent>& events, Profil
                     break;
                 }
                 if (old != heap.active.end()) {
-                    if (profile.allocations[old->second].size_bytes != event.old_size_bytes)
+                    if (profile.allocations[old->second].size_bytes != event.old_size_bytes) {
                         warning(profile, "Native realloc sizes disagree with recorded allocations.");
+                        complete_event_stream = false;
+                    }
                     release(profile.allocations[old->second], event.ts_us);
                     heap.active.erase(old);
                 } else {
@@ -157,6 +165,7 @@ void build_native_allocations(const std::vector<NativeHeapEvent>& events, Profil
         }
     }
 
+    profile.quality.allocation_history_gaps |= !complete_event_stream;
     for (auto& process_entry : process_heaps) {
         const auto& process = *processes.at(process_entry.first);
         for (auto& heap_entry : process_entry.second) {
