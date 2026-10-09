@@ -61,6 +61,36 @@ TraceModel memory_model() {
     return model;
 }
 
+TraceModel managed_memory_model(bool include_native = false) {
+    auto model = memory_model();
+    auto profile = model.profile();
+    profile.capabilities.native_allocation_history = include_native;
+    profile.capabilities.managed_allocation_history = true;
+    profile.capabilities.managed_survival = true;
+    if (!include_native) profile.allocations.clear();
+    auto add = [&](const char* id, const char* stack, uint64_t bytes, double birth, const char* process) {
+        AllocationLifetime allocation;
+        allocation.id = id;
+        allocation.process_id = process;
+        allocation.heap_id = std::string("heap-") + process;
+        allocation.stack_frame_id = stack;
+        allocation.size_bytes = bytes;
+        allocation.allocated_ts = birth;
+        allocation.kind = AllocationKind::Managed;
+        profile.allocations.push_back(allocation);
+    };
+    add("managed-retained", "recursive", 300, 10, "first");
+    add("managed-collected", "allocate", 60, 20, "first");
+    add("managed-other-process", "other", 30, 10, "second");
+    profile.managed_survival = {{"managed-retained", 50, true, 0x200},
+                                {"managed-collected", 40, true, 0x300},
+                                {"managed-collected", 60, false, {}},
+                                {"managed-other-process", 70, true, 0x400}};
+    model.set_profile(std::move(profile));
+    model.build_index();
+    return model;
+}
+
 int32_t function_row(const MemoryPanel& panel, const std::string& process, int32_t frame) {
     for (size_t i = 0; i < panel.result().functions.size(); ++i) {
         const auto& row = panel.result().functions[i];
@@ -135,6 +165,133 @@ TEST(MemoryPanel, TimeBirthAndProcessControlsUseRecordedLifetimes) {
     panel.set_process({});
     panel.refresh(model);
     EXPECT_EQ(panel.result().total.known.bytes, 189u);
+}
+
+TEST(MemoryPanel, ManagedQueriesReuseFiltersAndPathsWithoutKeepingNativeSelections) {
+    auto model = managed_memory_model(true);
+    MemoryPanel panel;
+    panel.set_time(40);
+    panel.refresh(model);
+    EXPECT_EQ(panel.allocation_kind(), AllocationKind::Native);
+    EXPECT_EQ(panel.result().total.known.bytes, 189u);
+    panel.select_function(model, function_row(panel, "first", 1));
+    panel.select_stack(model, (int32_t)panel.contributing_stacks()[0]);
+
+    panel.set_allocation_kind(AllocationKind::Managed);
+    EXPECT_EQ(panel.selected_function(), -1);
+    EXPECT_EQ(panel.selected_stack(), -1);
+    EXPECT_TRUE(panel.selected_path().empty());
+    panel.refresh(model);
+    EXPECT_EQ(panel.result().total.known.bytes, 390u);
+    panel.select_function(model, function_row(panel, "first", 1));
+    ASSERT_EQ(panel.contributing_stacks().size(), 2u);
+    panel.select_stack(model, (int32_t)panel.contributing_stacks()[0]);
+    EXPECT_EQ(panel.selected_path(), (std::vector<int32_t>{0, 1, 2}));
+
+    panel.set_birth_range({{20, 30}});
+    panel.refresh(model);
+    EXPECT_EQ(panel.result().total.known.bytes, 60u);
+    EXPECT_EQ(panel.selected_stack(), -1);
+    panel.set_time(50);
+    panel.refresh(model);
+    EXPECT_EQ(panel.result().total.known.bytes, 0u);
+    EXPECT_EQ(panel.result().total.uncertain.bytes, 60u);
+    panel.set_time(60);
+    panel.refresh(model);
+    EXPECT_EQ(panel.result().total.known.count, 0u);
+    EXPECT_EQ(panel.result().total.uncertain.count, 0u);
+
+    panel.set_birth_range(std::nullopt);
+    panel.set_process("second");
+    panel.refresh(model);
+    EXPECT_EQ(panel.result().total.known.bytes, 30u);
+    EXPECT_EQ(panel.result().total.uncertain.count, 0u);
+    panel.set_allocation_kind(AllocationKind::Native);
+    panel.refresh(model);
+    EXPECT_EQ(panel.time(), 60);
+    EXPECT_EQ(panel.process_id(), "second");
+    EXPECT_EQ(panel.result().total.known.bytes, 20u);
+
+    panel.set_allocation_kind(AllocationKind::Managed);
+    panel.on_model_changed();
+    panel.refresh(model);
+    EXPECT_EQ(panel.allocation_kind(), AllocationKind::Native);
+    EXPECT_EQ(panel.time(), 100);
+    EXPECT_TRUE(panel.process_id().empty());
+    EXPECT_EQ(panel.result().total.known.bytes, 189u);
+}
+
+TEST_F(MemoryPanelRenderTest, ManagedAllocationsDefaultToTheirViewAndExplainCheckpointUncertainty) {
+    auto model = managed_memory_model();
+    auto profile = model.profile();
+    profile.capabilities.managed_heap_snapshots = true;
+    profile.managed_snapshots.push_back({"snapshot", "first", 50, 48, 2});
+    model.set_profile(std::move(profile));
+    model.build_index();
+    MemoryPanel panel;
+    ViewState view;
+    panel.set_time(50);
+    auto text = render(panel, model, view);
+    EXPECT_EQ(panel.allocation_kind(), AllocationKind::Managed);
+    EXPECT_NE(text.find("Managed outstanding memory"), std::string::npos) << text;
+    EXPECT_NE(text.find("Known outstanding at 50.000 us: 330 bytes in 2 allocations"), std::string::npos) << text;
+    EXPECT_NE(text.find("Uncertain records: 60 bytes in 1 allocations"), std::string::npos) << text;
+    EXPECT_NE(text.find("GC checkpoints bound observed survival and absence"), std::string::npos) << text;
+    EXPECT_NE(text.find("Unobserved intervals remain uncertain"), std::string::npos) << text;
+    EXPECT_NE(text.find("does not give the exact release time"), std::string::npos) << text;
+    EXPECT_EQ(text.find("Native outstanding memory"), std::string::npos) << text;
+
+    profile = model.profile();
+    profile.capabilities.managed_survival = false;
+    profile.quality.sampled_allocations = true;
+    model.set_profile(std::move(profile));
+    model.build_index();
+    panel.on_model_changed();
+    panel.set_time(50);
+    text = render(panel, model, view);
+    EXPECT_NE(text.find("GC survival observations are unavailable"), std::string::npos) << text;
+    EXPECT_NE(text.find("Values describe recorded samples"), std::string::npos) << text;
+    EXPECT_NE(text.find("Uncertain records: 390 bytes in 3 allocations"), std::string::npos) << text;
+}
+
+TEST_F(MemoryPanelRenderTest, MixedProfilesExposeAllMemoryViewsAndResetTheDefaultOnReplacement) {
+    auto model = managed_memory_model(true);
+    auto profile = model.profile();
+    profile.capabilities.managed_heap_snapshots = true;
+    ManagedSnapshot snapshot;
+    snapshot.id = "snapshot";
+    snapshot.process_id = "first";
+    snapshot.ts = 50;
+    snapshot.live_bytes = 48;
+    snapshot.object_count = 2;
+    profile.managed_snapshots.push_back(snapshot);
+    model.set_profile(std::move(profile));
+    model.build_index();
+    MemoryPanel panel;
+    ViewState view;
+    auto text = render(panel, model, view);
+    for (const char* choice : {"Native outstanding memory", "Managed outstanding memory", "Managed snapshots"})
+        EXPECT_NE(text.find(choice), std::string::npos) << text;
+    EXPECT_NE(text.find("Known outstanding at 100.000 us: 189 bytes in 4 allocations"), std::string::npos) << text;
+    EXPECT_EQ(text.find("GC checkpoints"), std::string::npos) << text;
+
+    panel.set_allocation_kind(AllocationKind::Managed);
+    panel.set_time(50);
+    text = render(panel, model, view);
+    EXPECT_NE(text.find("Known outstanding at 50.000 us: 330 bytes in 2 allocations"), std::string::npos) << text;
+    panel.select_snapshot(0);
+    text = render(panel, model, view);
+    EXPECT_NE(text.find("Recorded bytes: 48"), std::string::npos) << text;
+    EXPECT_EQ(text.find("Known outstanding"), std::string::npos) << text;
+    panel.set_allocation_kind(AllocationKind::Managed);
+    text = render(panel, model, view);
+    EXPECT_NE(text.find("Known outstanding at 50.000 us: 330 bytes in 2 allocations"), std::string::npos) << text;
+
+    panel.select_snapshot(0);
+    panel.on_model_changed();
+    text = render(panel, model, view);
+    EXPECT_NE(text.find("Known outstanding at 100.000 us: 189 bytes in 4 allocations"), std::string::npos) << text;
+    EXPECT_EQ(text.find("Recorded bytes"), std::string::npos) << text;
 }
 
 TEST_F(MemoryPanelRenderTest, ManagedSnapshotsShowRecordedCountsWithoutAllocationAttribution) {
@@ -303,7 +460,7 @@ TEST_F(MemoryPanelRenderTest, SnapshotOnlyProfilesExplainMissingAllocationOrigin
     ViewState view;
     MemoryPanel panel;
     auto text = render(panel, model, view);
-    EXPECT_NE(text.find("Native allocation history is unavailable"), std::string::npos) << text;
+    EXPECT_NE(text.find("Allocation history is unavailable"), std::string::npos) << text;
     EXPECT_NE(text.find("Heap snapshots alone do not record allocation origins"), std::string::npos) << text;
     EXPECT_EQ(text.find("Known outstanding"), std::string::npos) << text;
 }

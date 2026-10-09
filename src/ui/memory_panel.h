@@ -6,6 +6,7 @@ class MemoryPanel {
 public:
     void render(const TraceModel& model, ViewState& view);
     void on_model_changed();
+    void set_allocation_kind(AllocationKind kind);
     void set_time(double ts);
     void set_process(std::string process_id);
     void set_birth_range(std::optional<std::pair<double, double>> range);
@@ -13,6 +14,7 @@ public:
     void select_function(const TraceModel& model, int32_t row);
     void select_stack(const TraceModel& model, int32_t row);
 
+    AllocationKind allocation_kind() const { return allocation_kind_; }
     double time() const { return time_; }
     const std::string& process_id() const { return process_id_; }
     const std::optional<std::pair<double, double>>& birth_range() const { return birth_range_; }
@@ -21,11 +23,15 @@ public:
     int32_t selected_stack() const { return selected_stack_; }
     const std::vector<size_t>& contributing_stacks() const { return contributing_stacks_; }
     const std::vector<int32_t>& selected_path() const { return selected_path_; }
-    void select_snapshot(size_t index) { selected_snapshot_ = index; }
+    void select_snapshot(size_t index) {
+        selected_snapshot_ = index;
+        snapshot_mode_ = true;
+    }
     size_t selected_snapshot() const { return selected_snapshot_; }
 
 private:
     void render_snapshot(const TraceModel& model);
+    AllocationKind allocation_kind_ = AllocationKind::Native;
     bool snapshot_mode_ = false;
     size_t selected_snapshot_ = 0;
     bool initialized_ = false;

@@ -39,6 +39,7 @@ void import_notes(const TraceModel& model) {
 }  // namespace
 
 void MemoryPanel::on_model_changed() {
+    allocation_kind_ = AllocationKind::Native;
     initialized_ = false;
     dirty_ = true;
     time_ = 0;
@@ -51,6 +52,16 @@ void MemoryPanel::on_model_changed() {
     selected_path_.clear();
     selected_snapshot_ = 0;
     snapshot_mode_ = false;
+}
+
+void MemoryPanel::set_allocation_kind(AllocationKind kind) {
+    snapshot_mode_ = false;
+    if (allocation_kind_ == kind) return;
+    allocation_kind_ = kind;
+    dirty_ = true;
+    selected_function_ = selected_stack_ = -1;
+    contributing_stacks_.clear();
+    selected_path_.clear();
 }
 
 void MemoryPanel::set_time(double ts) {
@@ -73,6 +84,13 @@ void MemoryPanel::set_birth_range(std::optional<std::pair<double, double>> range
 }
 
 void MemoryPanel::refresh(const TraceModel& model) {
+    const auto& capabilities = model.profile().capabilities;
+    const bool has_selected_kind = allocation_kind_ == AllocationKind::Native ? capabilities.native_allocation_history
+                                                                              : capabilities.managed_allocation_history;
+    if (!has_selected_kind && (capabilities.native_allocation_history || capabilities.managed_allocation_history)) {
+        allocation_kind_ = capabilities.native_allocation_history ? AllocationKind::Native : AllocationKind::Managed;
+        dirty_ = true;
+    }
     if (!initialized_) {
         time_ = model.profile().capture_end_ts.value_or(model.min_ts() <= model.max_ts() ? model.max_ts() : 0);
         initialized_ = true;
@@ -87,7 +105,7 @@ void MemoryPanel::refresh(const TraceModel& model) {
         const auto& selected = result_.stacks[selected_stack_];
         stack = {selected.process_id, selected.frame_index};
     }
-    result_ = model.query_outstanding_memory(time_, birth_range_, process_id_);
+    result_ = model.query_outstanding_memory(time_, birth_range_, process_id_, allocation_kind_);
     std::stable_sort(result_.functions.begin(), result_.functions.end(),
                      [](const auto& a, const auto& b) { return greater_amount(a.inclusive, b.inclusive); });
     std::stable_sort(result_.stacks.begin(), result_.stacks.end(),
@@ -158,26 +176,45 @@ void MemoryPanel::render(const TraceModel& model, ViewState& view) {
     refresh(model);
     const bool has_snapshots = !model.profile().managed_snapshots.empty();
     const bool has_native = model.profile().capabilities.native_allocation_history;
-    if (has_snapshots && has_native) {
-        if (ImGui::RadioButton("Native outstanding memory", !snapshot_mode_)) snapshot_mode_ = false;
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Managed snapshots", snapshot_mode_)) snapshot_mode_ = true;
+    const bool has_managed = model.profile().capabilities.managed_allocation_history;
+    if (has_native + has_managed + has_snapshots > 1) {
+        if (has_native && ImGui::RadioButton("Native outstanding memory",
+                                             !snapshot_mode_ && allocation_kind_ == AllocationKind::Native))
+            set_allocation_kind(AllocationKind::Native);
+        if (has_managed) {
+            if (has_native) ImGui::SameLine();
+            if (ImGui::RadioButton("Managed outstanding memory",
+                                   !snapshot_mode_ && allocation_kind_ == AllocationKind::Managed))
+                set_allocation_kind(AllocationKind::Managed);
+        }
+        if (has_snapshots) {
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Managed snapshots", snapshot_mode_)) select_snapshot(selected_snapshot_);
+        }
     }
-    if (has_snapshots && (!has_native || snapshot_mode_)) {
+    if (has_snapshots && ((!has_native && !has_managed) || snapshot_mode_)) {
         render_snapshot(model);
         ImGui::End();
         return;
     }
-    if (!model.profile().capabilities.native_allocation_history) {
+    if (!has_native && !has_managed) {
         ImGui::TextWrapped(
-            "Native allocation history is unavailable. Outstanding native memory cannot be attributed from this "
+            "Allocation history is unavailable. Outstanding memory cannot be attributed from this "
             "profile.");
         if (model.profile().capabilities.managed_heap_snapshots)
             ImGui::TextWrapped("Heap snapshots alone do not record allocation origins.");
         ImGui::End();
         return;
     }
-    ImGui::TextUnformatted("Native outstanding memory");
+    ImGui::TextUnformatted(allocation_kind_ == AllocationKind::Native ? "Native outstanding memory"
+                                                                      : "Managed outstanding memory");
+    if (allocation_kind_ == AllocationKind::Managed) {
+        ImGui::TextWrapped(
+            "GC checkpoints bound observed survival and absence. Unobserved intervals remain uncertain; a "
+            "collection checkpoint does not give the exact release time.");
+        if (!model.profile().capabilities.managed_survival)
+            ImGui::TextWrapped("GC survival observations are unavailable in this capture.");
+    }
     double edited_time = time_;
     ImGui::SetNextItemWidth(190);
     if (ImGui::InputDouble("T (microseconds)", &edited_time, 0, 0, "%.6f")) set_time(edited_time);

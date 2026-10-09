@@ -128,16 +128,18 @@ float current_rss_mb() const;
 DiagStats stats;  // fields: visible_slices, drawn_slices, merged_slices, merge_runs, labels_drawn, tracks_visible, instant_events
 ```
 
-## memory_panel.h / memory_panel.cpp - native outstanding memory queries and source navigation, managed snapshot/type summaries with attribution limits, and collapsible import notes
+## memory_panel.h / memory_panel.cpp - native and managed outstanding memory queries with checkpoint limits and source navigation, managed snapshot/type summaries, and collapsible import notes
 ```
 void render(const TraceModel&, ViewState&);
 void on_model_changed();
+void set_allocation_kind(AllocationKind kind);
 void set_time(double ts);
 void set_process(std::string process_id);
 void set_birth_range(std::optional<std::pair<double, double>> range);
 void refresh(const TraceModel&);
 void select_function(const TraceModel&, int32_t row);
 void select_stack(const TraceModel&, int32_t row);
+AllocationKind allocation_kind() const;
 double time() const;
 const std::string& process_id() const;
 const std::optional<std::pair<double, double>>& birth_range() const;
