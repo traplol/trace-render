@@ -1,5 +1,8 @@
 #include "trace_parser.h"
 #include "profile_io.h"
+#ifndef __EMSCRIPTEN__
+#include "diagsession_import.h"
+#endif
 #include "tracing.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -527,6 +530,21 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
         file.close();
     }
 
+#ifndef __EMSCRIPTEN__
+    if (is_diagsession_container(content)) {
+        bool ok = read_diagsession(content, model, error_message_, [this](const char* phase, float p) {
+            if (on_progress_) on_progress_(phase, p);
+            return true;
+        });
+        if (ok) {
+            auto profile = model.profile();
+            profile.source_name = filepath;
+            model.set_profile(std::move(profile));
+            if (on_progress_) on_progress_("Done", 1.0f);
+        }
+        return ok;
+    }
+#endif
     if (content.compare(0, 9, "TRPROFILE") == 0) {
         if (on_progress_) on_progress_("Parsing profile", 0.0f);
         bool ok = read_profile(content, model, error_message_);
@@ -571,6 +589,17 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
 bool TraceParser::parse_buffer(const char* data, size_t size, TraceModel& model) {
     TRACE_FUNCTION_CAT("parser");
 
+#ifndef __EMSCRIPTEN__
+    if (is_diagsession_container(std::string_view(data, size))) {
+        bool ok =
+            read_diagsession(std::string_view(data, size), model, error_message_, [this](const char* phase, float p) {
+                if (on_progress_) on_progress_(phase, p);
+                return true;
+            });
+        if (ok && on_progress_) on_progress_("Done", 1.0f);
+        return ok;
+    }
+#endif
     if (std::string_view(data, size).substr(0, 9) == "TRPROFILE") {
         if (on_progress_) on_progress_("Parsing profile", 0.0f);
         bool ok = read_profile(std::string_view(data, size), model, error_message_);

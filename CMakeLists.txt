@@ -60,6 +60,29 @@ FetchContent_Declare(sqlite3
   URL        https://www.sqlite.org/2024/sqlite-amalgamation-3450100.zip
 )
 
+# Desktop .diagsession ZIP/XML resources. Isolate generic vendor test options.
+if(NOT EMSCRIPTEN)
+  FetchContent_Declare(miniz
+    GIT_REPOSITORY https://github.com/richgel999/miniz.git
+    GIT_TAG 3.1.2
+    GIT_SHALLOW TRUE
+  )
+  FetchContent_Declare(tinyxml2
+    GIT_REPOSITORY https://github.com/leethomason/tinyxml2.git
+    GIT_TAG 11.0.0
+    GIT_SHALLOW TRUE
+  )
+  function(add_diagsession_dependencies)
+    set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+    set(BUILD_TESTS OFF)
+    set(BUILD_EXAMPLES OFF)
+    set(INSTALL_PROJECT OFF)
+    set(tinyxml2_BUILD_TESTING OFF)
+    FetchContent_MakeAvailable(miniz tinyxml2)
+  endfunction()
+  add_diagsession_dependencies()
+endif()
+
 if(EMSCRIPTEN)
   FetchContent_MakeAvailable(json imgui sqlite3)
 else()
@@ -102,6 +125,7 @@ file(GLOB_RECURSE APP_SOURCES src/*.cpp)
 # Exclude the wrong platform's source files
 if(EMSCRIPTEN)
   list(FILTER APP_SOURCES EXCLUDE REGEX "platform_desktop\\.cpp$|file_loader_desktop\\.cpp$")
+  list(FILTER APP_SOURCES EXCLUDE REGEX "diagsession_import\\.cpp$|diagsession_container\\.cpp$|etl_reader\\.cpp$|xpress_huffman\\.cpp$")
 else()
   list(FILTER APP_SOURCES EXCLUDE REGEX "platform_wasm\\.cpp$|file_loader_wasm\\.cpp$")
 endif()
@@ -132,6 +156,8 @@ if(EMSCRIPTEN)
   )
 else()
   target_link_libraries(trace_render PRIVATE
+    miniz
+    tinyxml2::tinyxml2
     imgui_lib
     nlohmann_json::nlohmann_json
     sqlite3_lib
@@ -164,6 +190,7 @@ if(NOT EMSCRIPTEN)
     add_executable(trace_render_tests EXCLUDE_FROM_ALL ${TEST_SOURCES} ${LIB_SOURCES})
     target_include_directories(trace_render_tests PRIVATE src)
     enable_native_pdb(trace_render_tests)
+    target_link_libraries(trace_render_tests PRIVATE miniz tinyxml2::tinyxml2)
     target_link_libraries(trace_render_tests PRIVATE
       GTest::gtest_main
       imgui_lib
