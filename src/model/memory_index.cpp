@@ -37,7 +37,7 @@ void MemoryIndex::clear() {
 void MemoryIndex::build(const ProfileData& profile, const std::vector<StackFrame>& frames,
                         const std::vector<std::string>& strings) {
     clear();
-    if (!profile.capabilities.native_allocation_history) return;
+    if (!profile.capabilities.native_allocation_history && !profile.capabilities.managed_allocation_history) return;
     std::unordered_map<std::string, int32_t> frame_ids;
     std::map<std::tuple<int, uint32_t, uint32_t, uint64_t>, int32_t> functions;
     frame_functions_.resize(frames.size(), -1);
@@ -56,13 +56,32 @@ void MemoryIndex::build(const ProfileData& profile, const std::vector<StackFrame
     std::unordered_map<std::string, std::optional<double>> heap_ends, process_ends;
     for (const auto& heap : profile.heaps) heap_ends.emplace(heap.id, heap.end_ts);
     for (const auto& process : profile.processes) process_ends.emplace(process.id, process.end_ts);
+    std::unordered_map<std::string, double> survived_through, absent_from;
+    if (profile.capabilities.managed_survival) {
+        for (const auto& observation : profile.managed_survival) {
+            auto& bounds = observation.survived ? survived_through : absent_from;
+            auto inserted = bounds.emplace(observation.allocation_id, observation.ts);
+            if (!inserted.second)
+                inserted.first->second = observation.survived ? std::max(inserted.first->second, observation.ts)
+                                                              : std::min(inserted.first->second, observation.ts);
+        }
+    }
     for (size_t i = 0; i < profile.allocations.size(); ++i) {
         const auto& allocation = profile.allocations[i];
-        if (allocation.kind != AllocationKind::Native) continue;
+        if (allocation.kind == AllocationKind::Native ? !profile.capabilities.native_allocation_history
+                                                      : !profile.capabilities.managed_allocation_history)
+            continue;
         Entry entry;
         entry.allocation = i;
         entry.start = allocation.allocated_ts.value_or(-INFINITY_TS);
         entry.end = allocation.freed_ts.value_or(INFINITY_TS);
+        entry.survived_through = entry.start;
+        if (allocation.kind == AllocationKind::Managed) {
+            auto survived = survived_through.find(allocation.id);
+            if (survived != survived_through.end()) entry.survived_through = survived->second;
+            auto absent = absent_from.find(allocation.id);
+            if (absent != absent_from.end()) entry.end = std::min(entry.end, absent->second);
+        }
         auto heap = heap_ends.find(allocation.heap_id);
         if (heap != heap_ends.end() && heap->second) entry.end = std::min(entry.end, *heap->second);
         auto process = process_ends.find(allocation.process_id);
@@ -94,8 +113,11 @@ void MemoryIndex::build(const ProfileData& profile, const std::vector<StackFrame
 
 OutstandingMemory MemoryIndex::query(const ProfileData& profile, double ts,
                                      std::optional<std::pair<double, double>> born_between,
-                                     const std::string& process_id) const {
-    if (!profile.capabilities.native_allocation_history) return failure("Native allocation history is unavailable.");
+                                     const std::string& process_id, AllocationKind kind) const {
+    if (kind == AllocationKind::Native ? !profile.capabilities.native_allocation_history
+                                       : !profile.capabilities.managed_allocation_history)
+        return failure(kind == AllocationKind::Native ? "Native allocation history is unavailable."
+                                                      : "Managed allocation history is unavailable.");
     if (!std::isfinite(ts)) return failure("Outstanding memory requires a finite timestamp.");
     if ((profile.capture_start_ts && ts < *profile.capture_start_ts) ||
         (profile.capture_end_ts && ts > *profile.capture_end_ts))
@@ -118,6 +140,7 @@ OutstandingMemory MemoryIndex::query(const ProfileData& profile, double ts,
             if (entry.start > ts) break;
             if (entry.end <= ts) continue;
             const auto& allocation = profile.allocations[entry.allocation];
+            if (allocation.kind != kind) continue;
             if (!process_id.empty() && allocation.process_id != process_id) continue;
             if (born_between) {
                 if (!allocation.allocated_ts) {
@@ -130,7 +153,8 @@ OutstandingMemory MemoryIndex::query(const ProfileData& profile, double ts,
             }
             const bool known = !uncertain_coverage && allocation.allocated_ts &&
                                ((allocation.end_state == AllocationEnd::Freed && allocation.freed_ts) ||
-                                (allocation.end_state == AllocationEnd::LiveAtCaptureEnd && profile.capture_end_ts));
+                                (allocation.end_state == AllocationEnd::LiveAtCaptureEnd && profile.capture_end_ts) ||
+                                (kind == AllocationKind::Managed && ts <= entry.survived_through));
             result.incomplete |= !known;
             if (!add_amount(result.total, allocation.size_bytes, known))
                 return failure("Outstanding allocation totals exceed the 64-bit range.");

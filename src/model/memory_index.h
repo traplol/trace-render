@@ -46,9 +46,11 @@ public:
 
     // Allocation lifetime [allocated_ts, freed_ts). Birth filters use [first, second).
     // Known live-at-end observations apply only through capture_end_ts, inclusive.
+    // Managed survival proves liveness through the last positive checkpoint;
+    // a negative checkpoint bounds absence without supplying an exact free time.
     OutstandingMemory query(const ProfileData& profile, double ts,
                             std::optional<std::pair<double, double>> born_between = std::nullopt,
-                            const std::string& process_id = {}) const;
+                            const std::string& process_id = {}, AllocationKind kind = AllocationKind::Native) const;
 
     bool stack_contains_function(int32_t leaf_frame, int32_t function_frame) const;
 
@@ -59,6 +61,7 @@ private:
         size_t allocation = 0;
         double start = 0;
         double end = 0;
+        double survived_through = 0;
         int32_t frame = -1;
     };
     struct Block {

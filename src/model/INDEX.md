@@ -58,15 +58,15 @@ int32_t find_longest_child(uint32_t event_idx) const;
 int32_t find_prev_sibling(uint32_t event_idx) const;
 int32_t find_next_sibling(uint32_t event_idx) const;
 void query_visible(const ThreadInfo&, double start_ts, double end_ts, std::vector<uint32_t>& out) const;
-OutstandingMemory query_outstanding_memory(double ts, std::optional<std::pair<double, double>> born_between = std::nullopt, const std::string& process_id = {}) const;
+OutstandingMemory query_outstanding_memory(double ts, std::optional<std::pair<double, double>> born_between = std::nullopt, const std::string& process_id = {}, AllocationKind kind = AllocationKind::Native) const;
 bool memory_stack_contains_function(int32_t leaf_frame, int32_t function_frame) const;
 void clear();
 ```
 
-## memory_index.h / memory_index.cpp — native lifetime index and outstanding byte/count queries with allocation cohort filters, stack/function grouping, and separate uncertain totals
+## memory_index.h / memory_index.cpp — native and managed lifetime index with GC observation bounds, allocation cohort filters, stack/function grouping, and separate uncertain totals
 ```
 void MemoryIndex::build(const ProfileData& profile, const std::vector<StackFrame>& frames, const std::vector<std::string>& strings);
-OutstandingMemory MemoryIndex::query(const ProfileData& profile, double ts, std::optional<std::pair<double, double>> born_between = std::nullopt, const std::string& process_id = {}) const;
+OutstandingMemory MemoryIndex::query(const ProfileData& profile, double ts, std::optional<std::pair<double, double>> born_between = std::nullopt, const std::string& process_id = {}, AllocationKind kind = AllocationKind::Native) const;
 bool MemoryIndex::stack_contains_function(int32_t leaf_frame, int32_t function_frame) const;
 void MemoryIndex::clear();
 ```

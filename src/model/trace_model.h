@@ -165,8 +165,9 @@ public:
 
     OutstandingMemory query_outstanding_memory(double ts,
                                                std::optional<std::pair<double, double>> born_between = std::nullopt,
-                                               const std::string& process_id = {}) const {
-        return memory_index_.query(profile_, ts, born_between, process_id);
+                                               const std::string& process_id = {},
+                                               AllocationKind kind = AllocationKind::Native) const {
+        return memory_index_.query(profile_, ts, born_between, process_id, kind);
     }
 
     bool memory_stack_contains_function(int32_t leaf_frame, int32_t function_frame) const {
