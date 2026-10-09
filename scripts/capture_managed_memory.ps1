@@ -1,4 +1,7 @@
-param([string]$OutputDirectory = (Join-Path $PSScriptRoot "../managed-memory-capture"))
+param(
+    [string]$OutputDirectory = (Join-Path $PSScriptRoot "../managed-memory-capture"),
+    [ValidateSet("net8.0", "net48")][string]$Framework = "net8.0"
+)
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
@@ -16,7 +19,7 @@ $diagnostics = Join-Path $collector "VSDiagnostics.exe"
 $config = Join-Path $collector "AgentConfigs/DotNetObjectAllocBase.json"
 if (!(Test-Path $diagnostics) -or !(Test-Path $config)) { throw "VSDiagnostics or DotNetObjectAllocBase.json is missing" }
 
-& dotnet publish $fixture -c Release --self-contained false -r win-x64 -o $app *> (Join-Path $output "build.log")
+& dotnet publish $fixture -c Release -f $Framework --self-contained false -r win-x64 -o $app *> (Join-Path $output "build.log")
 if ($LASTEXITCODE -ne 0) { throw "Fixture build failed; see build.log" }
 Copy-Item $config (Join-Path $output "DotNetObjectAllocBase.json")
 $metadata = [ordered]@{
@@ -24,6 +27,7 @@ $metadata = [ordered]@{
     diagnosticsVersion = (Get-Item $diagnostics).VersionInfo.FileVersion
     configSha256 = (Get-FileHash $config -Algorithm SHA256).Hash
     workload = "TraceManagedMemoryFixture"
+    framework = $Framework
     expectedRetainedPayloads = 2048
     expectedReleasedPayloads = 4096
     semantics = "Capture must be inspected for allocation, stack, movement and survival coverage; counts are not presumed exact."
@@ -48,7 +52,10 @@ try {
 }
 if (!(Test-Path (Join-Path $output "managed-allocation-survival.diagsession"))) { throw "No capture was produced" }
 $checkpoints = Get-Content (Join-Path $app "checkpoints.json") -Raw | ConvertFrom-Json
-if ($checkpoints.checkpoints[-1].retainedPayloads -ne 2048 -or $checkpoints.checkpoints[-1].releasedObjectAlive) {
+if ($checkpoints.checkpoints[-1].retainedPayloads -ne 2048 -or
+    $checkpoints.checkpoints[-1].retainedBytes -ne 8388608 -or
+    $checkpoints.checkpoints[-1].releasedObjectAlive -or
+    !$checkpoints.checkpoints[-2].largeObjectAlive -or $checkpoints.checkpoints[-1].largeObjectAlive) {
     throw "Synthetic retention/release oracle failed"
 }
 
