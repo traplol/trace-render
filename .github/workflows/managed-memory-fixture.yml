@@ -1,0 +1,27 @@
+name: Managed memory fixture
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [capture/managed-memory-fixture]
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Capture synthetic managed allocation and survival workload
+        shell: pwsh
+        run: ./scripts/capture_managed_memory.ps1 -OutputDirectory '${{ runner.temp }}/managed-memory-capture'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: managed-memory-capture
+          path: ${{ runner.temp }}/managed-memory-capture
+          retention-days: 7
