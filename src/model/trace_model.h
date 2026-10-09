@@ -169,6 +169,10 @@ public:
         return memory_index_.query(profile_, ts, born_between, process_id);
     }
 
+    bool memory_stack_contains_function(int32_t leaf_frame, int32_t function_frame) const {
+        return memory_index_.stack_contains_function(leaf_frame, function_frame);
+    }
+
     // Compute self time for an event (wall time minus immediate children's durations).
     double compute_self_time(uint32_t event_idx) const;
 

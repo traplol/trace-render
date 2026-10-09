@@ -30,7 +30,16 @@ public:
 
     // --- Selection ---
     int32_t selected_event_idx() const { return selected_event_idx_; }
-    void set_selected_event_idx(int32_t idx) { selected_event_idx_ = idx; }
+    void set_selected_event_idx(int32_t idx) {
+        selected_event_idx_ = idx;
+        selected_stack_frame_idx_ = -1;
+    }
+    int32_t selected_stack_frame_idx() const { return selected_stack_frame_idx_; }
+    void select_stack_frame(int32_t idx) {
+        selected_stack_frame_idx_ = idx;
+        selected_event_idx_ = -1;
+        pending_scroll_event_idx_ = -1;
+    }
     int32_t pending_scroll_event_idx() const { return pending_scroll_event_idx_; }
     void set_pending_scroll_event_idx(int32_t idx) { pending_scroll_event_idx_ = idx; }
 
@@ -169,7 +178,7 @@ public:
     // it is automatically scaled down by 1000x so the padding is appropriate
     // for nanosecond-resolution traces.
     void navigate_to_event(int32_t ev_idx, const TraceEvent& ev, double pad_factor = 0.5, double min_pad_us = 100.0) {
-        selected_event_idx_ = ev_idx;
+        set_selected_event_idx(ev_idx);
         pending_scroll_event_idx_ = ev_idx;
         double effective_min_pad = time_unit_ns_ ? min_pad_us / 1000.0 : min_pad_us;
         double pad = std::max(ev.dur * pad_factor, effective_min_pad);
@@ -209,6 +218,7 @@ private:
     double trace_max_ts_ = 0.0;
     bool has_trace_bounds_ = false;
     int32_t selected_event_idx_ = -1;
+    int32_t selected_stack_frame_idx_ = -1;
     int32_t pending_scroll_event_idx_ = -1;
     bool has_range_selection_ = false;
     bool range_selecting_ = false;

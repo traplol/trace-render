@@ -59,6 +59,7 @@ int32_t find_prev_sibling(uint32_t event_idx) const;
 int32_t find_next_sibling(uint32_t event_idx) const;
 void query_visible(const ThreadInfo&, double start_ts, double end_ts, std::vector<uint32_t>& out) const;
 OutstandingMemory query_outstanding_memory(double ts, std::optional<std::pair<double, double>> born_between = std::nullopt, const std::string& process_id = {}) const;
+bool memory_stack_contains_function(int32_t leaf_frame, int32_t function_frame) const;
 void clear();
 ```
 
@@ -66,6 +67,7 @@ void clear();
 ```
 void MemoryIndex::build(const ProfileData& profile, const std::vector<StackFrame>& frames, const std::vector<std::string>& strings);
 OutstandingMemory MemoryIndex::query(const ProfileData& profile, double ts, std::optional<std::pair<double, double>> born_between = std::nullopt, const std::string& process_id = {}) const;
+bool MemoryIndex::stack_contains_function(int32_t leaf_frame, int32_t function_frame) const;
 void MemoryIndex::clear();
 ```
 

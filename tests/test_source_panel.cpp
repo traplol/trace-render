@@ -49,6 +49,18 @@ TEST(ExtractSourceLocation, FileOnly) {
     EXPECT_EQ(line, -1);
 }
 
+TEST(ExtractSourceLocation, FrameWithoutSourceKeepsEventArgumentFallback) {
+    auto model = make_model_with_args(R"({"file":"only_file.cpp"})");
+    model.add_stack_frame(StackFrame{});
+    TraceEvent event = model.events()[0];
+    event.stack_frame_idx = 0;
+    std::string file;
+    int line = -1;
+    EXPECT_TRUE(extract_source_location(model, event, file, line));
+    EXPECT_EQ(file, "only_file.cpp");
+    EXPECT_EQ(line, -1);
+}
+
 TEST(ExtractSourceLocation, NoSourceFields) {
     auto model = make_model_with_args(R"({"duration":123,"name":"test"})");
     std::string file;

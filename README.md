@@ -130,6 +130,14 @@ Requires [Emscripten](https://emscripten.org/).
 
 You can also drag & drop a trace file onto the window.
 
+### Outstanding memory
+
+The Memory tab uses recorded native allocation lifetimes in a `.trprofile`. It defaults to the capture end. Set T in microseconds or use a selected event's time, then select a function to inspect its allocation paths. The birth filter selects allocations born at or after its start and before its end that remain outstanding at T. You can copy the timeline range into that filter or clear it to include earlier allocations.
+
+Known bytes and allocation counts include intentional retention. Records with an unknown start or end, sampled allocation events, and capture gaps are shown separately as uncertain. These numbers describe recorded allocations, not process RAM or total allocation traffic. Inclusive function rows overlap because each call path contributes to several functions; the summary counts each allocation once.
+
+Select an allocation path to see its frames. **View source** opens saved source locations in the existing Source tab, including in profiles without CPU events. Missing symbols remain visible as addresses, and source path remapping works as it does for trace events. Profiles without native allocation history explain why this analysis is unavailable.
+
 ### Controls
 
 | Action | Input |

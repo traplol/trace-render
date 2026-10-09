@@ -62,6 +62,8 @@ void App::finish_load() {
         search_.on_model_changed();
         instances_.on_model_changed();
         flame_graph_.on_model_changed();
+        memory_.on_model_changed();
+        source_.on_model_changed();
         if (model_.min_ts() < model_.max_ts()) {
             view_.set_trace_bounds(model_.min_ts(), model_.max_ts());
             view_.zoom_to_fit(model_.min_ts(), model_.max_ts());
@@ -205,6 +207,7 @@ void App::update() {
             ImGui::DockBuilderDockWindow("Search", dock_bottom);
             ImGui::DockBuilderDockWindow("Statistics", dock_bottom);
             ImGui::DockBuilderDockWindow("Flame Graph", dock_bottom);
+            ImGui::DockBuilderDockWindow("Memory", dock_bottom);
             ImGui::DockBuilderDockWindow("Instances", dock_bottom_right);
 
             ImGui::DockBuilderFinish(dockspace_id);
@@ -243,6 +246,7 @@ void App::update() {
         stats_.render(model_, query_db_, view_);
         instances_.render(model_, view_);
         diagnostics_.stats = timeline_.diag_stats;
+        memory_.render(model_, view_);
         source_.render(model_, view_);
         flame_graph_.render(model_, view_);
         diagnostics_.render(model_, view_);
@@ -284,6 +288,10 @@ void App::update() {
 
         ImGui::Begin("Flame Graph");
         ImGui::TextDisabled("No trace loaded.");
+        ImGui::End();
+
+        ImGui::Begin("Memory");
+        ImGui::TextDisabled("No profile loaded.");
         ImGui::End();
 
         diagnostics_.render(model_, view_);

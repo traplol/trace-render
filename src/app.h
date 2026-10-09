@@ -15,6 +15,7 @@
 #include "ui/diagnostics_panel.h"
 #include "ui/source_panel.h"
 #include "ui/flame_graph_panel.h"
+#include "ui/memory_panel.h"
 #include "model/query_db.h"
 #include <string>
 #include <vector>
@@ -50,6 +51,7 @@ private:
     DiagnosticsPanel diagnostics_;
     SourcePanel source_;
     FlameGraphPanel flame_graph_;
+    MemoryPanel memory_;
     QueryDb query_db_;
 
     bool has_trace_ = false;

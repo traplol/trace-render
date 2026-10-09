@@ -50,6 +50,8 @@ public:
                             std::optional<std::pair<double, double>> born_between = std::nullopt,
                             const std::string& process_id = {}) const;
 
+    bool stack_contains_function(int32_t leaf_frame, int32_t function_frame) const;
+
     void clear();
 
 private:

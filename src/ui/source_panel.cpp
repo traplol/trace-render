@@ -11,17 +11,19 @@
 
 using json = nlohmann::json;
 
+bool extract_source_location(const TraceModel& model, const StackFrame& frame, std::string& file, int& line) {
+    if (frame.source_file == 0 || model.get_string(frame.source_file).empty()) return false;
+    file = model.get_string(frame.source_file);
+    line = frame.source_line > 0 ? (int)frame.source_line : -1;
+    return true;
+}
+
 // Try common field names for source file and line in event args
 bool extract_source_location(const TraceModel& model, const TraceEvent& ev, std::string& file, int& line) {
     TRACE_FUNCTION_CAT("ui");
-    if (ev.stack_frame_idx >= 0 && (size_t)ev.stack_frame_idx < model.stack_frames().size()) {
-        const auto& frame = model.stack_frames()[ev.stack_frame_idx];
-        if (frame.source_file != 0) {
-            file = model.get_string(frame.source_file);
-            line = (int)frame.source_line;
-            return !file.empty();
-        }
-    }
+    if (ev.stack_frame_idx >= 0 && (size_t)ev.stack_frame_idx < model.stack_frames().size() &&
+        extract_source_location(model, model.stack_frames()[ev.stack_frame_idx], file, line))
+        return true;
     if (ev.args_idx == UINT32_MAX || ev.args_idx >= model.args().size()) return false;
 
     try {
@@ -243,24 +245,31 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
 
     ImGui::Separator();
 
-    if (view.selected_event_idx() < 0 || view.selected_event_idx() >= (int32_t)model.events().size()) {
-        ImGui::TextDisabled("Select an event to view source code.");
+    bool has_frame =
+        view.selected_stack_frame_idx() >= 0 && view.selected_stack_frame_idx() < (int32_t)model.stack_frames().size();
+    bool has_event = view.selected_event_idx() >= 0 && view.selected_event_idx() < (int32_t)model.events().size();
+    if (!has_frame && !has_event) {
+        ImGui::TextDisabled("Select an event or allocation frame to view source code.");
         ImGui::End();
         return;
     }
 
-    bool selection_changed = (cached_event_idx_ != view.selected_event_idx());
+    bool selection_changed =
+        cached_event_idx_ != view.selected_event_idx() || cached_stack_frame_idx_ != view.selected_stack_frame_idx();
     bool tab_just_shown = ImGui::IsWindowAppearing();
 
     // Check if selection or path settings changed
     if (selection_changed) {
         cached_event_idx_ = view.selected_event_idx();
-        const auto& ev = model.events()[view.selected_event_idx()];
+        cached_stack_frame_idx_ = view.selected_stack_frame_idx();
 
         std::string file;
         int line = -1;
 
-        if (extract_source_location(model, ev, file, line)) {
+        bool found = has_frame ? extract_source_location(model, model.stack_frames()[view.selected_stack_frame_idx()],
+                                                         file, line)
+                               : extract_source_location(model, model.events()[view.selected_event_idx()], file, line);
+        if (found) {
             cached_raw_file_ = file;
             resolve_and_load(cached_raw_file_);
             cached_line_ = line;
@@ -286,8 +295,7 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
     }
 
     if (cached_raw_file_.empty()) {
-        ImGui::TextDisabled("No source location in this event's args.");
-        ImGui::TextDisabled("Expected args fields: file/src_file + line/src_line");
+        ImGui::TextDisabled("No source location was recorded for this selection.");
         ImGui::End();
         return;
     }
@@ -388,4 +396,17 @@ void SourcePanel::render(const TraceModel& model, ViewState& view) {
     if (need_scroll_) need_scroll_ = false;
 
     ImGui::End();
+}
+
+void SourcePanel::on_model_changed() {
+    cached_event_idx_ = -1;
+    cached_stack_frame_idx_ = -1;
+    cached_raw_file_.clear();
+    cached_file_.clear();
+    cached_line_ = -1;
+    cached_lines_.clear();
+    cached_display_text_.clear();
+    cached_gutter_text_.clear();
+    cached_error_.clear();
+    need_scroll_ = false;
 }

@@ -160,3 +160,12 @@ OutstandingMemory MemoryIndex::query(const ProfileData& profile, double ts,
     }
     return result;
 }
+
+bool MemoryIndex::stack_contains_function(int32_t leaf_frame, int32_t function_frame) const {
+    if (leaf_frame == -1) return function_frame == -1;
+    if (leaf_frame < 0 || function_frame < 0 || static_cast<size_t>(leaf_frame) >= stack_functions_.size() ||
+        static_cast<size_t>(function_frame) >= frame_functions_.size())
+        return false;
+    const auto& functions = stack_functions_[leaf_frame];
+    return std::find(functions.begin(), functions.end(), function_frame) != functions.end();
+}

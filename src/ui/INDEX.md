@@ -8,6 +8,7 @@ double view_start_ts() const; void set_view_start_ts(double); double view_end_ts
 void set_view_range(double start, double end);
 // Selection
 int32_t selected_event_idx() const; void set_selected_event_idx(int32_t);
+int32_t selected_stack_frame_idx() const; void select_stack_frame(int32_t);
 int32_t pending_scroll_event_idx() const; void set_pending_scroll_event_idx(int32_t);
 // Range selection
 bool has_range_selection() const; bool range_selecting() const; void set_range_selecting(bool);
@@ -127,12 +128,34 @@ float current_rss_mb() const;
 DiagStats stats;  // fields: visible_slices, drawn_slices, merged_slices, merge_runs, labels_drawn, tracks_visible, instant_events
 ```
 
-## source_panel.h / source_panel.cpp — shows saved stack-frame or event-argument source locations for the selected event with path prefix remapping
+## memory_panel.h / memory_panel.cpp - native outstanding bytes/counts at T, birth-range and process filters, function-to-stack inspection, and source navigation with separate uncertain totals
+```
+void render(const TraceModel&, ViewState&);
+void on_model_changed();
+void set_time(double ts);
+void set_process(std::string process_id);
+void set_birth_range(std::optional<std::pair<double, double>> range);
+void refresh(const TraceModel&);
+void select_function(const TraceModel&, int32_t row);
+void select_stack(const TraceModel&, int32_t row);
+double time() const;
+const std::string& process_id() const;
+const std::optional<std::pair<double, double>>& birth_range() const;
+const OutstandingMemory& result() const;
+int32_t selected_function() const;
+int32_t selected_stack() const;
+const std::vector<size_t>& contributing_stacks() const;
+const std::vector<int32_t>& selected_path() const;
+```
+
+## source_panel.h / source_panel.cpp - shows saved source locations for a selected event or allocation frame with path prefix remapping
 ```
 bool extract_source_location(const TraceModel&, const TraceEvent&, std::string& file, int& line);
+bool extract_source_location(const TraceModel&, const StackFrame&, std::string& file, int& line);
 std::string remap_source_path(const std::string& trace_path, const std::string& strip_prefix, const std::string& local_base);
 void render(const TraceModel&, ViewState&);
 void render_settings();
+void on_model_changed();
 nlohmann::json save_settings() const;
 void load_settings(const nlohmann::json&);
 void reset_settings();

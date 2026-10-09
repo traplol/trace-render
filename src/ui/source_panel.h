@@ -5,10 +5,10 @@
 #include <vector>
 #include <nlohmann/json_fwd.hpp>
 
-// Extract file and line from an event's args JSON.
-// Looks for common field names: file/src_file/fileName + line/src_line/lineNumber.
-// Returns true if a file field was found.
+// Extract saved frame source locations, with common event-args fields as a fallback.
+// Returns true if a source file was found. Unknown line numbers remain -1.
 bool extract_source_location(const TraceModel& model, const TraceEvent& ev, std::string& file, int& line);
+bool extract_source_location(const TraceModel& model, const StackFrame& frame, std::string& file, int& line);
 
 // Remap a source path from a trace to a local filesystem path.
 // 1. Normalizes backslashes to forward slashes
@@ -21,6 +21,7 @@ class SourcePanel {
 public:
     void render(const TraceModel& model, ViewState& view);
     void render_settings();
+    void on_model_changed();
 
     nlohmann::json save_settings() const;
     void load_settings(const nlohmann::json& j);
@@ -34,7 +35,8 @@ private:
 
     // Cached state
     int32_t cached_event_idx_ = -1;
-    std::string cached_raw_file_;  // raw path from args (before remapping)
+    int32_t cached_stack_frame_idx_ = -1;
+    std::string cached_raw_file_;  // recorded source path before remapping
     std::string cached_file_;      // resolved local path (after remapping)
     int cached_line_ = -1;
     std::vector<std::string> cached_lines_;
