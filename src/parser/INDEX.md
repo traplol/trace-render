@@ -25,10 +25,16 @@ bool write_profile(const std::string& filepath, const TraceModel& model, std::st
 void build_native_allocations(const std::vector<NativeHeapEvent>& events, ProfileData& profile, bool complete_event_stream);
 ```
 
-## diagsession_import.h / diagsession_import.cpp — converts metadata-referenced ETL and managed snapshot resources into mixed managed/native CPU samples, native allocations, snapshot summaries, and capture-local identities
+## diagsession_import.h / diagsession_import.cpp — converts metadata-referenced ETL and managed snapshot resources into mixed CPU samples, native and managed allocations, supported GC observations, snapshot summaries, and capture-local identities
 ```
 bool is_diagsession_container(std::string_view bytes);
 bool read_diagsession(std::string_view bytes, TraceModel& model, std::string& error, const ImportProgress& progress = {}, NativeSymbolResolver* symbols = nullptr);
+```
+
+## managed_allocations.h / managed_allocations.cpp — decodes Visual Studio allocation records and replays verified Desktop CLR collections without inferring object addresses or exact free times
+```
+bool decode_managed_allocation(const EtlRecord& record, ManagedAllocationEvent& event);
+void build_managed_allocations(std::vector<ManagedAllocationEvent>& events, ProfileData& profile, bool complete_event_stream, const ImportProgress& progress = {});
 ```
 
 ## managed_methods.h / managed_methods.cpp — resolves recorded CLR method ranges by process and JIT generation while preserving ambiguous or incomplete metadata as unresolved frames

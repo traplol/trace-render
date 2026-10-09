@@ -82,8 +82,12 @@ with recorded allocation stacks. Heap create version 3 is also decoded. The
 native lifetime engine distinguishes missing initial contents from an internal
 recording gap, and preserves the original allocation in the Windows
 Alloc/Free/Realloc-summary sequence. Other heap layouts produce a quality
-limitation. Managed heaps, minidumps, counters, and other non-ETL resources are not
-decoded by this importer yet.
+limitation. Visual Studio .NET Object Allocation records provide managed
+allocation stacks and, for the checked Desktop CLR 4 mode, GC observations.
+[Managed allocation import](managed-allocations.md) documents runtime limits and
+the independent survival proof. [Managed snapshot import](managed-snapshots.md)
+describes supported GCDump type/count/size summaries. Minidumps and non-ETL
+counters are not decoded.
 
 The file layout references are the Windows WDK definitions and the
 [MIT Snail reader at 71b01259](https://github.com/albertziegenhagel/snail-server/tree/71b01259fff9e1ef347a77a7c77d90e35699e1b4/snail/etl).

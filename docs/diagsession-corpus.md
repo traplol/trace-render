@@ -216,3 +216,10 @@ size/hash, supported format and snapshot test command are documented in
 `TRACE_MANAGED_MEMORY_FIXTURE` to the downloaded
 `memory-maui-nine-snapshots.diagsession`. These captures are external fixtures;
 neither establishes managed allocation-origin and GC-survival coverage.
+
+The controlled Visual Studio .NET Object Allocation captures now supply a
+separate origin and survival proof. [Managed allocation import](managed-allocations.md)
+records both runtime artifacts, hashes, regeneration instructions and independent
+GC/function/cohort totals. Use `TRACE_MANAGED_DESKTOP_FIXTURE` for the checked
+Desktop CLR 4 survival capture and `TRACE_MANAGED_CORE_FIXTURE` for the CoreCLR
+capture whose retained-object contradiction requires survival to remain unavailable.

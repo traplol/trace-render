@@ -73,7 +73,7 @@ The flame graph creates separate measured, sample, and sampled-span trees per th
 
 SQL exposes `kind`, `sample_count`, `sample_weight`, `weight_unit`, `estimated_cpu_time`, `estimated_self_cpu_time`, and the raw `sf`. `dur` and `self_time` are NULL for sampled records. Original sample counts are NULL for converted spans. CPU estimates for raw samples belong to the observed leaf; the flame and range views calculate inclusive ancestry. Group queries by `kind` to keep observations and converted spans separate. Existing duration queries continue to select measured events.
 
-TraceRender also opens versioned `.trprofile` files through the normal file loader. These preserve the imported CPU observations, resolved names and source locations, allocation lifetimes, managed snapshots, and capture-quality metadata without requiring the original capture or symbol files. The production writer is `write_profile()` in `src/parser/profile_io.h`. File-menu saving and `.diagsession` decoding are separate integration work. See [the version 1 format](docs/profile-format.md).
+TraceRender opens `.diagsession` files directly on Linux through File > Open, drag and drop, or a command-line path. Import runs locally with progress and cancellation. File > Save Profile creates a versioned `.trprofile` that preserves CPU observations, resolved names and source locations, allocation histories, managed GC observations and snapshots, and capture quality. Reopening needs neither the original capture nor symbol files. See [the desktop import workflow](docs/diagsession-import.md#desktop-workflow) and [the version 1 format](docs/profile-format.md).
 
 Native CPU and allocation frames can share [local PDB resolution through LLVM 18.1](docs/native-symbols.md). Matching PDB GUID/age is required; missing symbols keep module offsets. Saved resolutions reopen without PDBs. Native flame and range views group by function identity, so unrelated functions with the same display name remain separate.
 
@@ -82,7 +82,7 @@ The committed fixtures in `tests/fixtures/` use invented functions and timestamp
 - `sampled_stacks.json` contains `main -> work` at 100 us with 250 us weight and `main` at 10,000 us with 500 us weight on thread 11. The root has two inclusive samples, one exclusive sample, and 750 us estimated CPU. Thread 12 has a separate unweighted observation. The gaps contribute no CPU time. Tests import both field orders.
 - `perfview_spans.json` contains a recursive outer frame from 0 to 10 us and two inner spans from 0 to 5 and 5 to 10 us. The outer estimate is 10 us inclusive and zero self; no original sample counts are inferred.
 
-Direct `.diagsession` loading, ETL/PDB decoding, Windows conversion, and heap inspection are outside this importer.
+Supported `.diagsession` producers and recording modes are listed in the [fixture corpus](docs/diagsession-corpus.md).
 
 ## Building
 
@@ -132,11 +132,13 @@ You can also drag & drop a trace file onto the window.
 
 ### Outstanding memory
 
-The Memory tab uses recorded native allocation lifetimes in a `.trprofile`. It defaults to the capture end. Set T in microseconds or use a selected event's time, then select a function to inspect its allocation paths. The birth filter selects allocations born at or after its start and before its end that remain outstanding at T. You can copy the timeline range into that filter or clear it to include earlier allocations.
+The Memory tab uses recorded native or managed allocation histories from `.diagsession` and `.trprofile` files. It defaults to the capture end. Set T in microseconds or use a selected event's time, then select a function to inspect its allocation paths. The birth filter selects allocations born at or after its start and before its end that remain outstanding at T. You can copy the timeline range into that filter or clear it to include earlier allocations.
 
 Known bytes and allocation counts include intentional retention. Records with an unknown start or end, sampled allocation events, and capture gaps are shown separately as uncertain. These numbers describe recorded allocations, not process RAM or total allocation traffic. Inclusive function rows overlap because each call path contributes to several functions; the summary counts each allocation once.
 
-Select an allocation path to see its frames. **View source** opens saved source locations in the existing Source tab, including in profiles without CPU events. Missing symbols remain visible as addresses, and source path remapping works as it does for trace events. Profiles without native allocation history explain why this analysis is unavailable.
+Managed GC checkpoints bound observed survival and absence; they do not supply exact release times. The checked Desktop CLR 4 capture supports survival analysis. CoreCLR allocation stacks remain available, but survival is unknown because the checked .NET 8 capture contradicts its retained-object checks. See [managed allocation coverage](docs/managed-allocations.md).
+
+Select an allocation path to see its frames. **View source** opens saved source locations in the existing Source tab, including in profiles without CPU events. Missing symbols remain visible as addresses, and source path remapping works as it does for trace events. Captures with several memory capabilities offer a view selector. [Managed heap snapshots](docs/managed-snapshots.md) show recorded type counts and sizes; they cannot identify allocating functions or allocation birth times.
 
 ### Controls
 

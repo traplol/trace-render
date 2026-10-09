@@ -1,5 +1,6 @@
 #include "diagsession_import.h"
 #include "diagsession_container.h"
+#include "managed_allocations.h"
 #include "managed_methods.h"
 #include "managed_snapshot.h"
 #include "native_heap.h"
@@ -95,6 +96,11 @@ public:
         EtlBytes p(r.payload);
         uint32_t ptr = r.pointer_size;
         if (managed_methods_.consume(r)) return;
+        ManagedAllocationEvent managed;
+        if (decode_managed_allocation(r, managed)) {
+            managed_records_.push_back(std::move(managed));
+            return;
+        }
         const bool heap_provider = r.group == 16 || r.provider == "222962ab-6180-4b88-a825-346b75f2a24a";
         if (heap_provider && r.event_id >= 32 && r.event_id <= 36 && (r.opcode < 32 || r.opcode > 36)) {
             unsupported_heap_events_ = true;
@@ -222,7 +228,8 @@ public:
             profile_.quality.incomplete_capture = true;
             warning(profile_, "ETL reports lost events or buffers; CPU observations are incomplete");
         }
-        if (extended_records_) warning(profile_, "ETL EventHeader extended payloads are not decoded");
+        if (extended_records_)
+            warning(profile_, "Some ETL events with EventHeader extensions are not used by this importer");
         build_lifetimes(process_records_, processes_, process_ids_, false);
         build_lifetimes(thread_records_, threads_, thread_ids_, true);
         for (const auto& life : processes_) add_profile_process(life);
@@ -328,6 +335,19 @@ public:
         }
         profile_.quality.allocation_history_gaps |= unsupported_heap_events_;
         build_native_allocations(heaps, profile_, !lost_events_ && !lost_buffers_ && !unsupported_heap_events_);
+        for (size_t i = 0; i < managed_records_.size(); ++i) {
+            if (i % 4096 == 0 && progress &&
+                !progress("Resolving managed allocation stacks", float(i) / managed_records_.size()))
+                throw std::runtime_error("Import canceled");
+            auto& event = managed_records_[i];
+            event.process_id = process_at(event.pid, event.raw_qpc);
+            event.ts_us = timestamp(event.raw_qpc);
+            if (!event.addresses.empty()) {
+                auto frame = make_stack(event.process_id, event.raw_qpc, event.addresses);
+                if (frame != UINT32_MAX) event.stack_frame_id = model_.get_string(frame);
+            }
+        }
+        build_managed_allocations(managed_records_, profile_, !lost_events_ && !lost_buffers_, progress);
         if (used_stacks.size() < stacks_.size())
             warning(profile_, std::to_string(stacks_.size() - used_stacks.size()) +
                                   " StackWalk keys have no decoded CPU or allocation observation");
@@ -540,6 +560,7 @@ private:
     uint64_t min_start_qpc_ = 0, end_filetime_ = 0, lost_events_ = 0;
     bool lost_buffers_ = false, unsupported_heap_events_ = false;
     std::vector<RawHeapRecord> heap_records_;
+    std::vector<ManagedAllocationEvent> managed_records_;
     size_t extended_records_ = 0;
     std::vector<LifecycleRecord> process_records_, thread_records_;
     std::vector<Lifetime> processes_, threads_;
@@ -627,8 +648,9 @@ bool read_diagsession(std::string_view bytes, TraceModel& model, std::string& er
         if (!etls && !profile.capabilities.managed_heap_snapshots)
             throw std::runtime_error(
                 "Diagsession contains no supported ETL resource or managed heap snapshot referenced by metadata");
-        if (!profile.capabilities.native_cpu_samples && !profile.capabilities.native_allocation_history)
-            warning(profile, "No supported CPU samples or native allocation history were found in ETL resources");
+        if (!profile.capabilities.native_cpu_samples && !profile.capabilities.native_allocation_history &&
+            !profile.capabilities.managed_allocation_history)
+            warning(profile, "No supported CPU samples or allocation history were found in ETL resources");
         if (ignored) warning(profile, "Some diagsession resources are not decoded by this importer");
         result.set_profile(std::move(profile));
         if (progress && !progress("Building profile index", 0)) throw std::runtime_error("Import canceled");

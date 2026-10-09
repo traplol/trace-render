@@ -590,7 +590,7 @@ TEST(DiagsessionImport, DecodesHeapRecordsInSamePassAndDoesNotProveSurvivalAcros
     EXPECT_TRUE(model.profile().quality.allocation_history_gaps);
     EXPECT_FALSE(model.profile().capabilities.native_allocation_history);
     EXPECT_NE(std::find(model.profile().quality.warnings.begin(), model.profile().quality.warnings.end(),
-                        "No supported CPU samples or native allocation history were found in ETL resources"),
+                        "No supported CPU samples or allocation history were found in ETL resources"),
               model.profile().quality.warnings.end());
 }
 
