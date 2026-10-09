@@ -21,8 +21,13 @@ public:
     int32_t selected_stack() const { return selected_stack_; }
     const std::vector<size_t>& contributing_stacks() const { return contributing_stacks_; }
     const std::vector<int32_t>& selected_path() const { return selected_path_; }
+    void select_snapshot(size_t index) { selected_snapshot_ = index; }
+    size_t selected_snapshot() const { return selected_snapshot_; }
 
 private:
+    void render_snapshot(const TraceModel& model);
+    bool snapshot_mode_ = false;
+    size_t selected_snapshot_ = 0;
     bool initialized_ = false;
     bool dirty_ = true;
     double time_ = 0;

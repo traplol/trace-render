@@ -13,7 +13,7 @@ void set_time_unit_ns(bool ns);
 void set_native_symbols(NativeSymbolResolver* symbols);
 ```
 
-## profile_io.h / profile_io.cpp — reads and writes version 1 profiles with validated identities, CPU observations, allocation lifetimes, managed observations, optional recorded PDB paths, and backward-compatible allocation-gap quality metadata
+## profile_io.h / profile_io.cpp — reads and writes version 1 profiles with validated identities, CPU observations, allocation lifetimes, managed snapshot quality and sampling weights, optional recorded PDB paths, and allocation-gap metadata
 ```
 bool read_profile(std::string_view data, TraceModel& model, std::string& error);
 bool serialize_profile(const TraceModel& model, std::string& data, std::string& error);
@@ -25,7 +25,7 @@ bool write_profile(const std::string& filepath, const TraceModel& model, std::st
 void build_native_allocations(const std::vector<NativeHeapEvent>& events, ProfileData& profile, bool complete_event_stream);
 ```
 
-## diagsession_import.h / diagsession_import.cpp — converts metadata-referenced ETL resources into CPU samples with mixed managed/native frames, native allocations, recorded stack parts, and capture-local process/module identities
+## diagsession_import.h / diagsession_import.cpp — converts metadata-referenced ETL and managed snapshot resources into mixed managed/native CPU samples, native allocations, snapshot summaries, and capture-local identities
 ```
 bool is_diagsession_container(std::string_view bytes);
 bool read_diagsession(std::string_view bytes, TraceModel& model, std::string& error, const ImportProgress& progress = {}, NativeSymbolResolver* symbols = nullptr);
@@ -37,6 +37,12 @@ bool ManagedMethods::consume(const EtlRecord& record);
 void ManagedMethods::build(const std::function<std::string(uint32_t, uint64_t)>& process_at);
 const ManagedMethod* ManagedMethods::find(const std::string& process_id, uint64_t address, uint64_t qpc) const;
 const std::vector<std::string>& ManagedMethods::warnings() const;
+```
+
+## managed_snapshot.h / managed_snapshot.cpp — reads bounded GCHeapDump graphs and manifest-referenced type summaries while preserving snapshot sampling and partial-data limits
+```
+bool read_gcdump(std::string_view bytes, ManagedSnapshot& snapshot, std::string& error, const ImportProgress& progress = {});
+bool read_managed_snapshots(const DiagsessionContainer& container, ProfileData& profile, std::string& error, const ImportProgress& progress = {});
 ```
 
 ## etl_reader.h / etl_reader.cpp — traverses checked ETL buffers and records, preserves raw QPC and provider payloads, and decompresses supported XPRESS buffers

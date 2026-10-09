@@ -29,6 +29,13 @@ bool greater_amount(const OutstandingMemoryAmount& a, const OutstandingMemoryAmo
     if (a.uncertain.bytes != b.uncertain.bytes) return a.uncertain.bytes > b.uncertain.bytes;
     return a.known.count > b.known.count;
 }
+
+void import_notes(const TraceModel& model) {
+    if (!model.profile().quality.warnings.empty() && ImGui::TreeNode("Import notes")) {
+        for (const auto& warning : model.profile().quality.warnings) ImGui::TextWrapped("%s", warning.c_str());
+        ImGui::TreePop();
+    }
+}
 }  // namespace
 
 void MemoryPanel::on_model_changed() {
@@ -42,6 +49,8 @@ void MemoryPanel::on_model_changed() {
     selected_function_ = selected_stack_ = -1;
     contributing_stacks_.clear();
     selected_path_.clear();
+    selected_snapshot_ = 0;
+    snapshot_mode_ = false;
 }
 
 void MemoryPanel::set_time(double ts) {
@@ -147,6 +156,18 @@ void MemoryPanel::render(const TraceModel& model, ViewState& view) {
         return;
     }
     refresh(model);
+    const bool has_snapshots = !model.profile().managed_snapshots.empty();
+    const bool has_native = model.profile().capabilities.native_allocation_history;
+    if (has_snapshots && has_native) {
+        if (ImGui::RadioButton("Native outstanding memory", !snapshot_mode_)) snapshot_mode_ = false;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Managed snapshots", snapshot_mode_)) snapshot_mode_ = true;
+    }
+    if (has_snapshots && (!has_native || snapshot_mode_)) {
+        render_snapshot(model);
+        ImGui::End();
+        return;
+    }
     if (!model.profile().capabilities.native_allocation_history) {
         ImGui::TextWrapped(
             "Native allocation history is unavailable. Outstanding native memory cannot be attributed from this "
@@ -219,7 +240,7 @@ void MemoryPanel::render(const TraceModel& model, ViewState& view) {
     if (result_.unknown_birth_count)
         ImGui::TextWrapped("Birth filter omitted %llu allocations whose start time is unknown.",
                            (unsigned long long)result_.unknown_birth_count);
-    for (const auto& warning : model.profile().quality.warnings) ImGui::TextWrapped("%s", warning.c_str());
+    import_notes(model);
     ImGui::TextDisabled("Outstanding allocation bytes; not process RAM, total allocated bytes, or CPU time.");
     ImGui::Separator();
     ImGui::TextUnformatted("Functions on allocation stacks");
@@ -318,4 +339,61 @@ void MemoryPanel::render(const TraceModel& model, ViewState& view) {
         }
     }
     ImGui::End();
+}
+
+void MemoryPanel::render_snapshot(const TraceModel& model) {
+    const auto& snapshots = model.profile().managed_snapshots;
+    selected_snapshot_ = std::min(selected_snapshot_, snapshots.size() - 1);
+    ImGui::TextUnformatted("Managed heap snapshots");
+    ImGui::TextWrapped(
+        "Allocation attribution unavailable. These snapshots show recorded objects by type, without allocating "
+        "functions or allocation birth times.");
+    const auto label = [](const ManagedSnapshot& snapshot) {
+        char time[64];
+        format_time(snapshot.ts, time, sizeof(time));
+        return snapshot.id + " | " + time;
+    };
+    if (ImGui::BeginCombo("Snapshot", label(snapshots[selected_snapshot_]).c_str())) {
+        for (size_t i = 0; i < snapshots.size(); ++i)
+            if (ImGui::Selectable(label(snapshots[i]).c_str(), i == selected_snapshot_)) select_snapshot(i);
+        ImGui::EndCombo();
+    }
+    const auto& snapshot = snapshots[selected_snapshot_];
+    ImGui::Text("Process lifetime: %s", snapshot.process_id.c_str());
+    if (snapshot.live_bytes) ImGui::Text("Recorded bytes: %llu", (unsigned long long)*snapshot.live_bytes);
+    if (snapshot.object_count) ImGui::Text("Recorded objects: %llu", (unsigned long long)*snapshot.object_count);
+    if (snapshot.sampled) {
+        ImGui::TextWrapped(
+            "Sampled snapshot. Values are recorded counts and bytes, not estimated complete heap totals.");
+        ImGui::Text("Producer average weights: count %.6g, bytes %.6g", snapshot.average_count_multiplier,
+                    snapshot.average_size_multiplier);
+    }
+    if (snapshot.incomplete) ImGui::TextWrapped("Partial snapshot. Complete heap coverage is unproven.");
+    for (const auto& warning : snapshot.warnings) ImGui::TextWrapped("%s", warning.c_str());
+    import_notes(model);
+    if (ImGui::BeginTable("ManagedTypes", 4,
+                          ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY,
+                          ImVec2(0, 350))) {
+        for (const char* name : {"Type", "Recorded objects", "Recorded bytes", "Producer count weight"})
+            ImGui::TableSetupColumn(name);
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableHeadersRow();
+        ImGuiListClipper clipper;
+        clipper.Begin((int)snapshot.types.size());
+        while (clipper.Step()) {
+            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+                const auto& type = snapshot.types[i];
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(type.name.c_str());
+                ImGui::TableNextColumn();
+                ImGui::Text("%llu", (unsigned long long)type.object_count);
+                ImGui::TableNextColumn();
+                ImGui::Text("%llu", (unsigned long long)type.size_bytes);
+                ImGui::TableNextColumn();
+                ImGui::Text("%.6g", type.count_multiplier);
+            }
+        }
+        ImGui::EndTable();
+    }
 }

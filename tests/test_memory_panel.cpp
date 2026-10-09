@@ -137,6 +137,51 @@ TEST(MemoryPanel, TimeBirthAndProcessControlsUseRecordedLifetimes) {
     EXPECT_EQ(panel.result().total.known.bytes, 189u);
 }
 
+TEST_F(MemoryPanelRenderTest, ManagedSnapshotsShowRecordedCountsWithoutAllocationAttribution) {
+    TraceModel model;
+    model.intern_string("");
+    ProfileData profile;
+    profile.capabilities.managed_heap_snapshots = true;
+    profile.processes = {{"managed-process", 7, {}, {}}};
+    ManagedSnapshot first;
+    first.id = "first";
+    first.process_id = "managed-process";
+    first.ts = 100;
+    first.live_bytes = 48;
+    first.object_count = 2;
+    first.types = {{"retained", "RetainedPayload", 2, 48, 4}};
+    first.sampled = first.incomplete = true;
+    first.average_count_multiplier = 2;
+    first.average_size_multiplier = 3;
+    first.warnings = {"Recorded snapshot coverage note"};
+    auto second = first;
+    second.id = "second";
+    second.ts = 200;
+    second.live_bytes = 96;
+    second.object_count = 4;
+    second.types[0].object_count = 4;
+    second.types[0].size_bytes = 96;
+    profile.managed_snapshots = {first, second};
+    model.set_profile(std::move(profile));
+    model.build_index();
+    MemoryPanel panel;
+    ViewState view;
+    auto text = render(panel, model, view);
+    EXPECT_NE(text.find("Allocation attribution unavailable"), std::string::npos);
+    EXPECT_NE(text.find("Recorded bytes: 48"), std::string::npos);
+    EXPECT_NE(text.find("Recorded objects: 2"), std::string::npos);
+    EXPECT_NE(text.find("Sampled snapshot"), std::string::npos);
+    EXPECT_NE(text.find("Partial snapshot"), std::string::npos);
+    EXPECT_NE(text.find("Recorded snapshot coverage note"), std::string::npos);
+    EXPECT_EQ(text.find("Functions on allocation stacks"), std::string::npos);
+    panel.select_snapshot(1);
+    text = render(panel, model, view);
+    EXPECT_NE(text.find("Recorded bytes: 96"), std::string::npos);
+    EXPECT_NE(text.find("Recorded objects: 4"), std::string::npos);
+    panel.on_model_changed();
+    EXPECT_EQ(panel.selected_snapshot(), 0u);
+}
+
 TEST(MemoryPanel, FunctionSelectionKeepsDistinctIdentitiesAndRecursivePaths) {
     auto model = memory_model();
     MemoryPanel panel;

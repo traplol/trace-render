@@ -54,15 +54,21 @@ struct ManagedTypeSummary {
     std::string name;
     uint64_t object_count = 0;
     uint64_t size_bytes = 0;
+    double count_multiplier = 1;  // producer's sampling weight; counts above remain recorded counts
 };
 
 struct ManagedSnapshot {
     std::string id;
     std::string process_id;
     double ts = 0;
-    std::optional<uint64_t> live_bytes;
+    std::optional<uint64_t> live_bytes;  // recorded graph bytes; no sampling multiplier is applied
     std::optional<uint64_t> object_count;
     std::vector<ManagedTypeSummary> types;
+    bool sampled = false;
+    bool incomplete = false;
+    double average_count_multiplier = 1;
+    double average_size_multiplier = 1;
+    std::vector<std::string> warnings;
 };
 
 struct ManagedSurvivalObservation {

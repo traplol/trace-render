@@ -233,13 +233,20 @@ bool serialize_profile(const TraceModel& model, std::string& data, std::string& 
                 types.push_back({{"type_id", t.type_id},
                                  {"name", t.name},
                                  {"object_count", std::to_string(t.object_count)},
-                                 {"size_bytes", std::to_string(t.size_bytes)}});
-            profile["managed_snapshots"].push_back({{"id", snapshot.id},
-                                                    {"process_id", snapshot.process_id},
-                                                    {"ts", time_value(snapshot.ts)},
-                                                    {"live_bytes", integer_value(snapshot.live_bytes)},
-                                                    {"object_count", integer_value(snapshot.object_count)},
-                                                    {"types", types}});
+                                 {"size_bytes", std::to_string(t.size_bytes)},
+                                 {"count_multiplier", time_value(t.count_multiplier)}});
+            profile["managed_snapshots"].push_back(
+                {{"id", snapshot.id},
+                 {"process_id", snapshot.process_id},
+                 {"ts", time_value(snapshot.ts)},
+                 {"live_bytes", integer_value(snapshot.live_bytes)},
+                 {"object_count", integer_value(snapshot.object_count)},
+                 {"sampled", snapshot.sampled},
+                 {"incomplete", snapshot.incomplete},
+                 {"average_count_multiplier", time_value(snapshot.average_count_multiplier)},
+                 {"average_size_multiplier", time_value(snapshot.average_size_multiplier)},
+                 {"warnings", snapshot.warnings},
+                 {"types", types}});
         }
         for (const auto& o : p.managed_survival)
             profile["managed_survival"].push_back({{"allocation_id", o.allocation_id},
@@ -470,12 +477,23 @@ bool read_profile(std::string_view data, TraceModel& model, std::string& error) 
             snapshot.ts = number(item.at("ts"));
             snapshot.live_bytes = optional_u64(item.at("live_bytes"));
             snapshot.object_count = optional_u64(item.at("object_count"));
+            snapshot.sampled = item.value("sampled", false);
+            snapshot.incomplete = item.value("incomplete", false);
+            snapshot.average_count_multiplier = number(item.value("average_count_multiplier", json(1)));
+            snapshot.average_size_multiplier = number(item.value("average_size_multiplier", json(1)));
+            require(snapshot.average_count_multiplier > 0 && snapshot.average_size_multiplier > 0,
+                    "snapshot sampling multipliers must be positive");
+            snapshot.sampled |= snapshot.average_count_multiplier != 1 || snapshot.average_size_multiplier != 1;
+            snapshot.warnings = item.value("warnings", std::vector<std::string>{});
             std::unordered_set<std::string> type_ids;
             for (const auto& type : array(item, "types")) {
                 auto id = type.at("type_id").get<std::string>();
                 require(!id.empty() && type_ids.insert(id).second, "empty or duplicate snapshot type identity");
-                snapshot.types.push_back(
-                    {id, type.at("name").get<std::string>(), u64(type.at("object_count")), u64(type.at("size_bytes"))});
+                const auto multiplier = number(type.value("count_multiplier", json(1)));
+                require(multiplier > 0, "snapshot type multiplier must be positive");
+                snapshot.sampled |= multiplier != 1;
+                snapshot.types.push_back({id, type.at("name").get<std::string>(), u64(type.at("object_count")),
+                                          u64(type.at("size_bytes")), multiplier});
             }
             profile.managed_snapshots.push_back(std::move(snapshot));
         }

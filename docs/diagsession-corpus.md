@@ -197,3 +197,22 @@ The search also found a native ECS memory capture in
 is disabled. Its pointer alone is not a usable fixture. The public CSCN capture
 above supplies the working native memory proof without requiring the user to
 record a new profile.
+
+## Managed captures
+
+The managed CPU capture comes from
+[Azure/durabletask issue 361](https://github.com/Azure/durabletask/issues/361).
+Download the public [diagsession.zip attachment](https://github.com/Azure/durabletask/files/4050870/diagsession.zip),
+extract its `error.diagsession` member, and rename it to
+`test_data/diagsession/cpu-azure-durabletask.diagsession`. The extracted file is
+14,924,022 bytes, SHA-256
+`c4221cbb1a67c403f1004d45dc57ec92aee0edaaf4548de6ab01d237effc9981`,
+with metadata `_BuildVersion` 15.9.18337.3. Set `TRACE_MANAGED_CPU_FIXTURE` to
+that path when running the authentic managed CPU tests.
+
+The nine-snapshot MAUI capture, its original issue/Drive download links, exact
+size/hash, supported format and snapshot test command are documented in
+[Managed heap snapshot import](managed-snapshots.md). Set
+`TRACE_MANAGED_MEMORY_FIXTURE` to the downloaded
+`memory-maui-nine-snapshots.diagsession`. These captures are external fixtures;
+neither establishes managed allocation-origin and GC-survival coverage.

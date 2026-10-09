@@ -128,7 +128,7 @@ float current_rss_mb() const;
 DiagStats stats;  // fields: visible_slices, drawn_slices, merged_slices, merge_runs, labels_drawn, tracks_visible, instant_events
 ```
 
-## memory_panel.h / memory_panel.cpp - native outstanding bytes/counts at T, birth-range and process filters, function-to-stack inspection, and source navigation with separate uncertain totals
+## memory_panel.h / memory_panel.cpp - native outstanding memory queries and source navigation, managed snapshot/type summaries with attribution limits, and collapsible import notes
 ```
 void render(const TraceModel&, ViewState&);
 void on_model_changed();
@@ -146,6 +146,8 @@ int32_t selected_function() const;
 int32_t selected_stack() const;
 const std::vector<size_t>& contributing_stacks() const;
 const std::vector<int32_t>& selected_path() const;
+void select_snapshot(size_t index);
+size_t selected_snapshot() const;
 ```
 
 ## source_panel.h / source_panel.cpp - shows saved source locations for a selected event or allocation frame with path prefix remapping

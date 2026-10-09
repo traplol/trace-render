@@ -1,6 +1,7 @@
 #include "diagsession_import.h"
 #include "diagsession_container.h"
 #include "managed_methods.h"
+#include "managed_snapshot.h"
 #include "native_heap.h"
 #include "symbols/native_symbol_resolver.h"
 #include <nlohmann/json.hpp>
@@ -598,7 +599,7 @@ bool read_diagsession(std::string_view bytes, TraceModel& model, std::string& er
                 continue;
             }
             if (resource.type != "DiagnosticsHub.Resource.EtlFile") {
-                ++ignored;
+                if (resource.type != "MemoryProfiler.Manifest" && resource.type != "MemoryProfiler.GCDump") ++ignored;
                 continue;
             }
             std::vector<uint8_t> data;
@@ -621,11 +622,14 @@ bool read_diagsession(std::string_view bytes, TraceModel& model, std::string& er
             builder.end_resource(info);
             ++etls;
         }
-        if (!etls) throw std::runtime_error("Diagsession contains no supported ETL resource referenced by metadata");
-        builder.finish(progress);
+        if (etls) builder.finish(progress);
+        if (!read_managed_snapshots(container, profile, error, progress)) return false;
+        if (!etls && !profile.capabilities.managed_heap_snapshots)
+            throw std::runtime_error(
+                "Diagsession contains no supported ETL resource or managed heap snapshot referenced by metadata");
         if (!profile.capabilities.native_cpu_samples && !profile.capabilities.native_allocation_history)
             warning(profile, "No supported CPU samples or native allocation history were found in ETL resources");
-        if (ignored) warning(profile, "Non-ETL resources are not decoded by the native CPU importer");
+        if (ignored) warning(profile, "Some diagsession resources are not decoded by this importer");
         result.set_profile(std::move(profile));
         if (progress && !progress("Building profile index", 0)) throw std::runtime_error("Import canceled");
         result.build_index();

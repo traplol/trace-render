@@ -106,4 +106,4 @@ static ImU32 border_color(ImU32 fill);
 static ImU32 text_color(ImU32 bg);
 ```
 
-## profile_data.h — POD records for capabilities, quality and allocation-history gaps, process and heap lifetimes, modules with optional recorded PDB paths, allocation lifetimes, managed snapshots, and GC survival observations
+## profile_data.h — POD records for capabilities, quality and allocation-history gaps, process and heap lifetimes, modules, allocation lifetimes, managed snapshots with separate quality and producer sampling weights, and GC survival observations
