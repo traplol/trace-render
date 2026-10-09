@@ -2,11 +2,14 @@
 #include "parser/diagsession_import.h"
 #include "parser/profile_io.h"
 #include "parser/trace_parser.h"
+#include "platform/file_loader.h"
+#include "symbols/native_symbol_resolver.h"
 #include <miniz.h>
 #include <nlohmann/json.hpp>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
+#include <filesystem>
 
 namespace {
 using json = nlohmann::json;
@@ -125,7 +128,8 @@ std::string etl(const std::string& records, uint32_t loss = 0) {
     bytes += body;
     return bytes;
 }
-std::string session(const std::string& trace, const std::string& second = "", const std::string& label = "cpu.etl") {
+std::string session(const std::string& trace, const std::string& second = "", const std::string& label = "cpu.etl",
+                    const std::string& embedded_pdb = "") {
     mz_zip_archive zip{};
     if (!mz_zip_writer_init_heap(&zip, 0, 0)) throw std::runtime_error("ZIP test init");
     std::string metadata = R"(<Package xmlns="urn:diagnosticshub-package-metadata-2-1"><Content>
@@ -134,6 +138,9 @@ std::string session(const std::string& trace, const std::string& second = "", co
     if (!second.empty())
         metadata += R"(<Resource Type="DiagnosticsHub.Resource.EtlFile" Id="{second}"
       Name="second.etl" ResourcePackageUriPrefix="second" IsDirectoryOnDisk="false"/>)";
+    if (!embedded_pdb.empty())
+        metadata += R"(<Resource Type="DiagnosticsHub.Resource.EmbeddedPdbs" Id="{symbols}"
+      Name="symbols" ResourcePackageUriPrefix="symbols" IsDirectoryOnDisk="true"/>)";
     metadata += "</Content></Package>";
     metadata.replace(metadata.find("cpu.etl"), 7, label);
     mz_zip_writer_add_mem(&zip, "metadata.xml", metadata.data(), metadata.size(), MZ_BEST_SPEED);
@@ -141,6 +148,8 @@ std::string session(const std::string& trace, const std::string& second = "", co
     mz_zip_writer_add_mem(&zip, "decoy.etl", "not an ETL", 10, MZ_BEST_SPEED);
     mz_zip_writer_add_mem(&zip, ("fixture/" + label).c_str(), trace.data(), trace.size(), MZ_BEST_SPEED);
     if (!second.empty()) mz_zip_writer_add_mem(&zip, "second/second.etl", second.data(), second.size(), MZ_BEST_SPEED);
+    if (!embedded_pdb.empty())
+        mz_zip_writer_add_mem(&zip, "symbols/renamed.bin", embedded_pdb.data(), embedded_pdb.size(), MZ_BEST_SPEED);
     void* data = nullptr;
     size_t size = 0;
     if (!mz_zip_writer_finalize_heap_archive(&zip, &data, &size)) throw std::runtime_error("ZIP test finalize");
@@ -422,4 +431,59 @@ TEST(DiagsessionImport, AuthenticCompoundCpuCapture) {
         EXPECT_EQ(e.kind, EventKind::Sample);
         EXPECT_DOUBLE_EQ(e.dur, 0);
     }
+}
+
+TEST(DiagsessionImport, DesktopLoaderResolvesEmbeddedPdbWithoutExternalFiles) {
+    if (!NativeSymbolResolver::available()) GTEST_SKIP() << "Optional LLVM backend is disabled";
+    const auto pdb_path = std::filesystem::path(__FILE__).parent_path() / "fixtures/native_symbols/fixture.pdb";
+    std::ifstream input(pdb_path, std::ios::binary);
+    std::string pdb((std::istreambuf_iterator<char>(input)), {});
+    ASSERT_FALSE(pdb.empty());
+    auto image = module(10, 1030, "fixture.exe");
+    put(image, 32 + 8, 0x4000, 8);
+    std::string payload(32, '\0');
+    put(payload, 0, 0x1000, 8);
+    put(payload, 8, 7, 4);
+    put(payload, 12, 0x5c6542d2, 4);
+    put(payload, 16, 0x6c0d, 2);
+    put(payload, 18, 0x3468, 2);
+    put(payload, 20, 0x2e42445020444c4cULL, 8);
+    put(payload, 28, 1, 4);
+    payload += "fixture.pdb";
+    payload += '\0';
+    std::string rsds(48, '\0');
+    put(rsds, 0, 48 + payload.size(), 2);
+    put(rsds, 2, 20, 1);
+    put(rsds, 3, 0xc0, 1);
+    put(rsds, 4, 36, 1);
+    put(rsds, 6, 2, 2);
+    put(rsds, 8, 9, 4);
+    put(rsds, 12, 7, 4);
+    put(rsds, 16, 1035, 8);
+    put(rsds, 24, 0xb3e675d7, 4);
+    put(rsds, 28, 0x2554, 2);
+    put(rsds, 30, 0x4f18, 2);
+    put(rsds, 32, 0xde60257362270b83ULL, 8);
+    rsds += payload;
+    rsds.resize((rsds.size() + 7) & ~size_t(7));
+    const auto data = session(
+        etl(process(1, 1010, 42) + thread(1, 1020) + image + rsds + sample(1100, 0x2005) + stack(1100, {0x2005})), "",
+        "cpu.etl", pdb);
+    FileLoader loader;
+    loader.load_buffer({data.begin(), data.end()}, "embedded.diagsession", false);
+    loader.join();
+    ASSERT_TRUE(loader.poll_finished());
+    ASSERT_TRUE(loader.success()) << loader.error();
+    auto model = loader.take_model();
+    ASSERT_EQ(model.events().size(), 1u);
+    ASSERT_EQ(model.stack_frames().size(), 1u);
+    ASSERT_TRUE(model.stack_frames()[0].symbol_resolved);
+    EXPECT_EQ(model.get_string(model.stack_frames()[0].name_idx), "allocate_buffer");
+    EXPECT_EQ(model.stack_frames()[0].source_line, 3u);
+    ASSERT_EQ(model.profile().modules.size(), 1u);
+    EXPECT_EQ(model.profile().modules[0].pdb_path, "fixture.pdb");
+    std::string saved, error;
+    ASSERT_TRUE(serialize_profile(model, saved, error)) << error;
+    ASSERT_TRUE(read_profile(saved, model, error)) << error;
+    EXPECT_EQ(model.get_string(model.stack_frames()[0].name_idx), "allocate_buffer");
 }

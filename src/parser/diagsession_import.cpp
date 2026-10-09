@@ -1,6 +1,7 @@
 #include "diagsession_import.h"
 #include "diagsession_container.h"
 #include "native_heap.h"
+#include "symbols/native_symbol_resolver.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <map>
@@ -447,10 +448,11 @@ private:
                 if (!module->build_id.empty() && module->build_id != r.build_id) {
                     warning(profile_, "Conflicting PDB identities for a module lifetime; symbols remain unresolved");
                     module->build_id.clear();
+                    module->pdb_path.clear();
                     conflicting_pdbs.insert(module->id);
                 } else {
                     module->build_id = r.build_id;
-                    // pdb_path is populated once the resolver's optional module field is integrated.
+                    module->pdb_path = r.path;
                 }
             }
         }
@@ -539,7 +541,8 @@ bool is_diagsession_container(std::string_view bytes) {
     return bytes.substr(0, 2) == "PK" || bytes.substr(0, 8) == std::string_view("\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", 8);
 }
 
-bool read_diagsession(std::string_view bytes, TraceModel& model, std::string& error, const ImportProgress& progress) {
+bool read_diagsession(std::string_view bytes, TraceModel& model, std::string& error, const ImportProgress& progress,
+                      NativeSymbolResolver* symbols) {
     model.clear();
     error.clear();
     try {
@@ -557,6 +560,26 @@ bool read_diagsession(std::string_view bytes, TraceModel& model, std::string& er
             if (progress && !progress("Reading diagsession resources", float(i) / container.resources().size()))
                 throw std::runtime_error("Import canceled");
             if (resource.directory) continue;
+            if (symbols && resource.type == "DiagnosticsHub.Resource.EmbeddedPdbs") {
+                std::vector<uint8_t> data;
+                std::string symbol_error;
+                auto cancelled = [&] {
+                    return progress && !progress("Reading embedded symbols", float(i) / container.resources().size());
+                };
+                if (!container.read_resource(i, data, symbol_error, cancelled)) {
+                    warning(profile, "Embedded symbols could not be read: " + symbol_error);
+                    continue;
+                }
+                const std::string_view bytes(reinterpret_cast<const char*>(data.data()), data.size());
+                constexpr std::string_view magic = "Microsoft C/C++ MSF";
+                if (bytes.substr(0, magic.size()) != magic) {
+                    ++ignored;
+                    continue;
+                }
+                if (!symbols->add_embedded_pdb(resource.stored_path, bytes, symbol_error))
+                    warning(profile, "Embedded native symbols could not be read: " + symbol_error);
+                continue;
+            }
             if (resource.type != "DiagnosticsHub.Resource.EtlFile") {
                 ++ignored;
                 continue;

@@ -93,6 +93,32 @@ TEST(NativeSymbols, SuppliedBinaryStillRequiresCapturedPdbIdentity) {
     EXPECT_FALSE(resolver.resolve(module, module.load_address + 0x1005).resolved);
 }
 
+TEST(NativeSymbols, EmbeddedPdbOwnsItsBytesAndRequiresMatchingIdentity) {
+    if (!NativeSymbolResolver::available()) GTEST_SKIP() << "Optional LLVM backend is disabled";
+    std::ifstream input(fixture(), std::ios::binary);
+    std::string bytes((std::istreambuf_iterator<char>(input)), {});
+    NativeSymbolResolver resolver;
+    std::string error;
+    ASSERT_TRUE(resolver.add_embedded_pdb("resource/renamed.bin", bytes, error)) << error;
+    bytes.clear();
+    bytes.shrink_to_fit();
+    auto module = fixture_module();
+    auto symbol = resolver.resolve(module, module.load_address + 0x1005);
+    ASSERT_TRUE(symbol.resolved) << symbol.diagnostic;
+    EXPECT_EQ(symbol.name, "allocate_buffer");
+    module.build_id = "00000000-0000-0000-0000-000000000000/1";
+    EXPECT_FALSE(resolver.resolve(module, module.load_address + 0x1005).resolved);
+    EXPECT_FALSE(resolver.add_embedded_pdb("corrupt", "not a PDB", error));
+    EXPECT_FALSE(error.empty());
+}
+
+TEST(NativeSymbols, ProfileResolutionCanBeCancelledBeforeMutation) {
+    auto model = native_profile();
+    NativeSymbolResolver resolver;
+    EXPECT_FALSE(resolver.resolve_profile(model, [](float) { return false; }));
+    EXPECT_FALSE(model.stack_frames()[0].symbol_resolved);
+}
+
 TEST(NativeSymbols, CorruptCandidateDoesNotBlockOtherMatchingSymbols) {
     if (!NativeSymbolResolver::available()) GTEST_SKIP() << "Optional LLVM backend is disabled";
     auto path = std::filesystem::temp_directory_path() / "trace-render-invalid.pdb";

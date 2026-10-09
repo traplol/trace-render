@@ -62,6 +62,7 @@ private:
     bool dark_theme_ = true;
     bool vsync_ = true;
     bool cli_time_unit_override_ = false;
+    std::string symbol_paths_;  // One local PDB, binary, or directory per line.
     SDL_Window* window_ = nullptr;
 
     void finish_load();
@@ -71,4 +72,5 @@ private:
     void reset_all_defaults();
     void load_settings();
     void save_settings();
+    void configure_symbols();
 };

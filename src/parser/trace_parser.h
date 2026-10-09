@@ -3,6 +3,8 @@
 #include <string>
 #include <functional>
 
+class NativeSymbolResolver;
+
 class TraceParser {
 public:
     bool parse(const std::string& filepath, TraceModel& model);
@@ -16,9 +18,11 @@ public:
 
     bool time_unit_ns() const { return time_unit_ns_; }
     void set_time_unit_ns(bool ns) { time_unit_ns_ = ns; }
+    void set_native_symbols(NativeSymbolResolver* symbols) { native_symbols_ = symbols; }
 
 private:
     std::function<void(const char* phase, float progress)> on_progress_;
     std::string error_message_;
     bool time_unit_ns_ = false;
+    NativeSymbolResolver* native_symbols_ = nullptr;  // Borrowed for the duration of parse/parse_buffer.
 };

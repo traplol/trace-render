@@ -1,7 +1,7 @@
 # src/
 Top-level app shell and self-tracing helpers. Subdirs: `model/` `parser/` `platform/` `symbols/` `ui/`
 
-## app.h / app.cpp - `App` owns subsystems, resets panel state on load, and renders the timeline, memory, and inspection views
+## app.h / app.cpp - `App` owns subsystems, opens and saves profiles, configures local symbols, cancels imports, and renders the timeline, memory, and inspection views
 ```
 void init(SDL_Window*);
 void update();

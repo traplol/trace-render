@@ -16,6 +16,8 @@ public:
     bool is_loading() const;
     bool poll_finished();  // returns true once when loading completes
     void join();           // block until done
+    void cancel();
+    void set_symbol_paths(std::vector<std::string> paths);
 
     bool success() const;
     const std::string& error() const;

@@ -94,6 +94,9 @@ void platform::save_file_dialog(SDL_Window* /*window*/, const std::string& defau
 void platform::open_file_dialog(SDL_Window* /*window*/) {
     trigger_file_input();
 }
+std::string platform::take_save_message() {
+    return {};
+}
 
 void platform::handle_file_drop(const char* /*path*/) {
     // No-op: drops handled via JS in shell.html

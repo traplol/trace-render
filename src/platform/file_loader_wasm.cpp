@@ -36,6 +36,8 @@ struct FileLoader::Impl {
 
 FileLoader::FileLoader() : impl_(std::make_unique<Impl>()) {}
 FileLoader::~FileLoader() = default;
+void FileLoader::cancel() {}                                    // Browser loading is synchronous.
+void FileLoader::set_symbol_paths(std::vector<std::string>) {}  // Native PDB backend is desktop-only.
 
 void FileLoader::load_file(const std::string& path, bool time_ns, QueryDb* query_db) {
     impl_->filename_ = path;

@@ -532,10 +532,13 @@ bool TraceParser::parse(const std::string& filepath, TraceModel& model) {
 
 #ifndef __EMSCRIPTEN__
     if (is_diagsession_container(content)) {
-        bool ok = read_diagsession(content, model, error_message_, [this](const char* phase, float p) {
-            if (on_progress_) on_progress_(phase, p);
-            return true;
-        });
+        bool ok = read_diagsession(
+            content, model, error_message_,
+            [this](const char* phase, float p) {
+                if (on_progress_) on_progress_(phase, p);
+                return true;
+            },
+            native_symbols_);
         if (ok) {
             auto profile = model.profile();
             profile.source_name = filepath;
@@ -591,11 +594,13 @@ bool TraceParser::parse_buffer(const char* data, size_t size, TraceModel& model)
 
 #ifndef __EMSCRIPTEN__
     if (is_diagsession_container(std::string_view(data, size))) {
-        bool ok =
-            read_diagsession(std::string_view(data, size), model, error_message_, [this](const char* phase, float p) {
+        bool ok = read_diagsession(
+            std::string_view(data, size), model, error_message_,
+            [this](const char* phase, float p) {
                 if (on_progress_) on_progress_(phase, p);
                 return true;
-            });
+            },
+            native_symbols_);
         if (ok && on_progress_) on_progress_("Done", 1.0f);
         return ok;
     }

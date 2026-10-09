@@ -38,6 +38,29 @@ void DiagnosticsPanel::render(const TraceModel& model, const ViewState& view) {
 
     ImGui::Begin("Diagnostics");
 
+    const auto& profile = model.profile();
+    if (!profile.source_format.empty() && ImGui::CollapsingHeader("Profile data", ImGuiTreeNodeFlags_DefaultOpen)) {
+        const auto& c = profile.capabilities;
+        ImGui::Text("CPU samples: %s", c.native_cpu_samples || c.managed_cpu_samples ? "available" : "unavailable");
+        ImGui::Text("Allocation history: %s",
+                    c.native_allocation_history || c.managed_allocation_history ? "available" : "unavailable");
+        ImGui::Text("Managed snapshots: %s", c.managed_heap_snapshots ? "available" : "unavailable");
+        if (profile.quality.sampled_cpu)
+            ImGui::TextWrapped(
+                "CPU observations are samples. Any CPU time shown is an estimate from the recorded sampling interval.");
+        if (profile.quality.unresolved_symbols)
+            ImGui::TextWrapped(
+                "Some frames have no resolved symbols. Add matching local PDB paths in Settings > Symbols and reopen "
+                "the capture.");
+        if (profile.quality.incomplete_capture)
+            ImGui::TextWrapped(
+                "This profile contains incomplete observations. See the import notes below for coverage limits.");
+        if (!profile.quality.warnings.empty() && ImGui::TreeNode("Import notes")) {
+            for (const auto& warning : profile.quality.warnings) ImGui::TextWrapped("%s", warning.c_str());
+            ImGui::TreePop();
+        }
+    }
+
     // FPS section
     if (ImGui::CollapsingHeader("Frame Rate", ImGuiTreeNodeFlags_DefaultOpen)) {
         float current_fps = ImGui::GetIO().Framerate;

@@ -1,5 +1,5 @@
 # src/platform/
-Platform abstraction: GL setup, main loop, file dialogs, async loading, memory monitoring.
+Platform abstraction: GL setup, main loop, file dialogs, cancellable async loading, symbol paths, profile saving, and memory monitoring.
 Desktop impl: `platform_desktop.cpp` / `file_loader_desktop.cpp`. Wasm impl: `platform_wasm.cpp` / `file_loader_wasm.cpp`.
 
 ## platform.h — `platform::` namespace; implemented per-platform
@@ -14,6 +14,7 @@ std::string settings_path();
 bool supports_vsync();
 void open_file_dialog(SDL_Window*);
 void save_file_dialog(SDL_Window*, const std::string& default_name, const std::string& content);
+std::string take_save_message();
 void handle_file_drop(const char* path);
 bool has_pending_file();
 PendingFile take_pending_file();
@@ -26,6 +27,8 @@ void load_buffer(std::vector<char> data, const std::string& filename, bool time_
 bool is_loading() const;
 bool poll_finished();
 void join();
+void cancel();
+void set_symbol_paths(std::vector<std::string> paths);
 bool success() const;
 const std::string& error() const;
 const std::string& filename() const;

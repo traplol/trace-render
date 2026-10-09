@@ -77,3 +77,32 @@ their 22,798 live allocations, sizes, birth times, and stacks with ETL replay,
 then reopens the saved TraceRender profile. Missing optional fixture paths cause
 these integration tests to skip; malformed framing, reuse, loss, cross-resource
 correlation, recursion, and equal-time observations run in the regular suite.
+
+## Desktop workflow
+
+On Linux, open a `.diagsession` using File > Open, drag it into the window, or pass
+its path as the application argument. These paths use the same local decoder.
+Import runs in the background; the overlay shows the current phase and its
+progress. Cancel or Escape discards the unfinished result. An import error never
+publishes a partial model as a completed capture.
+
+Settings > Symbols accepts one local PDB file, matching binary, or directory per
+line. Reopen the capture to use new paths. Native embedded MSF/PDB resources are
+read in memory. Every native match still requires the captured PDB GUID and age.
+Missing symbols leave module offsets or raw addresses usable. The Diagnostics
+panel lists available capabilities and import notes. Native PDB resolution needs
+the optional installed LLVM dependency described in [native-symbols.md](native-symbols.md).
+The ZIP/XML decoder dependencies are built into the desktop target; there is no
+Windows helper or manual conversion step.
+
+File > Save Profile writes a versioned `.trprofile`. Reopening it preserves CPU
+samples, allocation lifetimes, coverage markers, and already-resolved names and
+source locations without the original capture or symbol files. Source code itself
+is not copied into the profile. Saving reports write errors in the status bar.
+Chrome JSON opening and the existing CSV/TSV exports remain available.
+
+The original offline embedded-PDB test and `FileLoader` tests exercise cancellation,
+retry, symbol resolution during loading, and saved names with unavailable symbol
+paths. The authentic fixture environment variables above also exercise the actual
+desktop loader on both native captures, including outstanding-memory queries after
+saving and reopening.

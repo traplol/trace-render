@@ -4,6 +4,8 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <functional>
+#include <string_view>
 
 struct NativeSymbol {
     bool resolved = false;
@@ -20,9 +22,10 @@ public:
     explicit NativeSymbolResolver(std::vector<std::string> paths = {});
     ~NativeSymbolResolver();
     static bool available();
+    bool add_embedded_pdb(const std::string& name, std::string_view bytes, std::string& error);
     NativeSymbol resolve(const ProfileModule& module, uint64_t address,
                          std::optional<double> observation_ts = std::nullopt);
-    void resolve_profile(TraceModel& model);
+    bool resolve_profile(TraceModel& model, const std::function<bool(float)>& progress = {});
 
 private:
     struct Impl;

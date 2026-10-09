@@ -4,7 +4,7 @@
 #include "imgui.h"
 #include <SDL3/SDL.h>
 
-void Toolbar::render(const TraceModel& model, ViewState& view, float rss_mb) {
+void Toolbar::render(const TraceModel& model, ViewState& view, float rss_mb, bool can_save) {
     TRACE_FUNCTION_CAT("ui");
     if (ImGui::BeginMainMenuBar()) {
         ImGui::TextDisabled("%.0f FPS", ImGui::GetIO().Framerate);
@@ -15,6 +15,7 @@ void Toolbar::render(const TraceModel& model, ViewState& view, float rss_mb) {
             if (ImGui::MenuItem("Open...", "Ctrl+O")) {
                 platform::open_file_dialog(window_);
             }
+            if (ImGui::MenuItem("Save Profile...", nullptr, false, can_save)) save_profile_requested_ = true;
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {

@@ -1,8 +1,11 @@
 #include "app.h"
 #include "platform/platform.h"
+#include "parser/profile_io.h"
+#include "symbols/native_symbol_resolver.h"
 #include "tracing.h"
 #include "imgui.h"
 #include "imgui_internal.h"
+#include "imgui_stdlib.h"
 #include <nlohmann/json.hpp>
 #include <SDL3/SDL.h>
 #include <cstdio>
@@ -11,6 +14,7 @@
 #include <fstream>
 #include <algorithm>
 #include <chrono>
+#include <sstream>
 
 void App::init(SDL_Window* window) {
     TRACE_FUNCTION_CAT("app");
@@ -25,6 +29,7 @@ void App::init(SDL_Window* window) {
 
 void App::shutdown() {
     TRACE_FUNCTION_CAT("app");
+    loader_.cancel();
     loader_.join();
     save_settings();
 }
@@ -32,6 +37,7 @@ void App::shutdown() {
 void App::open_file(const std::string& path) {
     TRACE_FUNCTION_CAT("app");
     if (loader_.is_loading()) return;
+    configure_symbols();
     loader_.load_file(path, view_.time_unit_ns(), &query_db_);
     status_message_ = "Loading: " + loader_.filename();
 }
@@ -39,8 +45,20 @@ void App::open_file(const std::string& path) {
 void App::open_buffer(std::vector<char> data, const std::string& filename) {
     TRACE_FUNCTION_CAT("app");
     if (loader_.is_loading()) return;
+    configure_symbols();
     loader_.load_buffer(std::move(data), filename, view_.time_unit_ns(), &query_db_);
     status_message_ = "Loading: " + loader_.filename();
+}
+
+void App::configure_symbols() {
+    std::vector<std::string> paths;
+    std::istringstream input(symbol_paths_);
+    std::string path;
+    while (std::getline(input, path)) {
+        if (!path.empty() && path.back() == '\r') path.pop_back();
+        if (!path.empty()) paths.push_back(path);
+    }
+    loader_.set_symbol_paths(std::move(paths));
 }
 
 void App::finish_load() {
@@ -68,8 +86,9 @@ void App::finish_load() {
             view_.set_trace_bounds(model_.min_ts(), model_.max_ts());
             view_.zoom_to_fit(model_.min_ts(), model_.max_ts());
         }
-        status_message_ = "Loaded: " + loader_.filename() + " (" + std::to_string(model_.events().size()) +
-                          " events, " + std::to_string(model_.processes().size()) + " processes)";
+        status_message_ =
+            "Loaded: " + loader_.filename() + " (" + std::to_string(model_.events().size()) + " events, " +
+            std::to_string(std::max(model_.processes().size(), model_.profile().processes.size())) + " processes)";
         query_db_.create_indexes_async();
     } else {
         status_message_ = "Error: " + loader_.error();
@@ -88,7 +107,7 @@ void App::render_loading_overlay() {
     ImGui::Begin("##LoadingOverlay", nullptr,
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings |
-                     ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
+                     ImGuiWindowFlags_NoNav);
     ImGui::PopStyleColor();
 
     float progress = loader_.progress();
@@ -126,6 +145,8 @@ void App::render_loading_overlay() {
     // Global progress bar
     ImGui::SetCursorPosX((vp->WorkSize.x - content_w) / 2);
     ImGui::ProgressBar(progress, ImVec2(content_w, 0));
+    ImGui::SetCursorPosX((vp->WorkSize.x - 120) / 2);
+    if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) loader_.cancel();
 
     ImGui::EndGroup();
 
@@ -134,6 +155,7 @@ void App::render_loading_overlay() {
 
 void App::update() {
     TRACE_SCOPE("App::update");
+    if (auto message = platform::take_save_message(); !message.empty()) status_message_ = std::move(message);
 
     // Check if background load is complete
     if (loader_.poll_finished()) {
@@ -223,7 +245,17 @@ void App::update() {
     // Menu bar / toolbar
     {
         TRACE_SCOPE_CAT("App::toolbar", "ui");
-        toolbar_.render(model_, view_, diagnostics_.current_rss_mb());
+        toolbar_.render(model_, view_, diagnostics_.current_rss_mb(), has_trace_ && !loader_.is_loading());
+        if (toolbar_.save_profile_requested()) {
+            toolbar_.clear_save_profile_request();
+            std::string data, error;
+            if (serialize_profile(model_, data, error)) {
+                std::filesystem::path name(loader_.filename());
+                name.replace_extension(".trprofile");
+                platform::save_file_dialog(window_, name.filename().string(), data);
+            } else
+                status_message_ = "Cannot save profile: " + error;
+        }
         if (toolbar_.settings_requested()) {
             show_settings_ = true;
             toolbar_.clear_settings_request();
@@ -256,9 +288,14 @@ void App::update() {
         ImGui::Begin("Timeline");
         if (!loader_.is_loading()) {
             ImVec2 avail = ImGui::GetContentRegionAvail();
-            ImVec2 text_size = ImGui::CalcTextSize("Open a Chrome trace file (Ctrl+O) or drag & drop");
+#ifdef __EMSCRIPTEN__
+            const char* welcome = "Open a Chrome trace or .trprofile (Ctrl+O), or drag & drop";
+#else
+            const char* welcome = "Open a trace, .diagsession, or .trprofile (Ctrl+O), or drag & drop";
+#endif
+            ImVec2 text_size = ImGui::CalcTextSize(welcome);
             ImGui::SetCursorPos(ImVec2((avail.x - text_size.x) / 2, (avail.y - text_size.y) / 2));
-            ImGui::TextDisabled("Open a Chrome trace file (Ctrl+O) or drag & drop");
+            ImGui::TextDisabled("%s", welcome);
         }
         ImGui::End();
 
@@ -352,8 +389,8 @@ void App::render_settings_modal() {
     ImGui::SetNextWindowSize(ImVec2(800, 500), ImGuiCond_Appearing);
 
     if (ImGui::BeginPopupModal("Settings", &show_settings_)) {
-        const char* tab_labels[] = {"General", "Timeline", "Flamegraph", "Rendering", "Source", "Keyboard"};
-        constexpr int kTabCount = 6;
+        const char* tab_labels[] = {"General", "Timeline", "Flamegraph", "Rendering", "Source", "Keyboard", "Symbols"};
+        constexpr int kTabCount = 7;
         constexpr float kSidebarWidth = 140.0f;
         const float footer_height = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
 
@@ -506,6 +543,19 @@ void App::render_settings_modal() {
                 }
                 break;
             }
+            case 6: {
+                ImGui::TextWrapped(
+                    "Local symbol files and directories, one path per line. Reload the capture to apply changes. "
+                    "Matching PDBs can supply function names and source locations; unresolved frames remain "
+                    "available.");
+                ImGui::InputTextMultiline("##symbol_paths", &symbol_paths_, ImVec2(-1, 200));
+                if (!NativeSymbolResolver::available())
+                    ImGui::TextWrapped(
+                        "Native PDB resolution is unavailable in this build. Install the LLVM development dependency "
+                        "and rebuild to enable it.");
+                if (ImGui::Button("Clear paths")) symbol_paths_.clear();
+                break;
+            }
         }
 
         ImGui::EndChild();
@@ -575,6 +625,7 @@ void App::save_settings() {
     j["vsync"] = vsync_;
     j["query_tabs"] = stats_.save_tabs();
     j["source_panel"] = source_.save_settings();
+    j["symbol_paths"] = symbol_paths_;
     j["key_bindings"] = view_.key_bindings().save();
 
     std::ofstream f(path);
@@ -626,6 +677,7 @@ void App::load_settings() {
         if (j.contains("source_panel")) {
             source_.load_settings(j["source_panel"]);
         }
+        if (j.contains("symbol_paths")) symbol_paths_ = j["symbol_paths"].get<std::string>();
         if (j.contains("key_bindings")) {
             view_.key_bindings().load(j["key_bindings"]);
         }

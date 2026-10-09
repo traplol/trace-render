@@ -30,6 +30,7 @@ bool supports_vsync();
 // File dialogs
 void open_file_dialog(SDL_Window* window);
 void save_file_dialog(SDL_Window* window, const std::string& default_name, const std::string& content);
+std::string take_save_message();  // Empty when no save has completed.
 
 // File drop handling (called from SDL event loop)
 void handle_file_drop(const char* path);

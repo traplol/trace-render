@@ -13,6 +13,8 @@
 #include <llvm/DebugInfo/PDB/IPDBRawSymbol.h>
 #include <llvm/DebugInfo/PDB/PDBSymbolExe.h>
 #include <llvm/DebugInfo/PDB/PDB.h>
+#include <llvm/DebugInfo/PDB/Native/NativeSession.h>
+#include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
 #endif
@@ -52,6 +54,7 @@ std::string build_id(const std::string& text) {
 struct NativeSymbolResolver::Impl {
     explicit Impl(std::vector<std::string> candidates) : paths(std::move(candidates)) {}
     std::vector<std::string> paths;
+    std::vector<std::string> embedded;
 #ifdef TRACE_RENDER_HAS_NATIVE_PDB
     struct PdbFile {
         std::unique_ptr<llvm::pdb::IPDBSession> session;
@@ -60,6 +63,20 @@ struct NativeSymbolResolver::Impl {
         std::unordered_map<uint32_t, NativeSymbol> symbols;
     };
     std::unordered_map<std::string, PdbFile> files;
+
+    void identify(PdbFile& file) {
+        auto global = file.session->getGlobalScope();
+        if (!global) {
+            file.error = "PDB identity is unavailable";
+            file.session.reset();
+            return;
+        }
+        std::string guid;
+        llvm::raw_string_ostream out(guid);
+        out << global->getGuid();
+        out.flush();
+        file.identity = build_id(guid + "/" + std::to_string(global->getAge()));
+    }
 
     PdbFile& open(const std::string& path) {
         auto [it, inserted] = files.try_emplace(path);
@@ -77,17 +94,7 @@ struct NativeSymbolResolver::Impl {
             }
             file.error.clear();
         }
-        auto global = file.session->getGlobalScope();
-        if (!global) {
-            file.error = "PDB identity is unavailable";
-            file.session.reset();
-            return file;
-        }
-        std::string guid;
-        llvm::raw_string_ostream out(guid);
-        out << global->getGuid();
-        out.flush();
-        file.identity = build_id(guid + "/" + std::to_string(global->getAge()));
+        identify(file);
         return file;
     }
 
@@ -127,7 +134,7 @@ struct NativeSymbolResolver::Impl {
 #endif
 
     std::vector<std::string> candidates(const ProfileModule& module) const {
-        std::vector<std::string> result;
+        std::vector<std::string> result = embedded;
         auto pdb_name = basename(module.pdb_path);
         auto binary_name = basename(module.path.empty() ? module.name : module.path);
         if (pdb_name.empty()) {
@@ -150,6 +157,28 @@ struct NativeSymbolResolver::Impl {
 NativeSymbolResolver::NativeSymbolResolver(std::vector<std::string> paths)
     : impl_(std::make_unique<Impl>(std::move(paths))) {}
 NativeSymbolResolver::~NativeSymbolResolver() = default;
+
+bool NativeSymbolResolver::add_embedded_pdb(const std::string& name, std::string_view bytes, std::string& error) {
+    error.clear();
+#ifdef TRACE_RENDER_HAS_NATIVE_PDB
+    const std::string key = "embedded:" + name;
+    auto [it, inserted] = impl_->files.try_emplace(key);
+    auto& file = it->second;
+    if (inserted) {
+        auto buffer = llvm::MemoryBuffer::getMemBufferCopy(llvm::StringRef(bytes.data(), bytes.size()), name);
+        if (auto problem = llvm::pdb::NativeSession::createFromPdb(std::move(buffer), file.session))
+            file.error = llvm::toString(std::move(problem));
+        else
+            impl_->identify(file);
+        if (file.session) impl_->embedded.push_back(key);
+    }
+    error = file.error;
+    return bool(file.session);
+#else
+    error = "Native PDB support is unavailable in this build";
+    return false;
+#endif
+}
 
 bool NativeSymbolResolver::available() {
 #ifdef TRACE_RENDER_HAS_NATIVE_PDB
@@ -213,10 +242,11 @@ NativeSymbol NativeSymbolResolver::resolve(const ProfileModule& module, uint64_t
     return result;
 }
 
-void NativeSymbolResolver::resolve_profile(TraceModel& model) {
+bool NativeSymbolResolver::resolve_profile(TraceModel& model, const std::function<bool(float)>& progress) {
     std::unordered_map<std::string, const ProfileModule*> modules;
     for (const auto& module : model.profile().modules) modules.emplace(module.id, &module);
     for (uint32_t i = 0; i < model.stack_frames().size(); ++i) {
+        if (i % 256 == 0 && progress && !progress(float(i) / model.stack_frames().size())) return false;
         const auto& frame = model.stack_frames()[i];
         if (!frame.address || frame.symbol_resolved) continue;
         auto module = modules.find(model.get_string(frame.module_id));
@@ -227,4 +257,5 @@ void NativeSymbolResolver::resolve_profile(TraceModel& model) {
         if (!result.resolved) model.add_symbol_warning(module->second->name + ": " + result.diagnostic);
     }
     model.build_index();
+    return !progress || progress(1.0f);
 }

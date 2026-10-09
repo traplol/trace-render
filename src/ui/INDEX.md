@@ -121,7 +121,7 @@ void render(const TraceModel&, ViewState&);
 void on_model_changed();
 ```
 
-## diagnostics_panel.h / diagnostics_panel.cpp — FPS / memory sparklines and per-frame render stats
+## diagnostics_panel.h / diagnostics_panel.cpp — profile capabilities and import notes, FPS / memory sparklines, and per-frame render stats
 ```
 void render(const TraceModel&, const ViewState&);
 float current_rss_mb() const;
@@ -178,12 +178,14 @@ void render(ImDrawList*, const TraceModel&, const ViewState&, ImVec2 area_min, I
 static uint64_t make_key(uint32_t pid, uint32_t tid);
 ```
 
-## toolbar.h / toolbar.cpp — open-file button, zoom controls, time unit toggle, memory readout, settings button
+## toolbar.h / toolbar.cpp — open/save-profile requests, zoom controls, memory readout, and settings requests
 ```
-void render(const TraceModel&, ViewState&, float rss_mb);
+void render(const TraceModel&, ViewState&, float rss_mb, bool can_save = false);
 void set_window(SDL_Window*);
 bool settings_requested() const;
 void clear_settings_request();
+bool save_profile_requested() const;
+void clear_save_profile_request();
 ```
 
 ## range_stats.h / range_stats.cpp — separate measured, converted-span, and inclusive/exclusive sampled statistics grouped by native function identity when available

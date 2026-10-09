@@ -10,6 +10,7 @@ void set_on_progress(std::function<void(const char*, float)> cb);
 const std::string& error_message() const;
 bool time_unit_ns() const;
 void set_time_unit_ns(bool ns);
+void set_native_symbols(NativeSymbolResolver* symbols);
 ```
 
 ## profile_io.h / profile_io.cpp — reads and writes version 1 profiles with validated identities, CPU observations, allocation lifetimes, managed observations, optional recorded PDB paths, and backward-compatible allocation-gap quality metadata
@@ -27,7 +28,7 @@ void build_native_allocations(const std::vector<NativeHeapEvent>& events, Profil
 ## diagsession_import.h / diagsession_import.cpp — converts metadata-referenced ETL resources into authoritative CPU samples, native allocations, recorded stack parts, and capture-local process/module identities
 ```
 bool is_diagsession_container(std::string_view bytes);
-bool read_diagsession(std::string_view bytes, TraceModel& model, std::string& error, const ImportProgress& progress = {});
+bool read_diagsession(std::string_view bytes, TraceModel& model, std::string& error, const ImportProgress& progress = {}, NativeSymbolResolver* symbols = nullptr);
 ```
 
 ## etl_reader.h / etl_reader.cpp — traverses checked ETL buffers and records, preserves raw QPC and provider payloads, and decompresses supported XPRESS buffers

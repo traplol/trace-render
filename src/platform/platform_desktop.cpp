@@ -1,10 +1,14 @@
 #include "platform.h"
 #include <SDL3/SDL.h>
 #include <cstdlib>
+#include <memory>
+#include <mutex>
 #include "tracing.h"
 
 static platform::PendingFile g_pending;
 static bool g_has_pending = false;
+static std::mutex g_dialog_mutex;
+static std::string g_save_message;
 
 static void file_dialog_callback(void* /*userdata*/, const char* const* filelist, int /*filter*/) {
     if (filelist && filelist[0]) {
@@ -12,17 +16,34 @@ static void file_dialog_callback(void* /*userdata*/, const char* const* filelist
     }
 }
 
-static std::string g_save_content;
+struct SaveRequest {
+    std::string name;
+    std::string content;
+};
 
-static void save_dialog_callback(void* /*userdata*/, const char* const* filelist, int /*filter*/) {
+static void save_dialog_callback(void* userdata, const char* const* filelist, int /*filter*/) {
+    std::unique_ptr<SaveRequest> request(static_cast<SaveRequest*>(userdata));
+    std::string message = filelist ? "Save canceled" : std::string("Save dialog failed: ") + SDL_GetError();
     if (filelist && filelist[0]) {
-        SDL_IOStream* io = SDL_IOFromFile(filelist[0], "w");
+        SDL_IOStream* io = SDL_IOFromFile(filelist[0], "wb");
+        bool ok = false;
         if (io) {
-            SDL_WriteIO(io, g_save_content.data(), g_save_content.size());
-            SDL_CloseIO(io);
+            bool written = SDL_WriteIO(io, request->content.data(), request->content.size()) == request->content.size();
+            bool closed = SDL_CloseIO(io);
+            ok = written && closed;
         }
-        g_save_content.clear();
+        message = ok ? std::string("Saved: ") + filelist[0]
+                     : std::string("Could not save ") + filelist[0] + ": " + SDL_GetError();
     }
+    std::lock_guard<std::mutex> lock(g_dialog_mutex);
+    g_save_message = std::move(message);
+}
+
+std::string platform::take_save_message() {
+    std::lock_guard<std::mutex> lock(g_dialog_mutex);
+    std::string message;
+    message.swap(g_save_message);
+    return message;
 }
 
 void platform::set_gl_attributes() {
@@ -74,25 +95,32 @@ void platform::open_file_dialog(SDL_Window* window) {
     TRACE_FUNCTION_CAT("platform");
     if (!window) return;
     static const SDL_DialogFileFilter filters[] = {
+        {"Profiles and traces", "diagsession;trprofile;json"},
+        {"Visual Studio diagnostics", "diagsession"},
+        {"TraceRender profiles", "trprofile"},
         {"JSON Trace Files", "json"},
         {"All Files", "*"},
     };
-    SDL_ShowOpenFileDialog(file_dialog_callback, nullptr, window, filters, 2, nullptr, false);
+    SDL_ShowOpenFileDialog(file_dialog_callback, nullptr, window, filters, 5, nullptr, false);
 }
 
 void platform::save_file_dialog(SDL_Window* window, const std::string& default_name, const std::string& content) {
     if (!window) return;
     static const SDL_DialogFileFilter filters[] = {
+        {"TraceRender Profiles", "trprofile"},
         {"CSV Files", "csv"},
         {"TSV Files", "tsv"},
         {"All Files", "*"},
     };
-    g_save_content = content;
-    SDL_ShowSaveFileDialog(save_dialog_callback, nullptr, window, filters, 3, default_name.c_str());
+    auto* request = new SaveRequest{default_name, content};
+    bool profile = default_name.size() >= 10 && default_name.substr(default_name.size() - 10) == ".trprofile";
+    SDL_ShowSaveFileDialog(save_dialog_callback, request, window, profile ? filters : filters + 1, profile ? 4 : 3,
+                           request->name.c_str());
 }
 
 void platform::handle_file_drop(const char* path) {
     TRACE_FUNCTION_CAT("platform");
+    std::lock_guard<std::mutex> lock(g_dialog_mutex);
     g_pending.path = path;
     g_pending.data.clear();
 
@@ -105,11 +133,13 @@ void platform::handle_file_drop(const char* path) {
 }
 
 bool platform::has_pending_file() {
+    std::lock_guard<std::mutex> lock(g_dialog_mutex);
     return g_has_pending;
 }
 
 platform::PendingFile platform::take_pending_file() {
     TRACE_FUNCTION_CAT("platform");
+    std::lock_guard<std::mutex> lock(g_dialog_mutex);
     g_has_pending = false;
     return std::move(g_pending);
 }
