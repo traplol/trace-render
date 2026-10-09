@@ -22,6 +22,10 @@ uses `windows-2022`; the dedicated `capture/managed-memory-fixture` branch also
 triggers it so its first run does not require registration on the default branch.
 Artifacts expire after seven days.
 
+After capture, Windows `tracerpt` exports the decoded events, available event
+schemas and trace summary. These files provide a Windows-side comparison for the
+portable decoder. Events without an installed schema may remain undecoded.
+
 This is a capture candidate, not a validated allocation oracle yet. Inspect the
 captured provider schemas, sampling settings, stacks, GC movement and survival
 events before enabling allocation-lifetime import. An AllocationTick alone does

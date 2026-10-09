@@ -51,6 +51,20 @@ $checkpoints = Get-Content (Join-Path $app "checkpoints.json") -Raw | ConvertFro
 if ($checkpoints.checkpoints[-1].retainedPayloads -ne 2048 -or $checkpoints.checkpoints[-1].releasedObjectAlive) {
     throw "Synthetic retention/release oracle failed"
 }
+
+# Keep Windows' interpretation alongside the capture as an independent decoder oracle.
+$etl = Join-Path ([System.IO.Path]::GetTempPath()) ("trace-managed-" + [Guid]::NewGuid() + ".etl")
+$archive = [System.IO.Compression.ZipFile]::OpenRead((Join-Path $output "managed-allocation-survival.diagsession"))
+try {
+    $entries = @($archive.Entries | Where-Object { $_.Name -eq "sc.user_aux.etl" })
+    if ($entries.Count -ne 1) { throw "Expected one user ETL resource" }
+    [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entries[0], $etl)
+    & tracerpt $etl -of XML -o (Join-Path $output "events.xml") -export (Join-Path $output "schema.man") -summary (Join-Path $output "summary.xml") -y *> (Join-Path $output "tracerpt.log")
+    if ($LASTEXITCODE -ne 0) { throw "Windows trace export failed; see tracerpt.log" }
+} finally {
+    $archive.Dispose()
+    if (Test-Path $etl) { Remove-Item $etl }
+}
 Get-ChildItem $output -Recurse -File | Where-Object { $_.Extension -in ".diagsession", ".exe", ".dll", ".pdb" } |
     Get-FileHash -Algorithm SHA256 | Select-Object Hash, Path | ConvertTo-Json | Set-Content (Join-Path $output "hashes.json")
 Write-Output "CAPTURE OK: $output"
