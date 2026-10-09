@@ -125,7 +125,7 @@ file(GLOB_RECURSE APP_SOURCES src/*.cpp)
 # Exclude the wrong platform's source files
 if(EMSCRIPTEN)
   list(FILTER APP_SOURCES EXCLUDE REGEX "platform_desktop\\.cpp$|file_loader_desktop\\.cpp$")
-  list(FILTER APP_SOURCES EXCLUDE REGEX "diagsession_import\\.cpp$|diagsession_container\\.cpp$|etl_reader\\.cpp$|xpress_huffman\\.cpp$")
+  list(FILTER APP_SOURCES EXCLUDE REGEX "diagsession_import\\.cpp$|diagsession_container\\.cpp$|etl_reader\\.cpp$|xpress_huffman\\.cpp$|managed_methods\\.cpp$")
 else()
   list(FILTER APP_SOURCES EXCLUDE REGEX "platform_wasm\\.cpp$|file_loader_wasm\\.cpp$")
 endif()

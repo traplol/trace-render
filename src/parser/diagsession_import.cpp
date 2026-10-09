@@ -1,5 +1,6 @@
 #include "diagsession_import.h"
 #include "diagsession_container.h"
+#include "managed_methods.h"
 #include "native_heap.h"
 #include "symbols/native_symbol_resolver.h"
 #include <nlohmann/json.hpp>
@@ -92,6 +93,7 @@ public:
         }
         EtlBytes p(r.payload);
         uint32_t ptr = r.pointer_size;
+        if (managed_methods_.consume(r)) return;
         const bool heap_provider = r.group == 16 || r.provider == "222962ab-6180-4b88-a825-346b75f2a24a";
         if (heap_provider && r.event_id >= 32 && r.event_id <= 36 && (r.opcode < 32 || r.opcode > 36)) {
             unsupported_heap_events_ = true;
@@ -224,6 +226,8 @@ public:
         build_lifetimes(thread_records_, threads_, thread_ids_, true);
         for (const auto& life : processes_) add_profile_process(life);
         build_modules();
+        managed_methods_.build([&](uint32_t pid, uint64_t qpc) { return process_at(pid, qpc); });
+        for (const auto& message : managed_methods_.warnings()) warning(profile_, message);
         std::sort(intervals_.begin(), intervals_.end(), [](auto& a, auto& b) { return a.qpc < b.qpc; });
         std::stable_sort(samples_.begin(), samples_.end(), [](auto& a, auto& b) { return a.qpc < b.qpc; });
         // StackWalk carries a PID while SampleProf carries only a TID.
@@ -287,7 +291,7 @@ public:
                 event.sample_cpu_time = interval->interval / 10.0;
                 args["sampling_interval_100ns"] = interval->interval;
             }
-            event.stack_frame_id = make_stack(process_id, s.qpc, frames);
+            event.stack_frame_id = make_stack(process_id, s.qpc, frames, true);
             event.args_idx = model_.add_args(args.dump());
             model_.add_event(event);
         }
@@ -482,16 +486,19 @@ private:
                     frames.insert(frames.end(), part.begin(), part.end());
         return frames;
     }
-    uint32_t make_stack(const std::string& process_id, uint64_t qpc, const std::vector<uint64_t>& frames) {
+    uint32_t make_stack(const std::string& process_id, uint64_t qpc, const std::vector<uint64_t>& frames,
+                        bool cpu = false) {
         uint32_t parent = UINT32_MAX;
         for (auto it = frames.rbegin(); it != frames.rend(); ++it) {
+            auto* managed = managed_methods_.find(process_id, *it, qpc);
+            if (managed && cpu) profile_.capabilities.managed_cpu_samples = true;
             auto* module = module_at(process_id, *it, qpc);
             if (!module && (*it & (info_.pointer_size == 8 ? uint64_t(1) << 63 : uint64_t(1) << 31))) {
                 if (auto* system = lifetime_at(processes_, process_ids_, 0, qpc))
                     module = module_at(system->id, *it, qpc);
             }
             std::string module_id = module ? module->id : process_id;
-            auto key = std::make_tuple(module_id, *it, parent);
+            auto key = std::make_tuple(managed ? managed->symbol_id : module_id, *it, parent);
             auto found = frame_ids_.find(key);
             if (found != frame_ids_.end()) {
                 parent = found->second;
@@ -501,11 +508,20 @@ private:
             frame.id_idx = model_.intern_string(prefix_ + "/sf/" + std::to_string(frame_ids_.size()));
             frame.parent_id = parent;
             frame.address = *it;
-            frame.symbol_id = model_.intern_string(module_id + "/ip/" + hex(*it));
-            frame.cat_idx = model_.intern_string("Native");
-            frame.name_idx =
-                model_.intern_string(module ? module->name + "+" + hex(*it - module->load_address) : hex(*it));
-            if (module) frame.module_id = model_.intern_string(module->id);
+            if (managed) {
+                frame.symbol_id = model_.intern_string(managed->symbol_id);
+                frame.cat_idx = model_.intern_string("Managed");
+                frame.symbol_resolved = !managed->name.empty();
+                frame.name_idx = model_.intern_string(frame.symbol_resolved ? managed->name
+                                                                            : "CLR method " + hex(managed->method_id) +
+                                                                                  "+" + hex(*it - managed->address));
+            } else {
+                frame.symbol_id = model_.intern_string(module_id + "/ip/" + hex(*it));
+                frame.cat_idx = model_.intern_string(module ? "Native" : "Unresolved");
+                frame.name_idx =
+                    model_.intern_string(module ? module->name + "+" + hex(*it - module->load_address) : hex(*it));
+                if (module) frame.module_id = model_.intern_string(module->id);
+            }
             model_.add_stack_frame(frame);
             profile_.quality.unresolved_symbols = true;
             parent = frame.id_idx;
@@ -518,6 +534,7 @@ private:
     std::vector<std::string> source_names_;
     TraceModel& model_;
     ProfileData& profile_;
+    ManagedMethods managed_methods_;
     EtlFileInfo info_;
     uint64_t min_start_qpc_ = 0, end_filetime_ = 0, lost_events_ = 0;
     bool lost_buffers_ = false, unsupported_heap_events_ = false;

@@ -25,10 +25,18 @@ bool write_profile(const std::string& filepath, const TraceModel& model, std::st
 void build_native_allocations(const std::vector<NativeHeapEvent>& events, ProfileData& profile, bool complete_event_stream);
 ```
 
-## diagsession_import.h / diagsession_import.cpp — converts metadata-referenced ETL resources into authoritative CPU samples, native allocations, recorded stack parts, and capture-local process/module identities
+## diagsession_import.h / diagsession_import.cpp — converts metadata-referenced ETL resources into CPU samples with mixed managed/native frames, native allocations, recorded stack parts, and capture-local process/module identities
 ```
 bool is_diagsession_container(std::string_view bytes);
 bool read_diagsession(std::string_view bytes, TraceModel& model, std::string& error, const ImportProgress& progress = {}, NativeSymbolResolver* symbols = nullptr);
+```
+
+## managed_methods.h / managed_methods.cpp — resolves recorded CLR method ranges by process and JIT generation while preserving ambiguous or incomplete metadata as unresolved frames
+```
+bool ManagedMethods::consume(const EtlRecord& record);
+void ManagedMethods::build(const std::function<std::string(uint32_t, uint64_t)>& process_at);
+const ManagedMethod* ManagedMethods::find(const std::string& process_id, uint64_t address, uint64_t qpc) const;
+const std::vector<std::string>& ManagedMethods::warnings() const;
 ```
 
 ## etl_reader.h / etl_reader.cpp — traverses checked ETL buffers and records, preserves raw QPC and provider payloads, and decompresses supported XPRESS buffers

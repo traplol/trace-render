@@ -33,6 +33,34 @@ observed start/end QPC are saved on observations. Process and module generations
 have explicit identities; rundown does not invent creation or destruction times.
 Unknown frames keep their addresses and stable identities.
 
+CLR method load, unload, and rundown events resolve managed CPU frames in the
+same pass. Runtime method events 137–144 and rundown events 141–144 support
+versions 0, 1, and 2. The layouts come from the official
+[runtime manifest](https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/ClrEtwAll.man)
+and [PerfView parser](https://github.com/microsoft/perfview/blob/main/src/TraceEvent/Parsers/ClrTraceEventParser.cs).
+Verbose events supply captured namespace, method name, and signature; no user
+binaries are required. Nonverbose ranges retain managed identities and an
+explicit unresolved name. Standalone metadata caches and JIT-start events without
+code ranges do not currently add names.
+
+Method identities include the process generation, CLR instance, module, method,
+ReJIT ID, code extent, and code generation. An actual load/unload bounds its
+range. Rundown is an enumeration of existing code, so its timestamp is not used
+as a compilation time. It may describe earlier samples within the same process
+generation. Recorded reuse constrains that inference. Overlapping shared generic
+code, conflicting names, and unrecorded transitions remain unresolved rather than
+choosing an arbitrary method. Unsupported or malformed transitions stop older
+method attribution until a later known load. Quality warnings explain these
+limits and the possibility of transitions missing before recording began.
+
+Mixed stacks keep every recorded address and recursive frame in order. A known
+managed range is marked `Managed`; a mapped native image is `Native`; addresses
+without either attribution are `Unresolved`. Resolved names and generation
+identities survive profile save/reopen. Managed PDB/IL-to-native source mapping is
+not implemented yet and is reported explicitly. The compound fixture contains
+portable PDBs for other libraries, but its recorded `SimpleFunction.pdb` identity
+is absent; those unrelated symbols must not supply its source locations.
+
 Native x64 heap allocation/free/reallocation version 2 records use the same pass,
 with recorded allocation stacks. Heap create version 3 is also decoded. The
 native lifetime engine distinguishes missing initial contents from an internal
@@ -65,6 +93,7 @@ cmake -B build
 TRACE_NATIVE_CPU_FIXTURE=test_data/diagsession/native-cpu-obs.diagsession \
 TRACE_NATIVE_MEMORY_FIXTURE=test_data/diagsession/native-memory-cscn.diagsession \
 TRACE_COMPOUND_CPU_FIXTURE=test_data/diagsession/cpu-perfview-compound.diagsession \
+TRACE_MANAGED_CPU_FIXTURE=test_data/diagsession/cpu-azure-durabletask.diagsession \
 TRACE_RENDER_DIAGSESSION_CORPUS=test_data/diagsession \
 ./scripts/run_tests.sh
 ```
@@ -74,7 +103,14 @@ stack parts. It checks the recorded Qt module size and exact PDB identity. The
 compound capture exercises real DiagnosticsHub compression. The native memory
 test independently decodes six producer `.heapstate` snapshots and compares
 their 22,798 live allocations, sizes, birth times, and stacks with ETL replay,
-then reopens the saved TraceRender profile. Missing optional fixture paths cause
+then reopens the saved TraceRender profile. The Azure managed capture contains
+31,664 samples and 23,689 correlated stacks. Its checked sample at QPC
+1127633188921 belongs to PID 6592, TID 4688, and retains a 129-frame mixed stack
+with repeated DurableTask async methods. The compound capture contains 69,833
+samples; QPC 332187593497, PID 29796, TID 3860 includes `Program.Main`, the
+`NeuralNetwork` constructor, and `InitBiases` in recorded order. Method names,
+addresses, and process names were checked against raw CLR/StackWalk payloads.
+Missing optional fixture paths cause
 these integration tests to skip; malformed framing, reuse, loss, cross-resource
 correlation, recursion, and equal-time observations run in the regular suite.
 

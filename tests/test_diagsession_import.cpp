@@ -110,6 +110,35 @@ std::string manifest_heap() {
     put(bytes, 42, 2, 1);  // Manifest ID 33, opcode 0 is not the classic schema.
     return bytes;
 }
+std::string clr_method(uint16_t id, uint64_t qpc, uint64_t method_id, const std::string& name) {
+    std::string payload(36, '\0');
+    put(payload, 0, method_id, 8);
+    put(payload, 8, 42, 8);
+    put(payload, 16, 0x2000, 8);
+    put(payload, 24, 0x100, 4);
+    put(payload, 28, 0x06000001, 4);
+    put(payload, 32, 8, 4);
+    payload += utf16("Example") + utf16(name) + utf16("void  ()");
+    put(payload, payload.size(), 1, 2);
+    put(payload, payload.size(), 0, 8);
+    std::string bytes(80, '\0');
+    put(bytes, 0, bytes.size() + payload.size(), 2);
+    put(bytes, 2, 19, 1);
+    put(bytes, 3, 0xc0, 1);
+    put(bytes, 8, 9, 4);
+    put(bytes, 12, 7, 4);
+    put(bytes, 16, qpc, 8);
+    put(bytes, 24, 0xe13c0d23, 4);
+    put(bytes, 28, 0xccbc, 2);
+    put(bytes, 30, 0x4e12, 2);
+    put(bytes, 32, 0xe427ee2eccd91b93ULL, 8);
+    put(bytes, 40, id, 2);
+    put(bytes, 42, 2, 1);
+    put(bytes, 45, id == 143 ? 37 : 38, 1);
+    bytes += payload;
+    bytes.resize((bytes.size() + 7) & ~size_t(7));
+    return bytes;
+}
 std::string etl(const std::string& records, uint32_t loss = 0) {
     std::string header(284, '\0');
     put(header, 0, 4096, 4);
@@ -425,11 +454,82 @@ TEST(DiagsessionImport, AuthenticCompoundCpuCapture) {
     TraceModel model;
     TraceParser parser;
     ASSERT_TRUE(parser.parse_buffer(data.data(), data.size(), model)) << parser.error_message();
-    EXPECT_FALSE(model.events().empty());
+    EXPECT_EQ(model.events().size(), 69833u);
     EXPECT_TRUE(model.profile().capabilities.native_cpu_samples);
+    EXPECT_TRUE(model.profile().capabilities.managed_cpu_samples);
+    ASSERT_NE(model.find_process(29796), nullptr);
+    EXPECT_EQ(model.find_process(29796)->name, "SimpleFunction.exe");
+    bool checked = false;
     for (const auto& e : model.events()) {
         EXPECT_EQ(e.kind, EventKind::Sample);
         EXPECT_DOUBLE_EQ(e.dur, 0);
+        auto args = json::parse(model.args()[e.args_idx]);
+        if (args["raw_qpc"] != 332187593497ULL) continue;
+        checked = true;
+        EXPECT_EQ(e.pid, 29796u);
+        EXPECT_EQ(e.tid, 3860u);
+        auto frames = model.build_sample_stack(uint32_t(&e - model.events().data()));
+        std::vector<std::string> names;
+        for (auto index : frames) {
+            const auto& frame = model.stack_frames()[index];
+            if (frame.symbol_resolved) names.push_back(model.get_string(frame.name_idx));
+            EXPECT_EQ(frame.source_line, 0u);
+        }
+        EXPECT_EQ(names,
+                  (std::vector<std::string>{
+                      "SimpleFunction.Program.Main(class System.String[])",
+                      "SimpleFunction.NeuralNetwork..ctor(int32[],value class SimpleFunction.ActivationFunctions[])",
+                      "SimpleFunction.NeuralNetwork.InitBiases()"}));
+    }
+    EXPECT_TRUE(checked);
+}
+
+TEST(DiagsessionImport, ManagedMixedRecursionAndCodeReuseSurviveReopening) {
+    auto records =
+        process(1, 1010, 42) + thread(1, 1020) + module(10, 1030, "native.dll") + clr_method(143, 1100, 1, "Original") +
+        sample(1200, 0x2015) + stack(1200, {0x2010, 0x2010, 0x1010, 0xdead}) + clr_method(144, 1250, 1, "Original") +
+        clr_method(143, 1300, 2, "Replacement") + sample(1400, 0x2010) + stack(1400, {0x2010, 0x1010, 0xdead});
+    auto data = session(etl(records));
+    TraceModel model;
+    std::string error;
+    ASSERT_TRUE(read_diagsession(data, model, error)) << error;
+    ASSERT_EQ(model.events().size(), 2u);
+    NativeSymbolResolver resolver;
+    resolver.resolve_profile(model);
+    auto first = model.build_sample_stack(0);
+    auto second = model.build_sample_stack(1);
+    ASSERT_EQ(first.size(), 4u);
+    ASSERT_EQ(second.size(), 3u);
+    EXPECT_EQ(model.get_string(model.stack_frames()[first[0]].cat_idx), "Unresolved");
+    EXPECT_EQ(model.get_string(model.stack_frames()[first[1]].cat_idx), "Native");
+    EXPECT_EQ(model.get_string(model.stack_frames()[first[2]].cat_idx), "Managed");
+    EXPECT_EQ(model.get_string(model.stack_frames()[first[2]].name_idx), "Example.Original()");
+    EXPECT_EQ(model.get_string(model.stack_frames()[second[2]].name_idx), "Example.Replacement()");
+    EXPECT_NE(model.stack_frames()[first[2]].id_idx, model.stack_frames()[first[3]].id_idx);
+    EXPECT_EQ(model.stack_frames()[first[2]].symbol_id, model.stack_frames()[first[3]].symbol_id);
+    EXPECT_NE(model.stack_frames()[first[2]].symbol_id, model.stack_frames()[second[2]].symbol_id);
+    EXPECT_TRUE(model.stack_frames()[first[2]].symbol_resolved);
+    EXPECT_EQ(json::parse(model.args()[model.events()[0].args_idx])["raw_sample_ip"], 0x2015);
+    std::string saved;
+    ASSERT_TRUE(serialize_profile(model, saved, error)) << error;
+    TraceModel reopened;
+    ASSERT_TRUE(read_profile(saved, reopened, error)) << error;
+    EXPECT_TRUE(reopened.profile().capabilities.managed_cpu_samples);
+    ASSERT_EQ(reopened.events().size(), model.events().size());
+    for (uint32_t i = 0; i < model.events().size(); ++i) {
+        auto a = model.build_sample_stack(i), b = reopened.build_sample_stack(i);
+        ASSERT_EQ(a.size(), b.size());
+        EXPECT_EQ(model.args()[model.events()[i].args_idx], reopened.args()[reopened.events()[i].args_idx]);
+        EXPECT_EQ(reopened.events()[i].sample_weight, 1);
+        EXPECT_EQ(reopened.events()[i].ts, model.events()[i].ts);
+        for (size_t j = 0; j < a.size(); ++j) {
+            const auto& original = model.stack_frames()[a[j]];
+            const auto& restored = reopened.stack_frames()[b[j]];
+            EXPECT_EQ(original.address, restored.address);
+            EXPECT_EQ(original.symbol_resolved, restored.symbol_resolved);
+            EXPECT_EQ(model.get_string(original.name_idx), reopened.get_string(restored.name_idx));
+            EXPECT_EQ(model.get_string(original.symbol_id), reopened.get_string(restored.symbol_id));
+        }
     }
 }
 
@@ -486,4 +586,63 @@ TEST(DiagsessionImport, DesktopLoaderResolvesEmbeddedPdbWithoutExternalFiles) {
     ASSERT_TRUE(serialize_profile(model, saved, error)) << error;
     ASSERT_TRUE(read_profile(saved, model, error)) << error;
     EXPECT_EQ(model.get_string(model.stack_frames()[0].name_idx), "allocate_buffer");
+}
+
+TEST(DiagsessionImport, AuthenticAzureManagedCpuAncestry) {
+    const char* path = std::getenv("TRACE_MANAGED_CPU_FIXTURE");
+    if (!path) GTEST_SKIP() << "Set TRACE_MANAGED_CPU_FIXTURE to cpu-azure-durabletask.diagsession";
+    std::ifstream file(path, std::ios::binary);
+    ASSERT_TRUE(file.good());
+    std::string data((std::istreambuf_iterator<char>(file)), {});
+    TraceModel model;
+    TraceParser parser;
+    ASSERT_TRUE(parser.parse_buffer(data.data(), data.size(), model)) << parser.error_message();
+    ASSERT_EQ(model.events().size(), 31664u);
+    EXPECT_TRUE(model.profile().capabilities.managed_cpu_samples);
+    ASSERT_NE(model.find_process(6592), nullptr);
+    EXPECT_EQ(model.find_process(6592)->name, "w3wp.exe");
+    size_t correlated = 0;
+    bool checked = false;
+    for (uint32_t i = 0; i < model.events().size(); ++i) {
+        const auto& event = model.events()[i];
+        auto args = json::parse(model.args()[event.args_idx]);
+        correlated += args.contains("raw_stack_parts");
+        EXPECT_EQ(event.kind, EventKind::Sample);
+        EXPECT_EQ(event.sample_weight, 1);
+        if (args["raw_qpc"] != 1127633188921ULL) continue;
+        checked = true;
+        EXPECT_EQ(event.pid, 6592u);
+        EXPECT_EQ(event.tid, 4688u);
+        EXPECT_TRUE(args.contains("thread_instance_id"));
+        auto frames = model.build_sample_stack(i);
+        ASSERT_EQ(frames.size(), 129u);
+        // These addresses/names were checked directly against CLR verbose rundown
+        // payloads and StackWalk in the published capture, before conversion.
+        const std::vector<std::pair<uint64_t, std::string>> leaf = {
+            {0x7ffed9ea7fcfULL,
+             "DurableTask.AzureStorage.OrchestrationSessionManager+<GetNextSessionAsync>d__18.MoveNext()"},
+            {0x7ffed9ea79c9ULL, "System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start(!!0&)"},
+            {0x7ffed9ea7950ULL,
+             "DurableTask.AzureStorage.OrchestrationSessionManager.GetNextSessionAsync(value class "
+             "System.Threading.CancellationToken)"},
+            {0x7ffed9ea6574ULL,
+             "DurableTask.AzureStorage.AzureStorageOrchestrationService+<LockNextTaskOrchestrationWorkItemAsync>d__69."
+             "MoveNext()"}};
+        for (size_t j = 0; j < leaf.size(); ++j) {
+            const auto& frame = model.stack_frames()[frames[frames.size() - 1 - j]];
+            EXPECT_EQ(frame.address, leaf[j].first);
+            EXPECT_EQ(model.get_string(frame.name_idx), leaf[j].second);
+            EXPECT_TRUE(frame.symbol_resolved);
+        }
+        const auto& raw = args["raw_stack_parts"][0];
+        ASSERT_EQ(raw.size(), frames.size());
+        for (size_t j = 0; j < frames.size(); ++j)
+            EXPECT_EQ(model.stack_frames()[frames[j]].address, raw[raw.size() - 1 - j].get<uint64_t>());
+        const auto& once = model.stack_frames()[frames[frames.size() - 4]];
+        const auto& again = model.stack_frames()[frames[frames.size() - 15]];
+        EXPECT_EQ(once.symbol_id, again.symbol_id);
+        EXPECT_NE(once.id_idx, again.id_idx);
+    }
+    EXPECT_EQ(correlated, 23689u);
+    EXPECT_TRUE(checked);
 }
