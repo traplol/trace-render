@@ -10,6 +10,10 @@ permissions:
 
 jobs:
   capture:
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: [net8.0, net48]
     runs-on: windows-2022
     timeout-minutes: 10
     steps:
@@ -18,10 +22,10 @@ jobs:
           persist-credentials: false
       - name: Capture synthetic managed allocation and survival workload
         shell: pwsh
-        run: ./scripts/capture_managed_memory.ps1 -OutputDirectory '${{ runner.temp }}/managed-memory-capture'
+        run: ./scripts/capture_managed_memory.ps1 -Framework '${{ matrix.framework }}' -OutputDirectory '${{ runner.temp }}/managed-memory-capture'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: managed-memory-capture
+          name: managed-memory-capture-${{ matrix.framework }}
           path: ${{ runner.temp }}/managed-memory-capture
           retention-days: 7

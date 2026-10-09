@@ -25,18 +25,30 @@ internal static class Program
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void Collect(string name, WeakReference? released = null)
+    private static void Collect(string name, WeakReference? released = null, WeakReference? large = null)
     {
         GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
         GC.WaitForPendingFinalizers();
         GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
         Checkpoints.Add(new { name, timestamp = System.Diagnostics.Stopwatch.GetTimestamp(),
             retainedPayloads = Retained.Count, releasedObjectAlive = released?.IsAlive,
+            retainedBytes = Retained.Sum(payload => payload.Bytes.Length), largeObjectAlive = large?.IsAlive,
             generation2Collections = GC.CollectionCount(2) });
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "checkpoints.json"),
             JsonSerializer.Serialize(new { frequency = System.Diagnostics.Stopwatch.Frequency,
-                pid = Environment.ProcessId, checkpoints = Checkpoints }, new JsonSerializerOptions { WriteIndented = true }));
+                pid = process.Id, runtime = Environment.Version.ToString(), checkpoints = Checkpoints }, new JsonSerializerOptions { WriteIndented = true }));
     }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference AllocateLarge()
+    {
+        HeldDuringGc = new byte[128 * 1024];
+        return new WeakReference(HeldDuringGc);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ReleaseLarge() { HeldDuringGc = null; }
 
     private static int Main()
     {
@@ -51,10 +63,10 @@ internal static class Program
         var released = AllocateReleased();
         Collect("retained-and-released", released);
         // Keep another cohort alive over a compacting GC, then remove the reference.
-        HeldDuringGc = new byte[128 * 1024];
-        Collect("large-object-survived", released);
-        HeldDuringGc = null;
-        Collect("large-object-released", released);
+        var large = AllocateLarge();
+        Collect("large-object-survived", released, large);
+        ReleaseLarge();
+        Collect("large-object-released", released, large);
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "workload-complete"), "complete");
         // Collection stops while the deliberately retained cohort is still rooted.
         while (!File.Exists(Path.Combine(AppContext.BaseDirectory, "stop-workload")))
