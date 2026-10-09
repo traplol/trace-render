@@ -19,9 +19,25 @@ The ETL reader checks buffer and record boundaries in release builds. It handles
 System, Compact, PerfInfo, classic Full/Instance, and EventHeader framing, plain
 XPRESS and XPRESS-Huffman compression, and QPC timestamps. Unknown header types,
 unsupported compression, invalid sizes, and truncation fail with an error.
-EventHeader extended payloads are reported as a decoding limitation. Loss
-counters, buffer loss flags, skipped native heap records, and unmatched stacks
-remain visible in profile quality metadata.
+Loss counters, buffer loss flags, skipped native heap records, and unmatched
+stacks remain visible in profile quality metadata.
+
+The reader separates EventHeader extensions from provider UserData. Each inline
+item has an eight-byte header with total size, type, linkage, and data size.
+Total size includes padding to eight-byte alignment; data size excludes padding.
+Both must fit inside the event, and unknown reserved flags fail explicitly. The
+inline header is described in
+[Chappell's analysis of the kernel layout](https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/shared/evntcons/event_header.htm)
+and checked against the controlled and compound captures below; the latter's
+TraceLogging metadata items establish the padded total size. The
+[Microsoft SDK header](https://github.com/microsoft/win32metadata/blob/main/generation/WinSDK/RecompiledIdlHeaders/um/evntcons.h)
+defines the continuation bit and stack types. STACK_TRACE32/64 retain their
+64-bit match ID and every address at the recorded width. Duplicate stack parts
+remain separate and in order; unknown extension types retain their raw data.
+Match IDs permit later correlation of split user/kernel stacks; this reader does
+not combine them. Views of item data and UserData are valid only during the
+callback. Provider support remains separate: the current profile collector still
+reports extension-bearing events as a decoding limitation.
 
 CPU observations remain point samples. Each record contributes one sample, and
 only an explicitly recorded Timer interval supplies estimated CPU time. The raw
@@ -113,6 +129,18 @@ addresses, and process names were checked against raw CLR/StackWalk payloads.
 Missing optional fixture paths cause
 these integration tests to skip; malformed framing, reuse, loss, cross-resource
 correlation, recursion, and equal-time observations run in the regular suite.
+
+The controlled managed capture from
+[workflow run 37866467325](https://github.com/traplol/trace-render/actions/runs/37866467325)
+has SHA-256 `78898b5b435b51b372afc8e37b8bb08ac129ccdc802a852a0f98e0f5f945e111`.
+Set `TRACE_MANAGED_ALLOCATION_FIXTURE` to its
+`managed-allocation-survival.diagsession` when running the tests. The framing
+check expects 104,170 records with no reported loss, 23,188 VS allocation events,
+956,155 stack addresses, and 1,130,280 UserData bytes. Independent raw-byte and
+external-decoder inspection agree that QPC 11841591261, PID 4688, TID 2900 has
+one 33-frame stack with match ID zero and 49 bytes of UserData beginning at
+record offset 360. The test compares that complete stack and payload. This
+verifies framing; allocation and GC replay are separate checks.
 
 ## Desktop workflow
 

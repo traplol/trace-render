@@ -77,6 +77,37 @@ std::string EtlBytes::guid(size_t offset) const {
 }
 
 namespace {
+void extensions(EtlRecord& out) {
+    // On disk, the 8-byte prefix is followed by inline data, not DataPtr.
+    // evntcons.h defines Linkage (another item), types 5/6, and stack layouts.
+    // Packed sizes/alignment: Geoff Chappell's EVENT_HEADER study, checked
+    // against the original managed-allocation fixture; see diagsession-import.md.
+    EtlBytes b(out.payload);
+    size_t at = 0;
+    uint16_t linkage;
+    do {
+        size_t size = b.u16(at), data_size = b.u16(at + 6);
+        linkage = b.u16(at + 4);
+        if (linkage & ~1u) throw std::runtime_error("Unsupported ETL extension flags");
+        if (size != ((8 + data_size + 7) & ~size_t(7))) throw std::runtime_error("Invalid ETL extension size");
+        EtlExtension item;
+        item.type = b.u16(at + 2);
+        item.data = b.slice(at + 8, data_size);
+        if (item.type == 5 || item.type == 6) {
+            uint8_t width = item.type == 5 ? 4 : 8;
+            if (data_size < 8 || (data_size - 8) % width) throw std::runtime_error("Invalid ETL extended stack size");
+            EtlBytes data(item.data);
+            item.stack = EtlExtendedStack{data.u64(0), width, {}};
+            for (size_t offset = 8; offset < data_size; offset += width)
+                item.stack->addresses.push_back(data.pointer(offset, width));
+        }
+        out.extensions.push_back(std::move(item));
+        b.slice(at, size);  // Total size includes padding, which must fit this event too.
+        at += size;
+    } while (linkage);
+    out.payload.remove_prefix(at);
+}
+
 size_t record(std::string_view bytes, EtlRecord& out) {
     EtlBytes b(bytes);
     uint8_t type = b.u8(2);
@@ -135,6 +166,7 @@ size_t record(std::string_view bytes, EtlRecord& out) {
     }
     if (size < header_size) throw std::runtime_error("ETL record size is smaller than its header");
     out.payload = b.slice(header_size, size - header_size);
+    if (out.extended_data) extensions(out);
     return size;
 }
 

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "parser/diagsession_import.h"
+#include "parser/diagsession_container.h"
 #include "parser/profile_io.h"
 #include "parser/trace_parser.h"
 #include "platform/file_loader.h"
@@ -108,6 +109,25 @@ std::string manifest_heap() {
     put(bytes, 32, 0x4aa2f2756b3425a8ULL, 8);
     put(bytes, 40, 33, 2);
     put(bytes, 42, 2, 1);  // Manifest ID 33, opcode 0 is not the classic schema.
+    return bytes;
+}
+std::string extension(uint16_t type, const std::string& data, bool more = false) {
+    std::string bytes(8, '\0');
+    put(bytes, 0, (8 + data.size() + 7) & ~size_t(7), 2);
+    put(bytes, 2, type, 2);
+    put(bytes, 4, more, 2);
+    put(bytes, 6, data.size(), 2);
+    bytes += data;
+    bytes.resize((bytes.size() + 7) & ~size_t(7), char(0xa5));
+    return bytes;
+}
+std::string extended_event(const std::string& items, const std::string& payload, uint8_t type = 19) {
+    auto bytes = manifest_heap();
+    put(bytes, 2, type, 1);
+    put(bytes, 4, 1, 2);
+    bytes += items + payload;
+    put(bytes, 0, bytes.size(), 2);
+    bytes.resize((bytes.size() + 7) & ~size_t(7));
     return bytes;
 }
 std::string clr_method(uint16_t id, uint64_t qpc, uint64_t method_id, const std::string& name) {
@@ -251,6 +271,174 @@ TEST(EtlReader, ReadsXpressBuffersAndRejectsMalformedMatchesOrUnknownCompression
     put(data, 44, 2, 4);  // LZNT1 has no supported decoder.
     EXPECT_FALSE(read_etl(data, info, {}, error));
     EXPECT_NE(error.find("Unsupported ETL buffer compression 2"), std::string::npos);
+}
+
+TEST(EtlReader, SplitsLinkedExtensionsAndPreservesStackWidthsDuplicatesAndUnknownItems) {
+    std::string stack32, stack64;
+    put(stack32, 0, 0xfedcba9876543210ULL, 8);
+    put(stack32, 8, 0xffffffff, 4);
+    put(stack32, 12, 0, 4);
+    put(stack32, 16, 0x81234567, 4);
+    put(stack64, 0, 0xfedcba9876543210ULL, 8);
+    put(stack64, 8, 0xffff800000001000ULL, 8);
+    put(stack64, 16, 0xffff800000001000ULL, 8);  // Recursion remains recorded.
+    const std::string unknown("\0\1\2\3\4", 5);
+    auto items = extension(5, stack32, true) + extension(0xffff, unknown, true) + extension(6, stack64, true) +
+                 extension(6, stack64);
+    // UserData may itself look like another extension. Only Linkage continues a chain.
+    auto payload = extension(6, stack64) + "user data";
+    for (uint8_t header : {18, 19}) {
+        auto data = etl(extended_event(items, payload, header) + sample(1400, 0x1234));
+        EtlFileInfo info;
+        std::string error;
+        size_t extended = 0, following_samples = 0;
+        auto check = [&](const EtlRecord& r) {
+            ASSERT_EQ(r.extensions.size(), 4u);
+            EXPECT_EQ(r.payload, payload);
+            EXPECT_EQ(r.pointer_size, header == 18 ? 4 : 8);
+            const auto& a = r.extensions[0];
+            EXPECT_EQ(a.type, 5);
+            EXPECT_EQ(a.data, stack32);
+            ASSERT_TRUE(a.stack);
+            EXPECT_EQ(a.stack->pointer_size, 4);
+            EXPECT_EQ(a.stack->match_id, 0xfedcba9876543210ULL);
+            EXPECT_EQ(a.stack->addresses, (std::vector<uint64_t>{0xffffffff, 0, 0x81234567}));
+            EXPECT_EQ(r.extensions[1].type, 0xffff);
+            EXPECT_EQ(r.extensions[1].data, unknown);
+            EXPECT_FALSE(r.extensions[1].stack);
+            for (size_t i : {2u, 3u}) {
+                const auto& b = r.extensions[i];
+                EXPECT_EQ(b.type, 6);
+                EXPECT_EQ(b.data, stack64);
+                ASSERT_TRUE(b.stack);
+                EXPECT_EQ(b.stack->pointer_size, 8);
+                EXPECT_EQ(b.stack->match_id, a.stack->match_id);
+                EXPECT_EQ(b.stack->addresses, (std::vector<uint64_t>{0xffff800000001000ULL, 0xffff800000001000ULL}));
+            }
+        };
+        ASSERT_TRUE(read_etl(
+            data, info,
+            [&](const auto&, const EtlRecord& r) {
+                if (r.extended_data) {
+                    ++extended;
+                    check(r);
+                } else {
+                    EXPECT_TRUE(r.extensions.empty());
+                    if (r.group == 15 && r.opcode == 46) ++following_samples;
+                }
+                return true;
+            },
+            error))
+            << error;
+        EXPECT_EQ(info.records_read, 3u);
+        EXPECT_EQ(extended, 1u);
+        EXPECT_EQ(following_samples, 1u);
+    }
+}
+
+TEST(EtlReader, RejectsMalformedExtendedItemsWithinRecordBoundaries) {
+    auto valid = extension(6, std::string(16, '\0'));
+    std::vector<std::string> malformed;
+    for (size_t size = 0; size < 8; ++size) malformed.push_back(valid.substr(0, size));
+    for (auto [offset, value] : std::vector<std::pair<size_t, uint16_t>>{
+             {0, 0}, {0, 7}, {0, 23}, {0, 0xffff}, {6, 0xffff}, {6, 15}, {4, 2}, {4, 1}}) {
+        auto changed = valid;
+        put(changed, offset, value, 2);
+        malformed.push_back(changed);
+    }
+    malformed.push_back(valid.substr(0, valid.size() - 1));
+    malformed.push_back(extension(5, std::string(12, '\0')).substr(0, 20));  // Missing item alignment.
+    for (auto [type, size] : std::vector<std::pair<uint16_t, size_t>>{{5, 0}, {5, 7}, {5, 10}, {6, 12}})
+        malformed.push_back(extension(type, std::string(size, '\0')));
+    for (size_t i = 0; i < malformed.size(); ++i) {
+        SCOPED_TRACE(i);
+        // A following event must not supply missing extension bytes or padding.
+        auto bytes = etl(extended_event(malformed[i], "") + sample(1400, 0x1234));
+        EtlFileInfo info;
+        std::string error;
+        size_t callbacks = 0;
+        EXPECT_FALSE(read_etl(
+            bytes, info,
+            [&](const auto&, const auto&) {
+                ++callbacks;
+                return true;
+            },
+            error));
+        EXPECT_FALSE(error.empty());
+        EXPECT_EQ(callbacks, 1u);  // Only the logfile header is complete.
+    }
+}
+
+TEST(EtlReader, ControlledManagedCaptureSeparatesStacksFromAllocationUserData) {
+    const char* path = std::getenv("TRACE_MANAGED_ALLOCATION_FIXTURE");
+    if (!path) GTEST_SKIP() << "Set TRACE_MANAGED_ALLOCATION_FIXTURE to managed-allocation-survival.diagsession";
+    std::ifstream file(path, std::ios::binary);
+    ASSERT_TRUE(file);
+    std::string bytes((std::istreambuf_iterator<char>(file)), {});
+    DiagsessionContainer container;
+    std::string error;
+    ASSERT_TRUE(container.open(bytes, error)) << error;
+    // Constants come from a separate raw-byte census and an external ETL decoder.
+    const std::string first_payload(
+        "\x04\x00\x00\x00\x00\x00\x00\x00\xf8\x1f\x00\x00\x1d\x00\x00\x00"
+        "\x00\x40\xbc\xc0\xfc\x7f\x00\x00\x98\x00\x00\x02\x01\x00\x00\x00"
+        "\x00\x00\x00\x00\x01\x00\x00\x00\xfc\x03\x00\x00\x00\x04\x00\x00\x00",
+        49);
+    const std::vector<uint64_t> first_stack = {
+        0x7ffd580c05d4ULL, 0x7ffd580690e0ULL, 0x7ffd2fc84b7fULL, 0x7ffd2fc849c3ULL, 0x7ffd2fc89bb7ULL,
+        0x7ffd209ab1a1ULL, 0x7ffd2094f9afULL, 0x7ffd209ebf6dULL, 0x7ffd208f52f3ULL, 0x7ffd2079afd9ULL,
+        0x7ffd2079674fULL, 0x7ffd207965a8ULL, 0x7ffd2089275cULL, 0x7ffd2081b842ULL, 0x7ffd20846932ULL,
+        0x7ffd2084b9a6ULL, 0x7ffd2089c8f9ULL, 0x7ffd2089c895ULL, 0x7ffd2089c7cbULL, 0x7ffd2088ad69ULL,
+        0x7ffd274f3931ULL, 0x7ffd275104d5ULL, 0x7ffd275127cfULL, 0x7ffd309dd56bULL, 0x7ffd309e029cULL,
+        0x7ffd309e2676ULL, 0x7ffd309e079dULL, 0x7ffd309d8998ULL, 0x7ff76c41feacULL, 0x7ff76c420316ULL,
+        0x7ff76c421a58ULL, 0x7ffd56ae4cc0ULL, 0x7ffd5809edbbULL};
+    size_t resources = 0, records = 0, allocations = 0, extended = 0, invalid = 0, addresses = 0, user_bytes = 0;
+    for (size_t i = 0; i < container.resources().size(); ++i) {
+        const auto& resource = container.resources()[i];
+        if (resource.directory || resource.type != "DiagnosticsHub.Resource.EtlFile") continue;
+        ++resources;
+        std::vector<uint8_t> data;
+        ASSERT_TRUE(container.read_resource(i, data, error)) << error;
+        EtlFileInfo info;
+        ASSERT_TRUE(read_etl(
+            {reinterpret_cast<const char*>(data.data()), data.size()}, info,
+            [&](const auto&, const EtlRecord& r) {
+                extended += r.extended_data;
+                if (r.provider != "8bc9e67b-ca34-4b9a-9442-8f75403f357b" || r.event_id != 1 || r.version != 4)
+                    return true;
+                ++allocations;
+                user_bytes += r.payload.size();
+                if (!r.extended_data || r.extensions.size() != 1 || r.extensions[0].type != 6 ||
+                    !r.extensions[0].stack || r.extensions[0].stack->pointer_size != 8 ||
+                    r.extensions[0].stack->match_id != 0) {
+                    ++invalid;
+                    return true;
+                }
+                addresses += r.extensions[0].stack->addresses.size();
+                if (allocations == 1) {
+                    EXPECT_EQ(r.qpc, 11841591261ULL);
+                    EXPECT_EQ(r.pid, 4688u);
+                    EXPECT_EQ(r.tid, 2900u);
+                    EXPECT_EQ(r.extensions[0].data.size(), 272u);
+                    EXPECT_EQ(r.extensions[0].stack->addresses, first_stack);
+                    EXPECT_EQ(r.payload, first_payload);
+                }
+                return true;
+            },
+            error))
+            << error;
+        records += info.records_read;
+        EXPECT_EQ(info.lost_events, 0u);
+        EXPECT_EQ(info.lost_buffers, 0u);
+        EXPECT_FALSE(info.buffer_loss_flag);
+    }
+    EXPECT_EQ(resources, 1u);
+    EXPECT_EQ(records, 104170u);
+    EXPECT_EQ(allocations, 23188u);
+    EXPECT_EQ(extended, allocations);
+    EXPECT_EQ(invalid, 0u);
+    EXPECT_EQ(addresses, 956155u);
+    EXPECT_EQ(user_bytes, 1130280u);
 }
 
 TEST(DiagsessionImport, PreservesObservationsAndReusedProcessThreadModuleIdentities) {

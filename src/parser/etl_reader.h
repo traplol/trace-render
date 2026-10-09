@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // Checked little-endian access for ETL headers and provider payloads. Invalid
 // offsets and unterminated strings throw; read_etl turns these into an error.
@@ -38,6 +39,18 @@ struct EtlFileInfo {
     uint64_t records_read = 0;
 };
 
+struct EtlExtendedStack {
+    uint64_t match_id = 0;
+    uint8_t pointer_size = 0;
+    std::vector<uint64_t> addresses;
+};
+
+struct EtlExtension {
+    uint16_t type = 0;
+    std::string_view data;                  // Borrowed raw item data, valid only during the callback.
+    std::optional<EtlExtendedStack> stack;  // Present only for STACK_TRACE32/64.
+};
+
 struct EtlRecord {
     uint64_t qpc = 0;
     std::optional<uint32_t> pid;
@@ -49,7 +62,8 @@ struct EtlRecord {
     uint8_t opcode = 0;
     uint8_t pointer_size = 0;
     bool extended_data = false;
-    std::string_view payload;  // valid only during the callback
+    std::vector<EtlExtension> extensions;  // Recorded order, including unknown/duplicate types.
+    std::string_view payload;              // UserData after extensions; valid only during the callback.
 };
 
 // Callback order is physical buffer order, not timestamp order. False cancels.

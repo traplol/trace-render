@@ -45,7 +45,7 @@ bool read_gcdump(std::string_view bytes, ManagedSnapshot& snapshot, std::string&
 bool read_managed_snapshots(const DiagsessionContainer& container, ProfileData& profile, std::string& error, const ImportProgress& progress = {});
 ```
 
-## etl_reader.h / etl_reader.cpp — traverses checked ETL buffers and records, preserves raw QPC and provider payloads, and decompresses supported XPRESS buffers
+## etl_reader.h / etl_reader.cpp — traverses checked ETL buffers and records, separates EventHeader extensions and typed stacks from UserData, and decompresses supported XPRESS buffers
 ```
 explicit EtlBytes(std::string_view bytes);
 uint8_t EtlBytes::u8(size_t offset) const;
